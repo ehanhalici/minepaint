@@ -1,0 +1,6 @@
+- [ ] refactoring
+- [ ] silme eklenecek
+- [ ] sag panelin saklanabilmesi duzenlenecek
+- [ ] tablet icin basinc eklenecek
+- [ ] sonsuz x-y scroll eklenecek
+- [ ] belli limitte z scroll eklenecek
