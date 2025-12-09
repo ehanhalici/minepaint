@@ -99,9 +99,9 @@ int Ui::init_ui(int argc, char **argv) {
         return sld;
     };
 
-    make_slider("Fırça Boyutu", MYPAINT_BRUSH_SETTING_RADIUS_LOGARITHMIC, 0.0, 4.0, 2.0);
-    make_slider("Sertlik", MYPAINT_BRUSH_SETTING_HARDNESS, 0.0, 1.0, 0.8);
-    make_slider("Opaklık", MYPAINT_BRUSH_SETTING_OPAQUE, 0.0, 1.0, 1.0);
+    make_slider("Fırça Boyutu", MYPAINT_BRUSH_SETTING_RADIUS_LOGARITHMIC, 0.0, 4.0, 1.2);
+    make_slider("Sertlik", MYPAINT_BRUSH_SETTING_HARDNESS, 0.0, 1.0, 0.1);
+    make_slider("Opaklık", MYPAINT_BRUSH_SETTING_OPAQUE, 0.0, 1.0, 0.9);
     make_slider("Yumuşatma", MYPAINT_BRUSH_SETTING_SLOW_TRACKING, 0.0, 5.0, 3.0);
     appState.sidebar->user_data((void*)appState.canvas); // Callbackler için
     appState.sidebar->end(); // Sidebar bitti

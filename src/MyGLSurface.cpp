@@ -12,11 +12,12 @@ int draw_dab_callback(MyPaintSurface *self, float x, float y, float radius,
     (void)self; (void)snap_to_pixel; (void)view_zoom; 
     (void)view_rotation; (void)barrel_rotation; (void)colorize;
 
-    if (radius < 0.00001f) return 1; 
+    MyGLSurface *gl_surface = (MyGLSurface*)self;
+    if (radius < 0.00001f) return 1;
 
-    // --- KRİTİK DÜZELTME: BU İKİSİNİ MUTLAKA KAPAT ---
-    glDisable(GL_TEXTURE_2D); // Doku kaplamayı kapat (Sadece renk olsun)
-    glDisable(GL_DEPTH_TEST); // Derinlik testini kapat (2D çiziyoruz)
+
+    glDisable(GL_TEXTURE_2D); // Doku kaplamayı kapali, Sadece renk
+    glDisable(GL_DEPTH_TEST); // Derinlik testini kapali, 2D
 
     glPushMatrix(); // Mevcut koordinat sistemini kaydet
 
@@ -32,17 +33,17 @@ int draw_dab_callback(MyPaintSurface *self, float x, float y, float radius,
     // 2. RENK VE KARIŞIM AYARLARI
     glEnable(GL_BLEND);
 
-    //std::cout << color_r << " " << color_g << " " << color_b << " " << opaque<< " " << alpha_eraser << std::endl;
-    if (alpha_eraser >= 0.5f) {
+    if (gl_surface->is_erasing) {
         // === SİLGİ MODU (ERASER) ===
         // Matematik: Hedef Piksel = 0 * Kaynak + Hedef * (1 - SilgiGücü)
         // Yani: Eski rengi, silginin gücü kadar azalt.
 
         glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+        radius *= 4.0f;
         
         // Burada R,G,B'nin önemi yok (GL_ZERO yutacak). 
         // 4. parametre (Alpha) silme gücünü belirler.
-        glColor4f(0.0f, 0.0f, 0.0f, opaque * hardness); 
+        glColor4f(0.0f, 0.0f, 0.0f, 1.0f); 
         
     } else {
         // === NORMAL BOYA MODU ===
@@ -50,6 +51,7 @@ int draw_dab_callback(MyPaintSurface *self, float x, float y, float radius,
         glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         
         // Rengi ayarla
+        // merkez nokta tam opak tam gucte
         glColor4f(color_r, color_g, color_b, opaque);
     }
     
@@ -68,9 +70,9 @@ int draw_dab_callback(MyPaintSurface *self, float x, float y, float radius,
         // Kenarları biraz şeffaflaştır (Sertlik etkisi)
 
         // Kenar Yumuşatma Ayarı
-        if (alpha_eraser >= 0.5f) {
+        if (gl_surface->is_erasing) {
              // Silgide kenarlar daha az siler (Yumuşak silgi etkisi)
-             glColor4f(0.0f, 0.0f, 0.0f, opaque * hardness * hardness); 
+             glColor4f(0.0f, 0.0f, 0.0f, 1.0); 
         } else {
              // Normal boyada kenarlar daha şeffaftır
              glColor4f(color_r, color_g, color_b, opaque * hardness);
@@ -106,4 +108,5 @@ MyGLSurface::MyGLSurface() {
         this->end_atomic = NULL;
         this->save_png = NULL;
         this->refcount = 1; // Referans sayacı
+        this->is_erasing = false;
     }

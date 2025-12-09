@@ -60,6 +60,7 @@ void Layer::resize(int w, int h) {
     // Normal moda dön
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
+
 void Layer::bind() {
     if (!initialized) return;
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);

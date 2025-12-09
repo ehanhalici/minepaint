@@ -48,7 +48,7 @@ MyCanvas::MyCanvas(int x, int y, int w, int h) : Fl_Gl_Window(x, y, w, h) {
     mypaint_brush_set_base_value(brush, MYPAINT_BRUSH_SETTING_HARDNESS, 0.1f);
     mypaint_brush_set_base_value(brush, MYPAINT_BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS, 3.0f);
     //mypaint_brush_set_base_value(brush, MYPAINT_BRUSH_SETTING_DABS_PER_SECOND, 0.0f); // Sadece mesafeye göre çiz
-    mypaint_brush_set_base_value(brush, MYPAINT_BRUSH_SETTING_ERASER, 0.0f);
+    //mypaint_brush_set_base_value(brush, MYPAINT_BRUSH_SETTING_ERASER, 0.0f);
     // sik nokta koysun
     mypaint_brush_set_base_value(brush, MYPAINT_BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS, 20.0f);
     // durdugun yerde de ciz
@@ -161,9 +161,9 @@ int MyCanvas::handle(int event){
                 last_time = std::chrono::steady_clock::now();
                 
                 int button = Fl::event_button();
-                set_brush_setting(MYPAINT_BRUSH_SETTING_ERASER, (button == FL_RIGHT_MOUSE) ? 1.0f : 0.0f);
-
-
+                //set_brush_setting(MYPAINT_BRUSH_SETTING_ERASER, (button == FL_RIGHT_MOUSE) ? 1.0f : 0.0f);
+                mypaint_surface->is_erasing =  (button == FL_RIGHT_MOUSE) ? true : false;
+                
                 // İLK NOKTA MANTIĞI:
                 // Spline çizmek için 4 nokta lazım. İlk tıklamada elimizde 1 nokta var.
                 // Algoritmanın çalışması için bu noktayı 3 kere ekliyoruz ki P0, P1, P2 aynı olsun.
@@ -212,7 +212,8 @@ int MyCanvas::handle(int event){
                 // Kalanları çizmeye çalışma, bitir.
                 process_queue(true);
                 mypaint_brush_reset(brush);
-                set_brush_setting(MYPAINT_BRUSH_SETTING_ERASER, 0.0f);
+                //set_brush_setting(MYPAINT_BRUSH_SETTING_ERASER, 0.0f);
+                mypaint_surface->is_erasing = false;
                 return 1;
 
             default:
@@ -291,6 +292,7 @@ void MyCanvas::send_stroke_to_engine(float x, float y, float pressure, double dt
     glOrtho(0, pixel_w(), pixel_h(), 0, -1, 1);
     glMatrixMode(GL_MODELVIEW); glLoadIdentity();
 
+    
     mypaint_brush_stroke_to(brush, (MyPaintSurface*)mypaint_surface, x, y, pressure, 0, 0, dtime, 1.0, 0.0, 0.0, 0);
 
     glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW);

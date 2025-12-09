@@ -22,5 +22,6 @@ class MyGLSurface : public MyPaintSurface {
     
 public:
     MyGLSurface();
+    bool is_erasing = false;
 };
 

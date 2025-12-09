@@ -2,7 +2,7 @@
 #define LAYER_H
 
 #include <FL/gl.h>
-#include <FL/glu.h> // Hata kontrolü ve yardımcılar için
+#include <FL/glu.h>
 
 class Layer {
 private:
@@ -16,7 +16,6 @@ public:
     Layer(int w, int h);
     ~Layer();
 
-    // Layer boyutunu ayarlar veya değiştirir
     void resize(int w, int h);
 
     // Çizim modunu açar (Bundan sonraki OpenGL komutları bu katmana işlenir)
