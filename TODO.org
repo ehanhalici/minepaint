@@ -1,5 +1,5 @@
 - [ ] refactoring
-- [ ] silme eklenecek
+- [X] silme eklenecek
 - [ ] sag panelin saklanabilmesi duzenlenecek
 - [ ] tablet icin basinc eklenecek
 - [ ] sonsuz x-y scroll eklenecek

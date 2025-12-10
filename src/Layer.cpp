@@ -1,7 +1,4 @@
 #include "Layer.hpp"
-#include <algorithm>
-#include <iostream>
-#include <vector>
 
 Layer::Layer(int w, int h) : width(w), height(h), initialized(false), fbo(0), texture(0) {}
 
@@ -20,7 +17,7 @@ void Layer::resize(int w, int h) {
     
     glGenTextures(1, &newTexture);
     glBindTexture(GL_TEXTURE_2D, newTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -94,7 +91,7 @@ void Layer::drawOnScreen(int window_width, int window_height) {
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 
     // Tam ekrana (veya verilen boyuta) kare çiz ve texture'ı giydir
-    glBegin(GL_QUADS);
+    glBegin(GL_QUADS);{
         // Sol Alt
         glTexCoord2f(0.0f, 0.0f); 
         glVertex2f(0.0f, (float)window_height); 
@@ -110,7 +107,7 @@ void Layer::drawOnScreen(int window_width, int window_height) {
         // Sol Üst
         glTexCoord2f(0.0f, 1.0f); 
         glVertex2f(0.0f, 0.0f);
-    glEnd();
+    }glEnd();
 
     glDisable(GL_TEXTURE_2D);
 }

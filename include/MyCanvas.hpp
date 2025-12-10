@@ -51,4 +51,6 @@ private:
     void process_queue(bool force_finish = false);
     void send_stroke_to_engine(float x, float y, float pressure, double dtime);
     void rgb_to_hsv(float r, float g, float b, float &h, float &s, float &v);
+    void teleport_brush(MyPaintBrush* brush, float x, float y,  MyPaintSurface* mypaint_surface);
+    InputPoint interpolate_cubic(float t, InputPoint p0, InputPoint p1, InputPoint p2, InputPoint p3);
 };
