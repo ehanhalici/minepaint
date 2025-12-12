@@ -2,5 +2,5 @@
 - [X] silme eklenecek
 - [ ] sag panelin saklanabilmesi duzenlenecek
 - [ ] tablet icin basinc eklenecek
-- [ ] sonsuz x-y scroll eklenecek
-- [ ] belli limitte z scroll eklenecek
+- [X] x-y scroll eklenecek
+- [X] belli limitte z scroll eklenecek

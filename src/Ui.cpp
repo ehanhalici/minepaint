@@ -58,9 +58,9 @@ Fl_Color_Chooser* Ui::create_cooser(int x, int y, int w) {
 }
 
 int Ui::init_ui(int argc, char **argv) {
-    Fl::scheme("gleam"); 
+    Fl::scheme(NULL); 
 
-    Fl_Double_Window *window = new Fl_Double_Window(1000, 600, "MyPaint C++ Studio");
+    Fl_Double_Window *window = new Fl_Double_Window(1000, 600, "MinePaint");
     window->color(C_BG);
 
     // Uygulama widget'larını tutacak yapı

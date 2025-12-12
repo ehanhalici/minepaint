@@ -1,7 +1,7 @@
 #include "MyCanvas.hpp"
 #include "mypaint-brush.h"
+#include <GL/gl.h>
 #include <algorithm>
-
 
 MyCanvas::MyCanvas(int x, int y, int w, int h) : Fl_Gl_Window(x, y, w, h) {
     mode(FL_RGB | FL_ALPHA | FL_DOUBLE | FL_DEPTH | FL_MULTISAMPLE);
@@ -66,11 +66,11 @@ void MyCanvas::set_brush_color(double r, double g, double b) {
 
 void MyCanvas::draw() {
     if (!valid()) {
-        if (!mainLayer) {
-            mainLayer = new Layer(pixel_w(), pixel_h());
-            mainLayer->resize(pixel_w(), pixel_h());
+        if (!mainLayer){
+            mainLayer = new Layer(LayerSize.w, LayerSize.h);
+            mainLayer->resize(LayerSize.w, LayerSize.h);
         } else {
-            mainLayer->resize(pixel_w(), pixel_h());
+            //mainLayer->resize(LayerSize.w, LayerSize.h);
         }
 
         // EKRAN PROJEKSİYONU
@@ -80,29 +80,52 @@ void MyCanvas::draw() {
         glOrtho(0, pixel_w(), pixel_h(), 0, -1, 1);
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
+        // camre yi layer ortasina hizala
+        //camera.x = (float)(pixel_w() - LayerSize.w) / 2;
+        //camera.y = (float)(pixel_h() - LayerSize.w) / 2;
 
         valid(1);
     }
 
+    // ekrana cizmek icin tekrar viewport u ekrana cek
+    glViewport(0, 0, pixel_w(), pixel_h());
     // (Arka Plan Rengi)
     glClearColor(0.07f, 0.07f, 0.07f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // 2. Layer'ı Ekrana Bas
-    if (mainLayer) {
-        mainLayer->drawOnScreen(pixel_w(), pixel_h());
-    }
+    glPushMatrix();{
+       // Sıralama önemlidir
+        glTranslatef(camera.x, camera.y, 0.0f);
+        glScalef(zoom, zoom, 1.0f);
+        // 2. Layer'ı Ekrana Bas
+        if (mainLayer) {
+            mainLayer->drawOnScreen(LayerSize.w, LayerSize.h);
+
+            glColor4f(0.20f, 0.20f, 0.20f, 1.0f);
+            glBegin(GL_LINE_LOOP);
+                glVertex2f(0, 0);
+                glVertex2f(LayerSize.w, 0);
+                glVertex2f(LayerSize.w, LayerSize.h);
+                glVertex2f(0, LayerSize.h);
+            glEnd();
+        }
+    }glPopMatrix();
+    
 }
 
 // Fırçayı çizim yapmadan, lastik etkisi olmadan ışınlar
 // Mevcut (Slow Tracking) i kaydet, gecici olarak 0 yapip brush i resetle,
 // x,y noktasina isinla,
 // new_stroke ile yeni cizgi baslat
-void MyCanvas::teleport_brush(MyPaintBrush* brush, float x, float y,  MyPaintSurface* mypaint_surface) {
+void MyCanvas::teleport_brush(float x, float y) {
     float saved_tracking = mypaint_brush_get_base_value(brush, MYPAINT_BRUSH_SETTING_SLOW_TRACKING);
     set_brush_setting(MYPAINT_BRUSH_SETTING_SLOW_TRACKING, 0.0f);
+    
     mypaint_brush_reset(brush);
+    
+    // Sınıfın kendi üyelerini kullanıyoruz
     mypaint_brush_stroke_to(brush, (MyPaintSurface*)mypaint_surface, x, y, 0.0f, 0, 0, 0.0, 1.0, 0.0, 0.0, 0);
+    
     mypaint_brush_new_stroke(brush);
     set_brush_setting(MYPAINT_BRUSH_SETTING_SLOW_TRACKING, saved_tracking);
 }
@@ -112,31 +135,87 @@ int MyCanvas::handle(int event){
     float start_y = (float)Fl::event_y();
 
         switch(event) {
-            case FL_PUSH: {
+            // --- 1. ZOOM (FARE TEKERLEĞİ) ---
+            case FL_MOUSEWHEEL: {
+                int dy = Fl::event_dy(); 
 
-                teleport_brush(brush, start_x, start_y, mypaint_surface);
+                // Farenin eski konumunu bul Zoom yapmadan önce
+                InputPoint mouse_before = screen_to_world(start_x, start_y);
+
+                if (dy < 0) zoom *= 1.1f;
+                else        zoom *= 0.9f;
+
+                if (zoom < 0.1f) zoom = 0.1f;
+                if (zoom > 10.0f) zoom = 10.0f;
+
+                // Zoom değiştiği için farenin notkasi kaydı
+                InputPoint mouse_after = screen_to_world(start_x, start_y);
+
+                // Farenin altındaki nokta kaymasın diye View'i düzelt (Zoom towards cursor)
+                camera.x += (mouse_after.x - mouse_before.x) * zoom;
+                camera.y += (mouse_after.y - mouse_before.y) * zoom;
+
+                redraw(); // Ekranı yenile
+                return 1;
+            }
+            case FL_PUSH: {
+                int button = Fl::event_button();
+            
+                if (button == FL_MIDDLE_MOUSE) {
+                    last_mouse_x = start_x;
+                    last_mouse_y = start_y;
+                    return 1;
+                }
+
+                // KOORDİNAT DÖNÜŞÜMÜ: Ekrana değil, Dünyaya göre çiz
+                InputPoint world_pos = screen_to_world(start_x, start_y);
+                start_x = world_pos.x;
+                start_y = world_pos.y;
+
+                teleport_brush(start_x, start_y);
 
                 point_history.clear();
                 last_time = std::chrono::steady_clock::now();
                 
                 mypaint_surface->is_erasing =  (Fl::event_button() == FL_RIGHT_MOUSE) ? true : false;
-                
-                InputPoint p={.x=start_x, .y=start_y, .pressure=0.8f, .time=0.0};
+
+                InputPoint p={.x=start_x, .y=start_y, .pressure=get_pressure(), .time=0.0};
                 point_history.push_back(p);
                 return 1;
             }
 
             case FL_DRAG: {
+                int button = Fl::event_button();
+
+                // ORTA TUŞ: Kaydırma (Pan)
+                if (button == FL_MIDDLE_MOUSE) {
+                    int dx = Fl::event_x() - last_mouse_x;
+                    int dy = Fl::event_y() - last_mouse_y;
+                    
+                    camera.x += dx;
+                    camera.y += dy;
+                    
+                    last_mouse_x = Fl::event_x();
+                    last_mouse_y = Fl::event_y();
+                    
+                    redraw(); // Kaydırmayı göster
+                    return 1;
+                }
                 // Spline Matematiği: process_queue fonksiyonu, elindeki 4 noktayı alıp
                 // aradaki boşlukları interpolate_cubic fonksiyonu ile dolduruyor.
                 // Otomatik Sıklık: Fareyi çok hızlı hareket ettirsen bile (dist büyük olsa bile),
                 // steps_d sayesinde araya yüzlerce nokta ekleniyor. Bu da köşeli görünümü (Angular lines) tamamen yok ediyor.
-                
+
+                InputPoint world_pos = screen_to_world(Fl::event_x(), Fl::event_y());
+                start_x = world_pos.x;
+                start_y = world_pos.y;
+
                 auto now = std::chrono::steady_clock::now();
                 std::chrono::duration<double> elapsed = now - last_time;
                 double current_time = elapsed.count();
 
-                InputPoint p={.x=start_x, .y=start_y, .pressure=0.8f, .time=current_time};
+                
+                InputPoint p={.x=start_x, .y=start_y, .pressure=get_pressure(), .time=current_time};
                 point_history.push_back(p);
 
                 process_queue(false);
@@ -155,6 +234,10 @@ int MyCanvas::handle(int event){
         }
 }
 
+float MyCanvas::get_pressure() {
+    // TODO
+    return 0.8f;
+}
 
 void MyCanvas::process_queue(bool force_finish) {
     // Spline çizmek için en az 4 nokta gerekir: P0, P1, P2, P3
@@ -201,17 +284,27 @@ void MyCanvas::send_stroke_to_engine(float x, float y, float pressure, double dt
     make_current(); 
     mainLayer->bind(); 
 
-    glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity(); {
-        glOrtho(0, pixel_w(), pixel_h(), 0, -1, 1);
-        glMatrixMode(GL_MODELVIEW); glLoadIdentity();
-    
-        mypaint_brush_stroke_to(brush, (MyPaintSurface*)mypaint_surface, x, y, pressure, 0, 0, dtime, 1.0, 0.0, 0.0, 0);
-    } glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW);
+    glViewport(0, 0, LayerSize.w, LayerSize.h);
+
+
+    glMatrixMode(GL_PROJECTION); 
+    glPushMatrix(); 
+    glLoadIdentity(); 
+    {
+        // Projeksiyon
+        glOrtho(0, LayerSize.w, LayerSize.h, 0, -1, 1);
+        glMatrixMode(GL_MODELVIEW); 
+        glLoadIdentity();
+
+        mypaint_brush_stroke_to(brush, (MyPaintSurface*)mypaint_surface, x, y, pressure, 0, 0, dtime, zoom, 0.0, 0.0, 0);
+    } 
+    glMatrixMode(GL_PROJECTION); 
+    glPopMatrix(); 
+    glMatrixMode(GL_MODELVIEW);
 
     mainLayer->unbind(); 
     redraw();
 }
-
 
 InputPoint MyCanvas::interpolate_cubic(float t, InputPoint p0, InputPoint p1, InputPoint p2, InputPoint p3) {
     InputPoint result;
@@ -264,4 +357,15 @@ void MyCanvas::rgb_to_hsv(float r, float g, float b, float &h, float &s, float &
     if (h < 0.0f) h += 360.0f;
     
     h /= 360.0f; // MyPaint 0.0 - 1.0 arası ister
+}
+
+
+// Ekran koordinatını (Mouse) -> Dünya koordinatına (Tuval) çevirir
+
+InputPoint MyCanvas::screen_to_world(float screen_x, float screen_y) {
+    InputPoint p;
+    // Formül: (Fare - Kamera) / Zoom
+    p.x = (screen_x - camera.x) / zoom;
+    p.y = (screen_y - camera.y) / zoom;
+    return p;
 }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(painthan)
+project(minepaint)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -63,12 +63,12 @@ set(PROJECT_SOURCES
     src/Ui.cpp
 )
 
-add_executable(painthan ${PROJECT_SOURCES})
+add_executable(minepaint ${PROJECT_SOURCES})
 
 # Kütüphaneleri linkle
 # Linux'ta statik linklemede sıralama önemlidir. En bağımlı olandan sistem kütüphanesine doğru.
 # Kütüphaneleri linkle
-target_link_libraries(painthan 
+target_link_libraries(minepaint 
     # YEREL VE STATİK KALACAK KÜTÜPHANELER
     ${MYPAINT_LIB}      # libmypaint'ın statik (.a) sürümü
     fltk                # FLTK'nın statik sürümü
