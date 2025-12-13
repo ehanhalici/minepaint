@@ -4,3 +4,5 @@
 - [ ] tablet icin basinc eklenecek
 - [X] x-y scroll eklenecek
 - [X] belli limitte z scroll eklenecek
+- [ ] geri al
+- [ ] kaydet ve yukle
