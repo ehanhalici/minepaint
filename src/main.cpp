@@ -4,6 +4,5 @@
 
 #include "Ui.hpp"
 int main(int argc, char **argv) {
-    Ui().init_ui(argc, argv);
-        
+    Ui().init_ui(argc, argv);    
 }
