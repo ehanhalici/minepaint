@@ -3,10 +3,9 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-// Pointer aritmetiği ve unsafe işlemler için
 staload UN = "prelude/SATS/unsafe.sats"
 
-// --- 1. HARİCİ KÜTÜPHANE VE OPENGL TANIMLARI ---
+// --- Harici Kütüphane Başlıkları (Sadece bağımlılık bağlantısı) ---
 %{^
 #include <GL/gl.h>
 #include <mypaint-surface.h>
@@ -14,59 +13,16 @@ staload UN = "prelude/SATS/unsafe.sats"
 #include <stdlib.h>
 
 typedef struct {
-    MyPaintSurface parent; // İlk eleman
+    MyPaintSurface parent;
     int is_erasing;
+    void* layer;
 } MyGLSurface_Record;
 
-// 1. ATS'nin ürettiği gerçek fonksiyonun prototipi (İlk parametre void* olarak düzeltildi)
-extern int draw_dab_callback(void *self, float x, float y, float radius,
-                             float color_r, float color_g, float color_b,
-                             float opaque, float hardness, float alpha_eraser,
-                             float aspect_ratio, float angle,
-                             float lock_alpha, float colorize,
-                             float snap, float zoom, float rot, float barrel);
-
-// 2. Tip Uyuşmazlığını Çözen Arabulucu C Fonksiyonu
-// Libmypaint'in tam olarak beklediği imza (MyPaintSurface*)
-int draw_dab_c_wrapper(MyPaintSurface *self, float x, float y, float radius,
-                       float color_r, float color_g, float color_b,
-                       float opaque, float hardness, float alpha_eraser,
-                       float aspect_ratio, float angle,
-                       float lock_alpha, float colorize,
-                       float snap, float zoom, float rot, float barrel) {
-    // ATS fonksiyonunu çağırıp self pointer'ını (void*)'a cast ederek veriyoruz
-    return draw_dab_callback((void*)self, x, y, radius,
-                             color_r, color_g, color_b,
-                             opaque, hardness, alpha_eraser,
-                             aspect_ratio, angle,
-                             lock_alpha, colorize,
-                             snap, zoom, rot, barrel);
-}
-
-// 3. Oluşturucu
-MyGLSurface_Record* mygl_surface_create_c() {
-    MyGLSurface_Record* surf = (MyGLSurface_Record*)malloc(sizeof(MyGLSurface_Record));
-    mypaint_surface_init(&(surf->parent));
-    
-    // Doğrudan ATS fonksiyonu yerine uyumlu C arabulucusunu bağlıyoruz
-    surf->parent.draw_dab = draw_dab_c_wrapper;
-    
-    surf->is_erasing = 0;
-    return surf;
-}
-
-// 4. Yok Edici
-void mygl_surface_destroy_c(MyGLSurface_Record* surf) {
-    if(surf) free(surf);
-}
-
-// 5. Değişken Güncelleyici
-void mygl_surface_set_erasing(MyGLSurface_Record* surf, int erasing) {
-    if(surf) surf->is_erasing = erasing;
-}
+#define my_f2i(x) ((int)(x))
+#define my_fadd(a, b) ((a) + (b))
+#define my_fsub(a, b) ((a) - (b))
+#define my_fdiv(a, b) ((a) / (b))
 %}
-
-
 
 // OpenGL Sabitleri
 macdef GL_BLEND = $extval(int, "GL_BLEND")
@@ -96,22 +52,31 @@ extern fun glScalef(x: float, y: float, z: float): void = "mac#"
 // Matematik Fonksiyonları
 extern fun cosf(x: float): float = "mac#"
 extern fun sinf(x: float): float = "mac#"
+extern fun floorf(x: float): float = "mac#"
+extern fun f2i(f: float): int = "mac#my_f2i"
+extern fun f_add(a: float, b: float): float = "mac#my_fadd"
+extern fun f_sub(a: float, b: float): float = "mac#my_fsub"
+extern fun f_div(a: float, b: float): float = "mac#my_fdiv"
 
-// Standart C Fonksiyonları (ATS üzerinden çağrılır)
+// Bellek ve Kütüphane Fonksiyonları
 extern fun malloc(size: size_t): ptr = "mac#"
 extern fun free(p: ptr): void = "mac#"
 extern fun memset(p: ptr, value: int, size: size_t): ptr = "mac#"
+extern fun mypaint_surface_init(s: ptr): void = "mac#"
 
-// --- 2. LİBMYPAINT TİP TANIMLARI ---
+// Layer / Tile FFI Fonksiyonları
+extern fun layer_find_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_find_tile"
+extern fun layer_get_or_create_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_get_or_create_tile"
+extern fun layer_bind_tile(tile: ptr): void = "ext#layer_bind_tile"
+extern fun layer_unbind_tile(): void = "ext#layer_unbind_tile"
 
-// MyPaint'in beklediği fonksiyon imzası
+// LibMyPaint Tipleri
 typedef MyPaintDrawDabFunc = (
   ptr, float, float, float, float, float, float, 
   float, float, float, float, float, float, 
   float, float, float, float, float
 ) -> int
 
-// MyPaintSurface struct'ının ATS karşılığı (Bellek yerleşimi C ile aynıdır)
 typedef MyPaintSurface_Record = @{
   draw_dab= MyPaintDrawDabFunc,
   get_color= ptr,
@@ -119,41 +84,37 @@ typedef MyPaintSurface_Record = @{
   end_atomic= ptr,
   save_png= ptr,
   refcount= int,
-  _pad= int,          // hizalama
+  _pad= int,
   refcount_mutex= int
 }
 
-// Bizim genişletilmiş Surface yapımız
 typedef MyGLSurface_Record = @{
   parent= MyPaintSurface_Record,
-  is_erasing= int
+  is_erasing= int,
+  layer= ptr
 }
 
-
-// MyGLSurface nesnesini sızıntı yapamayacak "Lineer Opak Pointer" olarak tanımlıyoruz
-absvtype mygl_surface_vtype = ptr
-
-// FFI Köprüleri (Doğrudan C makrolarına bağlıyoruz)
-extern fun mygl_surface_create(): mygl_surface_vtype = "mac#mygl_surface_create_c"
-extern fun mygl_surface_destroy(surf: mygl_surface_vtype): void = "mac#mygl_surface_destroy_c"
-
-// ! sembolü: "Bu nesneyi geçici olarak ödünç alıyorum, yok etmeyeceğim" demek
-extern fun mygl_surface_set_erasing(surf: !mygl_surface_vtype, erasing: int): void = "mac#"
-
+// Surface API İmzaları
 typedef glsurface_vtype = ptr
 
-extern fun draw_dab_callback : MyPaintDrawDabFunc = "ext#"
-extern fun glsurface_create(): glsurface_vtype = "ext#"
-extern fun glsurface_destroy(s: glsurface_vtype): void = "ext#"
-extern fun glsurface_set_erasing(s: glsurface_vtype, v: int): void = "ext#"
+extern fun draw_dab_callback : MyPaintDrawDabFunc = "ext#draw_dab_callback"
+extern fun glsurface_create(): glsurface_vtype = "ext#glsurface_create"
+extern fun glsurface_destroy(s: glsurface_vtype): void = "ext#glsurface_destroy"
+extern fun glsurface_set_erasing(s: glsurface_vtype, v: int): void = "ext#glsurface_set_erasing"
+extern fun mygl_surface_set_layer(s: glsurface_vtype, layer: ptr): void = "ext#mygl_surface_set_layer"
 
+// Eski adlar ile de uyumluluk için C FFI sembolleri
+extern fun mygl_surface_create_c(): ptr = "ext#mygl_surface_create_c"
+extern fun mygl_surface_destroy_c(s: ptr): void = "ext#mygl_surface_destroy_c"
+extern fun mygl_surface_set_erasing(s: ptr, v: int): void = "ext#mygl_surface_set_erasing"
 
-// --- 3. ÇİZİM MANTIĞI (PÜR ATS) ---
-
+// --- Nokta Çizim Mantığı (MyGLSurface.cpp :: print_dot) ---
 fun print_dot(
   is_erasing: int, radius: float, color_r: float, color_g: float, color_b: float, opaque: float, hardness: float
 ): void = let
   val () = glEnable(GL_BLEND)
+  val actual_radius = if is_erasing > 0 then radius * 4.0f else radius
+
   val () = if is_erasing > 0 then let
     val () = glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA)
     val () = glColor4f(0.0f, 0.0f, 0.0f, 1.0f)
@@ -161,72 +122,118 @@ fun print_dot(
     val () = glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
     val () = glColor4f(color_r, color_g, color_b, opaque)
   in () end
-  
+
   val () = glBegin(GL_TRIANGLE_FAN)
   val () = glVertex2f(0.0f, 0.0f)
+
   val edge_alpha = if is_erasing > 0 then 1.0f else opaque * hardness
-  val () = glColor4f(color_r, color_g, color_b, edge_alpha)
+  val () = if is_erasing > 0 then
+    glColor4f(0.0f, 0.0f, 0.0f, 1.0f)
+  else
+    glColor4f(color_r, color_g, color_b, edge_alpha)
+
   val segments = 24
-  val PI = 3.1415926535f
-  
-  fun loop (i: int): void =
+  val PI = 3.14159265358979323846f
+
+  fun loop(i: int): void =
     if i <= segments then let
-      val theta = 2.0f * PI * g0int2float(i) / g0int2float(segments)
-      val dx = radius * cosf(theta)
-      val dy = radius * sinf(theta)
+      val theta: float = 2.0f * PI * g0int2float(i) / g0int2float(segments)
+      val dx: float = g0float_mul(actual_radius, cosf(theta))
+      val dy: float = g0float_mul(actual_radius, sinf(theta))
       val () = glVertex2f(dx, dy)
-    in loop (i + 1) end else ()
-    
+    in loop(i + 1) end else ()
+
   val () = loop(0)
   val () = glEnd()
-in end
+in () end
 
-// --- 4. CALLBACK IMPLEMENTASYONU ---
-
+// --- Dab Çizim Callback'i (Tiled Infinite Canvas Entegrasyonu) ---
 implement draw_dab_callback(self, x, y, radius, r, g, b, opaque, hardness, eraser, aspect, angle, lock, colorize, snap, zoom, rot, barrel): int = let
   val surf = $UN.cast{ref(MyGLSurface_Record)}(self)
+  val layer = surf->layer
   val is_erasing = surf->is_erasing
 in
-  if radius > 0.0001f then let
-    val () = glDisable(GL_TEXTURE_2D)
-    val () = glDisable(GL_DEPTH_TEST)
-    val () = glPushMatrix()
-    val () = glTranslatef(x, y, 0.0f)
-    val angle_deg = angle * 180.0f / 3.14159265f
-    val () = glRotatef(angle_deg, 0.0f, 0.0f, 1.0f)
-    val () = if aspect > 1.0f then glScalef(1.0f, 1.0f / aspect, 1.0f)
-             else if aspect < 1.0f then glScalef(aspect, 1.0f, 1.0f)
-             else ()
-    val () = print_dot(is_erasing, radius, r, g, b, opaque, hardness)
-    val () = glPopMatrix()
+  if (layer != the_null_ptr) * (radius > 0.00001f) then let
+    val actual_radius = if is_erasing > 0 then radius * 4.0f else radius
+    val min_tx: int = f2i(floorf(f_div(f_sub(x, actual_radius), 1024.0f)))
+    val max_tx: int = f2i(floorf(f_div(f_add(x, actual_radius), 1024.0f)))
+    val min_ty: int = f2i(floorf(f_div(f_sub(y, actual_radius), 1024.0f)))
+    val max_ty: int = f2i(floorf(f_div(f_add(y, actual_radius), 1024.0f)))
+
+    fun loop_y(tx: int, ty: int): void =
+      if ty <= max_ty then let
+        // Silgi modunda boş yere tile oluşturma; sadece var olan tile'ı sil
+        val tile =
+          if is_erasing > 0 then layer_find_tile(layer, tx, ty)
+          else layer_get_or_create_tile(layer, tx, ty)
+
+        val tile_p = $UN.cast{ptr}(tile)
+        val () = if tile_p > the_null_ptr then let
+          val () = layer_bind_tile(tile)
+          val () = glDisable(GL_TEXTURE_2D)
+          val () = glDisable(GL_DEPTH_TEST)
+          val () = glPushMatrix()
+          val () = glTranslatef(x, y, 0.0f)
+
+          val angle_deg = angle * 180.0f / 3.14159265358979323846f
+          val () = glRotatef(angle_deg, 0.0f, 0.0f, 1.0f)
+
+          val () = if aspect > 1.0f then glScalef(1.0f, 1.0f / aspect, 1.0f)
+                   else if aspect < 1.0f then glScalef(aspect, 1.0f, 1.0f)
+                   else ()
+
+          val () = print_dot(is_erasing, radius, r, g, b, opaque, hardness)
+          val () = glPopMatrix()
+          val () = layer_unbind_tile()
+        in () end
+      in
+        loop_y(tx, ty + 1)
+      end else ()
+
+    fun loop_x(tx: int): void =
+      if tx <= max_tx then let
+        val () = loop_y(tx, min_ty)
+      in
+        loop_x(tx + 1)
+      end else ()
+
+    val () = loop_x(min_tx)
   in () end else ();
   1
 end
 
-
-// --- 5. LIFECYCLE (OLUŞTURMA VE YOK ETME) ---
-
-
+// --- Yaşam Döngüsü (Lifecycle) ---
 implement glsurface_create() = let
   val sz = $UN.cast{size_t}(sizeof<MyGLSurface_Record>)
   val p = malloc(sz)
   val () = assertloc(p > the_null_ptr)
   val _ = memset(p, 0, sz)
 
+  val () = mypaint_surface_init(p)
+
   val p1 = $UN.cast{ref(MyGLSurface_Record)}(p)
   val () = p1->parent.draw_dab := draw_dab_callback
   val () = p1->parent.refcount := 1
   val () = p1->is_erasing := 0
+  val () = p1->layer := the_null_ptr
 in
   $UN.cast{glsurface_vtype}(p)
 end
 
 implement glsurface_destroy(s) = let
   val () = free($UN.cast{ptr}(s))
-in end
-
+in () end
 
 implement glsurface_set_erasing(s, v) = let
   val surf = $UN.cast{ref(MyGLSurface_Record)}(s)
   val () = surf->is_erasing := v
-in end
+in () end
+
+implement mygl_surface_set_layer(s, layer) = let
+  val surf = $UN.cast{ref(MyGLSurface_Record)}(s)
+  val () = surf->layer := layer
+in () end
+
+implement mygl_surface_create_c() = glsurface_create()
+implement mygl_surface_destroy_c(s) = glsurface_destroy(s)
+implement mygl_surface_set_erasing(s, v) = glsurface_set_erasing(s, v)

@@ -12,7 +12,6 @@ endif()
 
 
 include_directories("${PATSHOME}" "${PATSHOME}/ccomp/runtime")
-include_directories(include)
 
 # --- 1. STATİK DERLEME AYARLARI (KRİTİK) ---
 
@@ -38,9 +37,6 @@ find_package(PkgConfig REQUIRED)
 set(PKG_CONFIG_STATIC_LIBS TRUE)
 pkg_check_modules(DEPS REQUIRED json-c glib-2.0)
 
-# --- Geri kalan kod (Aynı kalmalı) ---
-
-include_directories(include)
 # --- LIBMYPAINT BAĞLANTISI ---
 
 # find_library zaten .a'yı öncelikli arayacaktır
@@ -95,7 +91,7 @@ foreach(ATS_FILE ${ATS_SOURCES})
 # --- 3. ÇALIŞTIRILABİLİR DOSYA ---
 add_executable(minepaint 
     ${GENERATED_C_SOURCES} 
-    src/ffi_bindings.cpp # C++ kütüphanelerine (FLTK vb.) tek köprümüz
+    dependencies/fltk_bridge.cpp # C++ kütüphanelerine (FLTK vb.) tek köprümüz
   )
 target_compile_definitions(minepaint PRIVATE ATS_MEMALLOC_LIBC)
 # Kütüphaneleri linkle
