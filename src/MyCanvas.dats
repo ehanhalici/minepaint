@@ -7,16 +7,16 @@ staload UN = "prelude/SATS/unsafe.sats"
 staload "./MyGLSurface.dats"
 staload "./Layer.dats"
 
-// --- Harici C Kütüphaneleri ve Tipler (Sadece bağımlılık bağlantısı) ---
+// --- Harici C Kütüphaneleri ve Tipler ---
 %{^
 #include <GL/gl.h>
 #include <mypaint-brush.h>
 #include <mypaint-surface.h>
 #include <math.h>
 #include <stdlib.h>
+#include <sys/time.h>
 
 typedef struct {
-  void* win;
   void* brush;
   void* surf;
   void* layer;
@@ -29,21 +29,11 @@ typedef struct {
   void* q;
 } canvas_state_record;
 
-extern int fltk_event_x(void);
-extern int fltk_event_y(void);
-extern int fltk_event_button(void);
-extern int fltk_event_dy(void);
-extern int fltk_event_dx(void);
-extern int fltk_window_pixel_w(void* win);
-extern int fltk_window_pixel_h(void* win);
-extern int fltk_event_mousewheel(void);
-extern int fltk_event_push(void);
-extern int fltk_event_release(void);
-extern int fltk_event_drag(void);
-extern int fltk_event_is_panning(void);
-extern double ats_get_current_time(void);
-extern void fltk_make_current(void* win);
-extern void fltk_canvas_redraw(void* win);
+static double get_time_seconds(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + ((double)tv.tv_usec / 1000000.0);
+}
 
 #define my_f2i(x) ((int)(x))
 #define my_i2f(x) ((float)(x))
@@ -57,7 +47,6 @@ extern void fltk_canvas_redraw(void* win);
 %}
 
 typedef canvas_state_record = $extype_struct"canvas_state_record" of {
-  win= ptr,
   brush= ptr,
   surf= ptr,
   layer= ptr,
@@ -83,7 +72,7 @@ macdef MYPAINT_BRUSH_SETTING_COLOR_H = $extval(int, "MYPAINT_BRUSH_SETTING_COLOR
 macdef MYPAINT_BRUSH_SETTING_COLOR_S = $extval(int, "MYPAINT_BRUSH_SETTING_COLOR_S")
 macdef MYPAINT_BRUSH_SETTING_COLOR_V = $extval(int, "MYPAINT_BRUSH_SETTING_COLOR_V")
 
-// C Bağımlılık Fonksiyon İmzaları
+// C Fonksiyon İmzaları
 extern fun malloc(n: size_t): ptr = "mac#"
 extern fun free(p: ptr): void = "mac#"
 extern fun glMatrixMode(m: int): void = "mac#"
@@ -108,22 +97,7 @@ extern fun mypaint_brush_new_stroke(brush: ptr): void = "mac#"
 extern fun mypaint_brush_set_base_value(brush: ptr, setting: int, value: float): void = "mac#"
 extern fun mypaint_brush_get_base_value(brush: ptr, setting: int): float = "mac#"
 
-extern fun fltk_canvas_redraw(win: ptr): void = "mac#"
-extern fun fltk_make_current(win: ptr): void = "mac#"
-extern fun fltk_event_x(): int = "mac#"
-extern fun fltk_event_y(): int = "mac#"
-extern fun fltk_event_button(): int = "mac#"
-extern fun fltk_event_dy(): int = "mac#"
-extern fun fltk_event_dx(): int = "mac#"
-extern fun fltk_window_pixel_w(win: ptr): int = "mac#"
-extern fun fltk_window_pixel_h(win: ptr): int = "mac#"
-extern fun fltk_event_mousewheel(): int = "mac#"
-extern fun fltk_event_push(): int = "mac#"
-extern fun fltk_event_release(): int = "mac#"
-extern fun fltk_event_drag(): int = "mac#"
-extern fun fltk_event_is_panning(): int = "mac#"
-extern fun ats_get_current_time(): double = "mac#"
-
+extern fun get_time_seconds(): double = "mac#get_time_seconds"
 extern fun sqrtf(x: float): float = "mac#"
 extern fun powf(x: float, y: float): float = "mac#"
 
@@ -169,7 +143,7 @@ in
   end
 end
 
-// --- Pür ATS2 ile Kübik Enterpolasyon (MyCanvas.cpp :: interpolate_cubic) ---
+// --- Pür ATS2 ile Kübik Enterpolasyon ---
 fun interpolate_cubic(t: float, p0: input_point, p1: input_point, p2: input_point, p3: input_point): input_point = let
   val t2 = f_mul(t, t)
   val t3 = f_mul(t2, t)
@@ -206,7 +180,7 @@ fun push_queue(q: point_queue, pt: input_point): point_queue =
   | ~QueueNil() => QueueCons(pt, QueueNil())
   | ~QueueCons(p, tail) => QueueCons(p, push_queue(tail, pt))
 
-// --- Fırçayı Çizgisiz Işınlama (MyCanvas.cpp :: teleport_brush) ---
+// --- Fırçayı Çizgisiz Işınlama ---
 fun teleport_brush(brush: ptr, surf: ptr, x: float, y: float): void = let
   val saved_tracking = mypaint_brush_get_base_value(brush, MYPAINT_BRUSH_SETTING_SLOW_TRACKING)
   val () = mypaint_brush_set_base_value(brush, MYPAINT_BRUSH_SETTING_SLOW_TRACKING, 0.0f)
@@ -216,13 +190,12 @@ fun teleport_brush(brush: ptr, surf: ptr, x: float, y: float): void = let
   val () = mypaint_brush_set_base_value(brush, MYPAINT_BRUSH_SETTING_SLOW_TRACKING, saved_tracking)
 in () end
 
-// --- Motora Çizim Gönderme (Sonsuz Tiled Canvas'a Doğrudan Çizim) ---
+// --- Motora Çizim Gönderme ---
 fun send_stroke_to_engine(
-  win: ptr, layer: ptr, brush: ptr, surf: ptr, zoom: float,
+  layer: ptr, brush: ptr, surf: ptr, zoom: float,
   x: float, y: float, pressure: float, dtime: double
 ): void = let
   val () = if layer != the_null_ptr then let
-    val () = fltk_make_current(win)
     val () = mygl_surface_set_layer(surf, layer)
     val _ = mypaint_brush_stroke_to(brush, surf, x, y, pressure, 0.0f, 0.0f, dtime, zoom, 0.0f, 0.0f, 0)
   in () end
@@ -230,7 +203,7 @@ in () end
 
 // --- Spline Kuyruğunu İşleme ---
 fun process_queue(
-  win: ptr, layer: ptr, brush: ptr, surf: ptr, zoom: float,
+  layer: ptr, brush: ptr, surf: ptr, zoom: float,
   queue: point_queue, force_finish: bool
 ): point_queue =
   case+ queue of
@@ -255,13 +228,13 @@ fun process_queue(
         if i <= steps_clamped then let
           val t = f_div(i2f(i), i2f(steps_clamped))
           val p = interpolate_cubic(t, p0, p1, p2, p3)
-          val () = send_stroke_to_engine(win, layer, brush, surf, zoom, p.x, p.y, p.pressure, sub_dtime)
+          val () = send_stroke_to_engine(layer, brush, surf, zoom, p.x, p.y, p.pressure, sub_dtime)
         in stroke_loop(i + 1) end else ()
 
       val () = stroke_loop(1)
       val nq = QueueCons(p1, QueueCons(p2, QueueCons(p3, tail)))
     in
-      process_queue(win, layer, brush, surf, zoom, nq, force_finish)
+      process_queue(layer, brush, surf, zoom, nq, force_finish)
     end
   | _ =>
     if force_finish then let
@@ -269,20 +242,28 @@ fun process_queue(
     in QueueNil() end
     else queue
 
-// --- Çizim Callback'i (Sonsuz Kanvas - Sınır Çizgisi Kaldırıldı) ---
-extern fun canvas_draw_callback(state_ptr: ptr): void = "mac#"
-implement canvas_draw_callback(state_ptr) = let
-  val s = $UN.cast{ref(canvas_state_record)}(state_ptr)
-  val win_w = fltk_window_pixel_w(s->win)
-  val win_h = fltk_window_pixel_h(s->win)
+// --- Canvas API İmzaları (Pencere ve UI Tarafından Çağrılır) ---
+extern fun canvas_render(p: ptr, canvas_w: int, canvas_h: int): void = "ext#canvas_render"
+extern fun canvas_on_wheel(p: ptr, mx: int, my: int, dy: int): void = "ext#canvas_on_wheel"
+extern fun canvas_on_mouse_down(p: ptr, mx: int, my: int, btn: int, is_pan: int): void = "ext#canvas_on_mouse_down"
+extern fun canvas_on_mouse_move(p: ptr, mx: int, my: int, btn: int, is_pan: int): void = "ext#canvas_on_mouse_move"
+extern fun canvas_on_mouse_up(p: ptr, mx: int, my: int, btn: int, is_pan: int): void = "ext#canvas_on_mouse_up"
+extern fun canvas_set_brush_color(p: ptr, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
+extern fun canvas_set_brush_setting(p: ptr, id: int, v: float): void = "ext#canvas_set_brush_setting"
+extern fun canvas_state_create(brush: ptr): ptr = "ext#canvas_state_create"
 
-  val () = glViewport(0, 0, win_w, win_h)
+// --- Çizim Render Fonksiyonu ---
+implement canvas_render(state_ptr, canvas_w, canvas_h) = let
+  val s = $UN.cast{ref(canvas_state_record)}(state_ptr)
+
+  val () = glViewport(0, 0, canvas_w, canvas_h)
   val () = glMatrixMode(GL_PROJECTION)
   val () = glLoadIdentity()
-  val () = glOrtho(0.0, g0int2float(win_w), g0int2float(win_h), 0.0, ~1.0, 1.0)
+  val () = glOrtho(0.0, g0int2float(canvas_w), g0int2float(canvas_h), 0.0, ~1.0, 1.0)
   val () = glMatrixMode(GL_MODELVIEW)
   val () = glLoadIdentity()
 
+  // Kanvas arka plan rengi
   val () = glClearColor(0.07f, 0.07f, 0.07f, 1.0f)
   val () = glClear(GL_COLOR_BUFFER_BIT)
 
@@ -295,132 +276,116 @@ implement canvas_draw_callback(state_ptr) = let
     val cur_zoom = s->zoom
     val vl = f_div(f_sub(0.0f, s->cam_x), cur_zoom)
     val vt = f_div(f_sub(0.0f, s->cam_y), cur_zoom)
-    val vr = f_div(f_sub(i2f(win_w), s->cam_x), cur_zoom)
-    val vb = f_div(f_sub(i2f(win_h), s->cam_y), cur_zoom)
+    val vr = f_div(f_sub(i2f(canvas_w), s->cam_x), cur_zoom)
+    val vb = f_div(f_sub(i2f(canvas_h), s->cam_y), cur_zoom)
     val () = layer_draw_tiles(s->layer, vl, vt, vr, vb)
   in () end
 
   val () = glPopMatrix()
 in () end
 
-// --- Olay İşleme Callback'i (Fare Tekerleği Zoom + Sonsuz Pan) ---
-extern fun canvas_handle_callback(p: ptr, ev: int): int = "mac#"
-implement canvas_handle_callback(p, ev) = let
+// --- Fare Tekerleği Zoom ---
+implement canvas_on_wheel(p, mx, my, dy) = let
   val s = $UN.cast{ref(canvas_state_record)}(p)
-  val start_x = i2f(fltk_event_x())
-  val start_y = i2f(fltk_event_y())
+  val start_x = i2f(mx)
+  val start_y = i2f(my)
+  val cur_zoom = s->zoom
+  val mb_x = f_div(f_sub(start_x, s->cam_x), cur_zoom)
+  val mb_y = f_div(f_sub(start_y, s->cam_y), cur_zoom)
+
+  val step_zoom = if dy < 0 then f_mul(cur_zoom, 1.15f) else f_mul(cur_zoom, 0.85f)
+  val min_clamped = if f_lt(step_zoom, 0.02f) then 0.02f else step_zoom
+  val new_zoom = if f_gt(min_clamped, 50.0f) then 50.0f else min_clamped
+
+  val ma_x = f_div(f_sub(start_x, s->cam_x), new_zoom)
+  val ma_y = f_div(f_sub(start_y, s->cam_y), new_zoom)
+
+  val () = s->cam_x := f_add(s->cam_x, f_mul(f_sub(ma_x, mb_x), new_zoom))
+  val () = s->cam_y := f_add(s->cam_y, f_mul(f_sub(ma_y, mb_y), new_zoom))
+  val () = s->zoom := new_zoom
+in () end
+
+// --- Fare Basma ---
+implement canvas_on_mouse_down(p, mx, my, btn, is_pan) = let
+  val s = $UN.cast{ref(canvas_state_record)}(p)
   val q = $UN.castvwtp0{point_queue}(s->q)
-
-  val ev_wheel = fltk_event_mousewheel()
-  val ev_push = fltk_event_push()
-  val ev_drag = fltk_event_drag()
-  val ev_rel = fltk_event_release()
 in
-  // 1. FARE TEKERLEĞİ İLE ZOOM (Cursor merkezli kesintisiz yakınlaşma)
-  if ev = ev_wheel then let
-    val dy = fltk_event_dy()
-    val cur_zoom = s->zoom
-    val mb_x = f_div(f_sub(start_x, s->cam_x), cur_zoom)
-    val mb_y = f_div(f_sub(start_y, s->cam_y), cur_zoom)
-
-    // dy < 0 yukarı kaydırma = Yakınlaş, dy > 0 aşağı kaydırma = Uzaklaş
-    val step_zoom = if dy < 0 then f_mul(cur_zoom, 1.15f) else f_mul(cur_zoom, 0.85f)
-    val min_clamped = if f_lt(step_zoom, 0.02f) then 0.02f else step_zoom
-    val new_zoom = if f_gt(min_clamped, 50.0f) then 50.0f else min_clamped
-
-    val ma_x = f_div(f_sub(start_x, s->cam_x), new_zoom)
-    val ma_y = f_div(f_sub(start_y, s->cam_y), new_zoom)
-
-    // İmleç altındaki dünya noktasını sabit tutacak şekilde kamerayı güncelle
-    val () = s->cam_x := f_add(s->cam_x, f_mul(f_sub(ma_x, mb_x), new_zoom))
-    val () = s->cam_y := f_add(s->cam_y, f_mul(f_sub(ma_y, mb_y), new_zoom))
-    val () = s->zoom := new_zoom
+  if (is_pan > 0) || (btn = 2) then let
+    val () = s->last_mouse_x := mx
+    val () = s->last_mouse_y := my
     val () = s->q := $UN.castvwtp0{ptr}(q)
-    val () = fltk_canvas_redraw(s->win)
-  in 1 end
-
-  // 2. FARE BASMA (FL_PUSH)
-  else if ev = ev_push then let
-    val is_pan = (fltk_event_is_panning() > 0)
-  in
-    if is_pan then let // Orta tuş veya Boşluk tuşu ile Pan başlat
-      val () = s->last_mouse_x := fltk_event_x()
-      val () = s->last_mouse_y := fltk_event_y()
-      val () = s->q := $UN.castvwtp0{ptr}(q)
-    in 1 end
-    else let
-      val cur_zoom = s->zoom
-      val wx = f_div(f_sub(start_x, s->cam_x), cur_zoom)
-      val wy = f_div(f_sub(start_y, s->cam_y), cur_zoom)
-
-      val () = teleport_brush(s->brush, s->surf, wx, wy)
-      val () = free_queue(q)
-      val () = s->last_time := ats_get_current_time()
-
-      val btn = fltk_event_button()
-      val is_erasing = if btn = 3 then 1 else 0 // Sağ Tuş: Silgi
-      val () = glsurface_set_erasing(s->surf, is_erasing)
-
-      val p0 = @{ x= wx, y= wy, pressure= 0.8f, time= 0.0 }
-      val nq = QueueCons(p0, QueueNil())
-      val () = s->q := $UN.castvwtp0{ptr}(nq)
-    in 1 end
-  end
-
-  // 3. FARE SÜRÜKLEME (FL_DRAG)
-  else if ev = ev_drag then let
-    val is_pan = (fltk_event_is_panning() > 0)
-  in
-    if is_pan then let // Tuvali Sonsuz Kaydırma (Pan)
-      val cur_x = fltk_event_x()
-      val cur_y = fltk_event_y()
-      val dx = cur_x - s->last_mouse_x
-      val dy = cur_y - s->last_mouse_y
-      val () = s->cam_x := f_add(s->cam_x, i2f(dx))
-      val () = s->cam_y := f_add(s->cam_y, i2f(dy))
-      val () = s->last_mouse_x := cur_x
-      val () = s->last_mouse_y := cur_y
-      val () = s->q := $UN.castvwtp0{ptr}(q)
-      val () = fltk_canvas_redraw(s->win)
-    in 1 end
-    else let
-      val cur_zoom = s->zoom
-      val wx = f_div(f_sub(start_x, s->cam_x), cur_zoom)
-      val wy = f_div(f_sub(start_y, s->cam_y), cur_zoom)
-      val cur_time = ats_get_current_time()
-      val elapsed = cur_time - s->last_time
-
-      val pt = @{ x= wx, y= wy, pressure= 0.8f, time= elapsed }
-      val q1 = push_queue(q, pt)
-      val q2 = process_queue(s->win, s->layer, s->brush, s->surf, s->zoom, q1, false)
-      val () = s->q := $UN.castvwtp0{ptr}(q2)
-      val () = fltk_canvas_redraw(s->win)
-    in 1 end
-  end
-
-  // 4. FARE BIRAKMA (FL_RELEASE)
-  else if ev = ev_rel then let
-    val is_pan = (fltk_event_is_panning() > 0)
-  in
-    if is_pan then let
-      val () = s->q := $UN.castvwtp0{ptr}(q)
-    in 1 end
-    else let
-      val q1 = process_queue(s->win, s->layer, s->brush, s->surf, s->zoom, q, true)
-      val () = free_queue(q1)
-      val () = s->q := $UN.castvwtp0{ptr}(QueueNil())
-      val () = mypaint_brush_reset(s->brush)
-      val () = glsurface_set_erasing(s->surf, 0)
-      val () = fltk_canvas_redraw(s->win)
-    in 1 end
-  end
+  in () end
   else let
-    val () = s->q := $UN.castvwtp0{ptr}(q)
-  in 0 end
+    val start_x = i2f(mx)
+    val start_y = i2f(my)
+    val cur_zoom = s->zoom
+    val wx = f_div(f_sub(start_x, s->cam_x), cur_zoom)
+    val wy = f_div(f_sub(start_y, s->cam_y), cur_zoom)
+
+    val () = teleport_brush(s->brush, s->surf, wx, wy)
+    val () = free_queue(q)
+    val () = s->last_time := get_time_seconds()
+
+    val is_erasing = if btn = 3 then 1 else 0 // Sağ tık silgi
+    val () = glsurface_set_erasing(s->surf, is_erasing)
+
+    val p0 = @{ x= wx, y= wy, pressure= 0.8f, time= 0.0 }
+    val nq = QueueCons(p0, QueueNil())
+    val () = s->q := $UN.castvwtp0{ptr}(nq)
+  in () end
 end
 
-// --- UI ile İletişim Fonksiyonları ---
-extern fun canvas_set_brush_color(p: ptr, r: float, g: float, b: float): void = "ext#"
+// --- Fare Sürükleme ---
+implement canvas_on_mouse_move(p, mx, my, btn, is_pan) = let
+  val s = $UN.cast{ref(canvas_state_record)}(p)
+  val q = $UN.castvwtp0{point_queue}(s->q)
+in
+  if (is_pan > 0) || (btn = 2) then let
+    val dx = mx - s->last_mouse_x
+    val dy = my - s->last_mouse_y
+    val () = s->cam_x := f_add(s->cam_x, i2f(dx))
+    val () = s->cam_y := f_add(s->cam_y, i2f(dy))
+    val () = s->last_mouse_x := mx
+    val () = s->last_mouse_y := my
+    val () = s->q := $UN.castvwtp0{ptr}(q)
+  in () end
+  else if (btn = 1) || (btn = 3) then let
+    val start_x = i2f(mx)
+    val start_y = i2f(my)
+    val cur_zoom = s->zoom
+    val wx = f_div(f_sub(start_x, s->cam_x), cur_zoom)
+    val wy = f_div(f_sub(start_y, s->cam_y), cur_zoom)
+    val cur_time = get_time_seconds()
+    val elapsed = cur_time - s->last_time
+
+    val pt = @{ x= wx, y= wy, pressure= 0.8f, time= elapsed }
+    val q1 = push_queue(q, pt)
+    val q2 = process_queue(s->layer, s->brush, s->surf, s->zoom, q1, false)
+    val () = s->q := $UN.castvwtp0{ptr}(q2)
+  in () end
+  else let
+    val () = s->q := $UN.castvwtp0{ptr}(q)
+  in () end
+end
+
+// --- Fare Bırakma ---
+implement canvas_on_mouse_up(p, mx, my, btn, is_pan) = let
+  val s = $UN.cast{ref(canvas_state_record)}(p)
+  val q = $UN.castvwtp0{point_queue}(s->q)
+in
+  if (is_pan > 0) || (btn = 2) then let
+    val () = s->q := $UN.castvwtp0{ptr}(q)
+  in () end
+  else let
+    val q1 = process_queue(s->layer, s->brush, s->surf, s->zoom, q, true)
+    val () = free_queue(q1)
+    val () = s->q := $UN.castvwtp0{ptr}(QueueNil())
+    val () = mypaint_brush_reset(s->brush)
+    val () = glsurface_set_erasing(s->surf, 0)
+  in () end
+end
+
+// --- Renk Ayarı ---
 implement canvas_set_brush_color(p, r, g, b) = let
   val @(h, s, v) = rgb_to_hsv(r, g, b)
   val st = $UN.cast{ref(canvas_state_record)}(p)
@@ -431,7 +396,7 @@ implement canvas_set_brush_color(p, r, g, b) = let
   in () end
 in () end
 
-extern fun canvas_set_brush_setting(p: ptr, id: int, v: float): void = "ext#"
+// --- Fırça Ayarı ---
 implement canvas_set_brush_setting(p, id, v) = let
   val st = $UN.cast{ref(canvas_state_record)}(p)
   val () = if st->brush != the_null_ptr then
@@ -440,13 +405,11 @@ implement canvas_set_brush_setting(p, id, v) = let
 in () end
 
 // --- Canvas Durum Oluşturucu ---
-extern fun canvas_state_create(win: ptr, brush: ptr): ptr = "ext#"
-implement canvas_state_create(win, brush) = let
+implement canvas_state_create(brush) = let
   val surf_linear = glsurface_create()
   val surf_ptr = $UN.castvwtp0{ptr}(surf_linear)
 
   val state = $UN.cast{ref(canvas_state_record)}(malloc($extval(size_t, "sizeof(canvas_state_record)")))
-  val () = state->win := win
   val () = state->brush := brush
   val () = state->surf := surf_ptr
   val () = state->layer := the_null_ptr

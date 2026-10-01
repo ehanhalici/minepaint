@@ -5,7 +5,7 @@
 // --- 2. MODÜL YÜKLEMELERİ (STALOAD) ---
 // Uygulamanın UI mantığını ve state yönetimini barındıran modülü dahil ediyoruz.
 // Bu dosya, FFI üzerinden ffi_bindings.cpp ile konuşacak olan arayüzdür.
-staload "./Ui.dats"
+staload "./ui/ui.dats"
 
 // --- 3. ANA GİRİŞ NOKTASI (ENTRY POINT) ---
 

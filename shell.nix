@@ -7,7 +7,6 @@ pkgs.mkShell {
   ];
 
   buildInputs = with pkgs; [
-    fltk
     libmypaint
     json_c
     
@@ -16,9 +15,9 @@ pkgs.mkShell {
     libGLU
     # ---------------------------------------
     
-    xorg.libX11
-    xorg.libXext
-    xorg.libXrender
+    libx11
+    libxext
+    libxrender
   ];
   
 shellHook = ''
@@ -35,7 +34,7 @@ shellHook = ''
     echo "========================================="
     echo "ATS2 Geliştirme Ortamı Hazır."
     echo "Gerçek PATSHOME = $PATSHOME"
-    patscc -version
+    patsopt --version
     echo "========================================="
   '';
 }
