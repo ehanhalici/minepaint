@@ -114,8 +114,8 @@ implement mypaint_mapping_set_n(self_p, input, n) = let
   val cp = get_control_point_ptr(self->pointsList, input)
   val old_n = get_cp_n(cp)
   val () =
-    if (n != 0) * (old_n = 0) then self->inputs_used := self->inputs_used + 1
-    else if (n = 0) * (old_n != 0) then self->inputs_used := self->inputs_used - 1
+    if (n != 0) && (old_n = 0) then self->inputs_used := self->inputs_used + 1
+    else if (n = 0) && (old_n != 0) then self->inputs_used := self->inputs_used - 1
     else ()
   val () = set_cp_n(cp, n)
 in
@@ -194,7 +194,7 @@ in
 
           // find segment with slope
           fun find_seg(i: int, x0: float, y0: float, x1: float, y1: float): @(float, float, float, float) =
-            if (i < n) * (x > x1) then
+            if (i < n) && (x > x1) then
               find_seg(i + 1, x1, y1, get_cp_x(cp, i), get_cp_y(cp, i))
             else
               @(x0, y0, x1, y1)

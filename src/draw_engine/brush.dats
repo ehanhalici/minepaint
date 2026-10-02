@@ -7,6 +7,9 @@ staload UN = "prelude/SATS/unsafe.sats"
 staload "./settings.dats"
 staload "./helpers.dats"
 staload "./surface.dats"
+#include "./brushsettings_gen.hats"
+
+extern fun mypaint_brush_setting_info(id: int): ptr = "ext#mypaint_brush_setting_info"
 
 %{^
 #include <math.h>
@@ -67,6 +70,18 @@ implement draw_engine_brush_new() = let
   val _ = memset(p, 0, sz)
   val () = clear_states(p)
   val () = set_reset(p, 1)
+
+  fun init_defaults(b: ptr, i: int): void =
+    if i < MYPAINT_BRUSH_SETTINGS_COUNT then let
+      val info_p = mypaint_brush_setting_info(i)
+      val () = if info_p != the_null_ptr then let
+        val s = $UN.cast{ref(MyPaintBrushSettingInfo)}(info_p)
+        val () = set_base(b, i, s->def)
+        val () = set_val(b, i, s->def)
+      in () end
+    in init_defaults(b, i + 1) end else ()
+
+  val () = init_defaults(p, 0)
 in
   p
 end

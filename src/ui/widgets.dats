@@ -62,9 +62,13 @@ fn f_add(a: float, b: float): float = g0float_add_float(a, b)
 fn f_sub(a: float, b: float): float = g0float_sub_float(a, b)
 fn f_mul(a: float, b: float): float = g0float_mul_float(a, b)
 fn f_div(a: float, b: float): float = g0float_div_float(a, b)
-fn f_min(a: float, b: float): float = if a < b then a else b
-fn f_max(a: float, b: float): float = if a > b then a else b
+fn f_min(a: float, b: float): float = if g0float_lt(a, b) then a else b
+fn f_max(a: float, b: float): float = if g0float_gt(a, b) then a else b
 fn f_clamp(x: float, lo: float, hi: float): float = f_max(lo, f_min(hi, x))
+fn f_lt(a: float, b: float): bool = g0float_lt(a, b)
+fn f_gt(a: float, b: float): bool = g0float_gt(a, b)
+fn f_lte(a: float, b: float): bool = g0float_lte(a, b)
+fn f_gte(a: float, b: float): bool = g0float_gte(a, b)
 
 // --- 2D Çizim Yardımcıları (Pür ATS2) ---
 fun gl_draw_rect(x: float, y: float, w: float, h: float, r: float, g: float, b: float, a: float): void = let
@@ -230,6 +234,31 @@ fun hsv_to_rgb(h: float, s: float, v: float): @(float, float, float) =
     | _ => @(v, p, q)
   end
 
+// --- Renk Dönüşümü: RGB -> HSV (Pür ATS2) ---
+fun rgb_to_hsv(r: float, g: float, b: float): @(float, float, float) = let
+  val max_rg = if f_gt(r, g) then r else g
+  val max_val = if f_gt(max_rg, b) then max_rg else b
+  val min_rg = if f_lt(r, g) then r else g
+  val min_val = if f_lt(min_rg, b) then min_rg else b
+  val delta = f_sub(max_val, min_val)
+  val v = max_val
+in
+  if f_lt(delta, 0.00001f) then
+    @(0.0f, 0.0f, v)
+  else let
+    val s = if f_gt(max_val, 0.0f) then f_div(delta, max_val) else 0.0f
+    val h_val =
+      if f_gte(r, max_val) then f_div(f_sub(g, b), delta)
+      else if f_gte(g, max_val) then f_add(2.0f, f_div(f_sub(b, r), delta))
+      else f_add(4.0f, f_div(f_sub(r, g), delta))
+    val h_deg = f_mul(h_val, 60.0f)
+    val h_norm = if f_lt(h_deg, 0.0f) then f_add(h_deg, 360.0f) else h_deg
+    val h = f_div(h_norm, 360.0f)
+  in
+    @(h, s, v)
+  end
+end
+
 // --- Renk Paleti (Pür ATS2) ---
 fun get_palette_color(i: int): @(float, float, float) =
   case+ i of
@@ -318,6 +347,10 @@ implement widgets_on_mouse_down(mx, my, btn, canvas_ptr) =
           val () = u->cur_r := pr
           val () = u->cur_g := pg
           val () = u->cur_b := pb
+          val @(ph, ps, pv) = rgb_to_hsv(pr, pg, pb)
+          val () = u->cur_h := ph
+          val () = u->cur_s := ps
+          val () = u->cur_v := pv
           val () = canvas_set_brush_color(canvas_ptr, pr, pg, pb)
         in 1 end
         else check_pal(i + 1)
@@ -376,7 +409,7 @@ implement widgets_on_mouse_down(mx, my, btn, canvas_ptr) =
                 val () = canvas_set_brush_setting(canvas_ptr, set_id, new_v)
               in 1 end
               else check_slider(i + 1)
-            end else 1
+            end else 0
         in
           check_slider(0)
         end
