@@ -1,32 +1,51 @@
 // src/ui/widgets.dats
-// Native ATS2 Implementation of GUI Widgets (Sliders, Color Pickers, Vector Font)
+// Native ATS2 Implementation of GUI Widgets (Sliders, Color Pickers, Vector Font, Presets, Collapsible Sidebar)
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
 staload UN = "prelude/SATS/unsafe.sats"
 
-// --- Harici Kütüphane Başlıkları (Sadece OpenGL ve libc snprintf) ---
+// --- Harici Kütüphane Başlıkları (Sadece OpenGL ve libc snprintf / sys/time) ---
 %{^
 #include <GL/gl.h>
 #include <math.h>
 #include <stdio.h>
+#include <sys/time.h>
 
 static inline void format_slider_val(char* buf, int sz, float v) {
     snprintf(buf, sz, "%.2f", v);
 }
 
+static inline float double_to_float(double d) {
+    return (float)d;
+}
+
 static struct {
+    double edge_hover_time;
     float cur_r, cur_g, cur_b;
     float cur_h, cur_s, cur_v;
-    int active_drag;
     float val0, val1, val2, val3;
-} g_ui_state = { 0.73f, 0.73f, 0.73f, 0.0f, 0.0f, 0.73f, -1, 1.2f, 0.1f, 0.9f, 3.0f };
+    int active_drag;
+    int active_preset;
+    int sidebar_visible;
+    int dummy;
+} g_ui_state = {
+    0.0,
+    0.73f, 0.73f, 0.73f,
+    0.0f, 0.0f, 0.73f,
+    1.2f, 0.1f, 0.9f, 3.0f,
+    -1,
+    1,
+    1,
+    0
+};
 
 static inline void* get_g_ui_ptr(void) { return &g_ui_state; }
 %}
 
 extern fun format_slider_val(buf: ptr, sz: int, v: float): void = "mac#"
+extern fun double_to_float(d: double): float = "mac#"
 extern fun get_g_ui_ptr(): ptr = "mac#"
 
 // OpenGL Sabitleri
@@ -57,7 +76,7 @@ extern fun sinf(x: float): float = "mac#"
 extern fun canvas_set_brush_setting(p: ptr, id: int, v: float): void = "ext#canvas_set_brush_setting"
 extern fun canvas_set_brush_color(p: ptr, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
 
-// Float Aritmetik Yardımcıları
+// Float ve Double Aritmetik Yardımcıları
 fn f_add(a: float, b: float): float = g0float_add_float(a, b)
 fn f_sub(a: float, b: float): float = g0float_sub_float(a, b)
 fn f_mul(a: float, b: float): float = g0float_mul_float(a, b)
@@ -69,6 +88,12 @@ fn f_lt(a: float, b: float): bool = g0float_lt(a, b)
 fn f_gt(a: float, b: float): bool = g0float_gt(a, b)
 fn f_lte(a: float, b: float): bool = g0float_lte(a, b)
 fn f_gte(a: float, b: float): bool = g0float_gte(a, b)
+
+fn d_sub(a: double, b: double): double = g0float_sub_double(a, b)
+fn d_div(a: double, b: double): double = g0float_div_double(a, b)
+fn d_gte(a: double, b: double): bool = g0float_gte_double(a, b)
+fn d_lte(a: double, b: double): bool = g0float_lte_double(a, b)
+fn d_gt(a: double, b: double): bool = g0float_gt_double(a, b)
 
 // --- 2D Çizim Yardımcıları (Pür ATS2) ---
 fun gl_draw_rect(x: float, y: float, w: float, h: float, r: float, g: float, b: float, a: float): void = let
@@ -115,6 +140,10 @@ fun font_get_col(c: int, col: int): int =
   | 46 => if col = 1 || col = 2 then 0x60 else 0 // '.'
   | 58 => if col = 1 || col = 2 then 0x36 else 0 // ':'
   | 45 => 0x08 // '-'
+  | 60 => // '<' (Sola Ok / Chevron)
+    if col = 0 then 0x08 else if col = 1 then 0x14 else if col = 2 then 0x22 else if col = 3 then 0x41 else 0x00
+  | 62 => // '>' (Sağa Ok / Chevron)
+    if col = 0 then 0x41 else if col = 1 then 0x22 else if col = 2 then 0x14 else if col = 3 then 0x08 else 0x00
   | 37 => // '%'
     if col = 0 then 0x63 else if col = 1 then 0x33 else if col = 2 then 0x18 else if col = 3 then 0x0c else 0x66
   | 48 => // '0'
@@ -275,19 +304,23 @@ fun get_palette_color(i: int): @(float, float, float) =
   | 10 => @(0.65f, 0.25f, 0.85f) // Mor
   | _  => @(0.55f, 0.35f, 0.20f) // Kahverengi
 
-// --- Widget Durumu (State Record) ---
+// --- Widget Durumu (State Record - Tam C struct uyumlu) ---
 typedef UIWidgetsState = @{
+  edge_hover_time= double,
   cur_r= float,
   cur_g= float,
   cur_b= float,
   cur_h= float,
   cur_s= float,
   cur_v= float,
-  active_drag= int,
   val0= float,
   val1= float,
   val2= float,
-  val3= float
+  val3= float,
+  active_drag= int,
+  active_preset= int,
+  sidebar_visible= int,
+  dummy= int
 }
 
 fn ui_get(): ref(UIWidgetsState) = $UN.cast{ref(UIWidgetsState)}(get_g_ui_ptr())
@@ -312,6 +345,30 @@ in
   | _ => u->val3 := v
 end
 
+// --- Fırça Profilleri (4 Preset Desteği) ---
+fn apply_preset(canvas_ptr: ptr, preset_id: int): void = let
+  val u = ui_get()
+  val () = u->active_preset := preset_id
+  val () =
+    case+ preset_id of
+    | 0 => begin
+        u->val0 := 0.80f; u->val1 := 0.85f; u->val2 := 1.00f; u->val3 := 0.50f
+      end
+    | 1 => begin
+        u->val0 := 1.20f; u->val1 := 0.10f; u->val2 := 0.90f; u->val3 := 3.00f
+      end
+    | 2 => begin
+        u->val0 := 2.60f; u->val1 := 0.05f; u->val2 := 0.35f; u->val3 := 0.00f
+      end
+    | _ => begin
+        u->val0 := 2.20f; u->val1 := 0.70f; u->val2 := 0.55f; u->val3 := 1.00f
+      end
+  val () = canvas_set_brush_setting(canvas_ptr, 3, u->val0)   // RADIUS
+  val () = canvas_set_brush_setting(canvas_ptr, 4, u->val1)   // HARDNESS
+  val () = canvas_set_brush_setting(canvas_ptr, 0, u->val2)   // OPAQUE
+  val () = canvas_set_brush_setting(canvas_ptr, 31, u->val3)  // SLOW_TRACKING
+in () end
+
 // --- Widget Olay ve Render Fonksiyonları (Pür ATS2) ---
 extern fun widgets_is_dragging(): int = "ext#widgets_is_dragging"
 implement widgets_is_dragging() = let
@@ -332,86 +389,118 @@ implement widgets_on_mouse_down(mx, my, btn, canvas_ptr) =
   if btn != 1 then 0
   else let
     val u = ui_get()
-    val swatch_w = 22.0f
-    val swatch_h = 20.0f
-    fun check_pal(i: int): int =
-      if i < 12 then let
-        val row = i / 6
-        val col = i % 6
-        val bx = f_add(75.0f, f_mul(g0int2float(col), f_add(swatch_w, 5.0f)))
-        val by = f_add(55.0f, f_mul(g0int2float(row), f_add(swatch_h, 5.0f)))
-        val hit = (mx >= bx) * (mx <= f_add(bx, swatch_w)) * (my >= by) * (my <= f_add(by, swatch_h))
-      in
-        if hit then let
-          val @(pr, pg, pb) = get_palette_color(i)
-          val () = u->cur_r := pr
-          val () = u->cur_g := pg
-          val () = u->cur_b := pb
-          val @(ph, ps, pv) = rgb_to_hsv(pr, pg, pb)
-          val () = u->cur_h := ph
-          val () = u->cur_s := ps
-          val () = u->cur_v := pv
-          val () = canvas_set_brush_color(canvas_ptr, pr, pg, pb)
-        in 1 end
-        else check_pal(i + 1)
-      end else 0
-
-    val pal_hit = check_pal(0)
+    val sw = 250.0f
+    // 0. Sağ üstteki ">>" menüyü gizleme düğmesi kontrolü
+    val in_collapse = (mx >= f_sub(sw, 40.0f)) * (mx <= f_sub(sw, 8.0f)) * (my >= 8.0f) * (my <= 36.0f)
   in
-    if pal_hit > 0 then 1
+    if in_collapse then let
+      val () = u->sidebar_visible := 0
+    in 1 end
     else let
-      val bar_w = 210.0f
-      val in_hue = (mx >= 20.0f) * (mx <= f_add(20.0f, bar_w)) * (my >= 115.0f) * (my <= 135.0f)
+      // 1. Renk Paleti Etkileşimi
+      val swatch_w = 22.0f
+      val swatch_h = 20.0f
+      fun check_pal(i: int): int =
+        if i < 12 then let
+          val row = i / 6
+          val col = i % 6
+          val bx = f_add(75.0f, f_mul(g0int2float(col), f_add(swatch_w, 5.0f)))
+          val by = f_add(55.0f, f_mul(g0int2float(row), f_add(swatch_h, 5.0f)))
+          val hit = (mx >= bx) * (mx <= f_add(bx, swatch_w)) * (my >= by) * (my <= f_add(by, swatch_h))
+        in
+          if hit then let
+            val @(pr, pg, pb) = get_palette_color(i)
+            val () = u->cur_r := pr
+            val () = u->cur_g := pg
+            val () = u->cur_b := pb
+            val @(ph, ps, pv) = rgb_to_hsv(pr, pg, pb)
+            val () = u->cur_h := ph
+            val () = u->cur_s := ps
+            val () = u->cur_v := pv
+            val () = canvas_set_brush_color(canvas_ptr, pr, pg, pb)
+          in 1 end
+          else check_pal(i + 1)
+        end else 0
+
+      val pal_hit = check_pal(0)
     in
-      if in_hue then let
-        val () = u->active_drag := 10
-        val raw_h = f_div(f_sub(mx, 20.0f), bar_w)
-        val h_val = f_clamp(raw_h, 0.0f, 1.0f)
-        val () = u->cur_h := h_val
-        val @(nr, ng, nb) = hsv_to_rgb(h_val, u->cur_s, u->cur_v)
-        val () = u->cur_r := nr
-        val () = u->cur_g := ng
-        val () = u->cur_b := nb
-        val () = canvas_set_brush_color(canvas_ptr, nr, ng, nb)
-      in 1 end
+      if pal_hit > 0 then 1
       else let
-        val in_sv = (mx >= 20.0f) * (mx <= f_add(20.0f, bar_w)) * (my >= 145.0f) * (my <= 220.0f)
+        val bar_w = 210.0f
+        val in_hue = (mx >= 20.0f) * (mx <= f_add(20.0f, bar_w)) * (my >= 115.0f) * (my <= 135.0f)
       in
-        if in_sv then let
-          val () = u->active_drag := 11
-          val raw_s = f_div(f_sub(mx, 20.0f), bar_w)
-          val raw_v = f_sub(1.0f, f_div(f_sub(my, 145.0f), 75.0f))
-          val s_val = f_clamp(raw_s, 0.0f, 1.0f)
-          val v_val = f_clamp(raw_v, 0.0f, 1.0f)
-          val () = u->cur_s := s_val
-          val () = u->cur_v := v_val
-          val @(nr, ng, nb) = hsv_to_rgb(u->cur_h, s_val, v_val)
+        if in_hue then let
+          val () = u->active_drag := 10
+          val raw_h = f_div(f_sub(mx, 20.0f), bar_w)
+          val h_val = f_clamp(raw_h, 0.0f, 1.0f)
+          val () = u->cur_h := h_val
+          val @(nr, ng, nb) = hsv_to_rgb(h_val, u->cur_s, u->cur_v)
           val () = u->cur_r := nr
           val () = u->cur_g := ng
           val () = u->cur_b := nb
           val () = canvas_set_brush_color(canvas_ptr, nr, ng, nb)
         in 1 end
         else let
-          val slider_base_y = 250.0f
-          val slider_spacing = 58.0f
-          fun check_slider(i: int): int =
-            if i < 4 then let
-              val sy_pos = f_add(slider_base_y, f_mul(g0int2float(i), slider_spacing))
-              val in_sl = (mx >= 15.0f) * (mx <= 235.0f) * (my >= f_add(sy_pos, 10.0f)) * (my <= f_add(sy_pos, 35.0f))
-            in
-              if in_sl then let
-                val () = u->active_drag := i
-                val raw_pct = f_div(f_sub(mx, 20.0f), bar_w)
-                val pct = f_clamp(raw_pct, 0.0f, 1.0f)
-                val @(_, set_id, min_v, max_v, _) = get_slider_info(i)
-                val new_v = f_add(min_v, f_mul(pct, f_sub(max_v, min_v)))
-                val () = set_slider_val(i, new_v)
-                val () = canvas_set_brush_setting(canvas_ptr, set_id, new_v)
-              in 1 end
-              else check_slider(i + 1)
-            end else 0
+          val in_sv = (mx >= 20.0f) * (mx <= f_add(20.0f, bar_w)) * (my >= 145.0f) * (my <= 220.0f)
         in
-          check_slider(0)
+          if in_sv then let
+            val () = u->active_drag := 11
+            val raw_s = f_div(f_sub(mx, 20.0f), bar_w)
+            val raw_v = f_sub(1.0f, f_div(f_sub(my, 145.0f), 75.0f))
+            val s_val = f_clamp(raw_s, 0.0f, 1.0f)
+            val v_val = f_clamp(raw_v, 0.0f, 1.0f)
+            val () = u->cur_s := s_val
+            val () = u->cur_v := v_val
+            val @(nr, ng, nb) = hsv_to_rgb(u->cur_h, s_val, v_val)
+            val () = u->cur_r := nr
+            val () = u->cur_g := ng
+            val () = u->cur_b := nb
+            val () = canvas_set_brush_color(canvas_ptr, nr, ng, nb)
+          in 1 end
+          else let
+            val slider_base_y = 250.0f
+            val slider_spacing = 58.0f
+            fun check_slider(i: int): int =
+              if i < 4 then let
+                val sy_pos = f_add(slider_base_y, f_mul(g0int2float(i), slider_spacing))
+                val in_sl = (mx >= 15.0f) * (mx <= 235.0f) * (my >= f_add(sy_pos, 10.0f)) * (my <= f_add(sy_pos, 35.0f))
+              in
+                if in_sl then let
+                  val () = u->active_drag := i
+                  val () = u->active_preset := ~1
+                  val raw_pct = f_div(f_sub(mx, 20.0f), bar_w)
+                  val pct = f_clamp(raw_pct, 0.0f, 1.0f)
+                  val @(_, set_id, min_v, max_v, _) = get_slider_info(i)
+                  val new_v = f_add(min_v, f_mul(pct, f_sub(max_v, min_v)))
+                  val () = set_slider_val(i, new_v)
+                  val () = canvas_set_brush_setting(canvas_ptr, set_id, new_v)
+                in 1 end
+                else check_slider(i + 1)
+              end else 0
+
+            val sl_hit = check_slider(0)
+          in
+            if sl_hit > 0 then 1
+            else let
+              // 4 Profil Düğmesi Kontrolü (PEN, INK, AIR, MRK)
+              val in_presets = (my >= 510.0f) * (my <= 538.0f)
+            in
+              if in_presets then let
+                fun check_pbtn(p: int): int =
+                  if p < 4 then let
+                    val bx = f_add(20.0f, f_mul(g0int2float(p), 54.0f))
+                    val hit = (mx >= bx) * (mx <= f_add(bx, 48.0f))
+                  in
+                    if hit then let
+                      val () = apply_preset(canvas_ptr, p)
+                    in 1 end
+                    else check_pbtn(p + 1)
+                  end else 0
+              in
+                check_pbtn(0)
+              end else 0
+            end
+          end
         end
       end
     end
@@ -450,6 +539,7 @@ in
     in 1 end
     else if (u->active_drag >= 0) * (u->active_drag < 4) then let
       val i = u->active_drag
+      val () = u->active_preset := ~1
       val raw_pct = f_div(f_sub(mx, 20.0f), bar_w)
       val pct = f_clamp(raw_pct, 0.0f, 1.0f)
       val @(_, set_id, min_v, max_v, _) = get_slider_info(i)
@@ -473,9 +563,17 @@ implement widgets_render(sx, sy, sw, sh) = let
   val () = gl_draw_rect(sx, sy, sw, sh, 0.12f, 0.12f, 0.13f, 1.0f)
   val () = gl_draw_rect(sx, sy, 1.0f, sh, 0.22f, 0.22f, 0.25f, 1.0f)
 
-  // 2. Başlık
+  // 2. Başlık ve Gizleme Düğmesi ">>"
   val () = glPointSize(2.0f)
   val () = gl_draw_string(f_add(sx, 20.0f), 20.0f, 1.5f, "MINEPAINT", 0.0f, 0.6f, 1.0f)
+
+  val btn_collapse_x = f_sub(f_add(sx, sw), 38.0f)
+  val btn_collapse_y = 10.0f
+  val () = gl_draw_rect(btn_collapse_x, btn_collapse_y, 28.0f, 24.0f, 0.18f, 0.18f, 0.22f, 1.0f)
+  val () = gl_draw_rect_outline(btn_collapse_x, btn_collapse_y, 28.0f, 24.0f, 0.35f, 0.35f, 0.40f, 1.0f)
+  val () = glPointSize(1.5f)
+  val () = gl_draw_string(f_add(btn_collapse_x, 5.0f), f_add(btn_collapse_y, 5.0f), 1.2f, ">>", 0.80f, 0.80f, 0.90f)
+
   val () = gl_draw_rect(f_add(sx, 20.0f), 42.0f, f_sub(sw, 40.0f), 1.0f, 0.2f, 0.2f, 0.22f, 1.0f)
 
   // 3. Renk Bölümü
@@ -573,4 +671,121 @@ implement widgets_render(sx, sy, sw, sh) = let
       val () = gl_draw_circle(thumb_x, f_add(track_y, f_div(track_h, 2.0f)), 4.0f, 0.0f, 0.48f, 0.80f, 1.0f)
     in draw_sliders(i + 1) end else ()
   val () = draw_sliders(0)
+
+  // 5. Fırça Profilleri (Presets: PEN, INK, AIR, MRK)
+  val () = gl_draw_rect(f_add(sx, 20.0f), 485.0f, bar_w, 1.0f, 0.2f, 0.2f, 0.22f, 1.0f)
+  val () = glPointSize(1.5f)
+  val () = gl_draw_string(f_add(sx, 20.0f), 494.0f, 1.1f, "PROFILLER", 0.65f, 0.65f, 0.70f)
+
+  val preset_y = 510.0f
+  val preset_w = 48.0f
+  val preset_h = 26.0f
+  val preset_gap = 6.0f
+
+  fun draw_preset_btn(idx: int, label: string): void = let
+    val bx = f_add(f_add(sx, 20.0f), f_mul(g0int2float(idx), f_add(preset_w, preset_gap)))
+    val is_active = u->active_preset = idx
+    val () = if is_active then
+      gl_draw_rect(bx, preset_y, preset_w, preset_h, 0.0f, 0.48f, 0.80f, 1.0f)
+    else
+      gl_draw_rect(bx, preset_y, preset_w, preset_h, 0.18f, 0.18f, 0.20f, 1.0f)
+    val () = if is_active then
+      gl_draw_rect_outline(bx, preset_y, preset_w, preset_h, 0.3f, 0.7f, 1.0f, 1.0f)
+    else
+      gl_draw_rect_outline(bx, preset_y, preset_w, preset_h, 0.30f, 0.30f, 0.35f, 1.0f)
+    val () = glPointSize(1.5f)
+    val () = if is_active then
+      gl_draw_string(f_add(bx, 11.0f), f_add(preset_y, 7.0f), 1.2f, label, 1.0f, 1.0f, 1.0f)
+    else
+      gl_draw_string(f_add(bx, 11.0f), f_add(preset_y, 7.0f), 1.2f, label, 0.70f, 0.70f, 0.75f)
+  in () end
+
+  val () = draw_preset_btn(0, "PEN")
+  val () = draw_preset_btn(1, "INK")
+  val () = draw_preset_btn(2, "AIR")
+  val () = draw_preset_btn(3, "MRK")
 in () end
+
+// --- Kenar ve Gizleme Fonksiyonları (Exported) ---
+
+extern fun widgets_get_sidebar_visible(): int = "ext#widgets_get_sidebar_visible"
+implement widgets_get_sidebar_visible() = let
+  val u = ui_get()
+in
+  u->sidebar_visible
+end
+
+extern fun widgets_set_sidebar_visible(v: int): void = "ext#widgets_set_sidebar_visible"
+implement widgets_set_sidebar_visible(v) = let
+  val u = ui_get()
+in
+  u->sidebar_visible := v
+end
+
+extern fun widgets_on_edge_hover(mx: float, my: float, win_w: float, cur_time: double): void = "ext#widgets_on_edge_hover"
+implement widgets_on_edge_hover(mx, my, win_w, cur_time) = let
+  val u = ui_get()
+in
+  if u->sidebar_visible = 0 then let
+    val near_edge = f_gte(mx, f_sub(win_w, 25.0f))
+    val near_btn = (mx >= f_sub(win_w, 45.0f)) * (my >= 8.0f) * (my <= 42.0f)
+  in
+    if (near_edge || near_btn) then
+      u->edge_hover_time := cur_time
+  end
+end
+
+extern fun widgets_try_click_floating_toggle(mx: float, my: float, win_w: float, cur_time: double): int = "ext#widgets_try_click_floating_toggle"
+implement widgets_try_click_floating_toggle(mx, my, win_w, cur_time) = let
+  val u = ui_get()
+in
+  if u->sidebar_visible = 0 then let
+    val dt = d_sub(cur_time, u->edge_hover_time)
+    val is_active = d_gte(dt, 0.0) && d_lte(dt, 1.0)
+  in
+    if is_active then let
+      val bx = f_sub(win_w, 42.0f)
+      val by = 10.0f
+      val bw = 34.0f
+      val bh = 30.0f
+      val hit = (mx >= bx) * (mx <= f_add(bx, bw)) * (my >= by) * (my <= f_add(by, bh))
+    in
+      if hit then let
+        val () = u->sidebar_visible := 1
+      in 1 end
+      else 0
+    end else 0
+  end else 0
+end
+
+extern fun widgets_render_floating_toggle(win_w: float, cur_time: double): void = "ext#widgets_render_floating_toggle"
+implement widgets_render_floating_toggle(win_w, cur_time) = let
+  val u = ui_get()
+in
+  if u->sidebar_visible = 0 then let
+    val dt = d_sub(cur_time, u->edge_hover_time)
+    val is_active = d_gte(dt, 0.0) && d_lte(dt, 1.0)
+  in
+    if is_active then let
+      val alpha_d = if d_gt(dt, 0.7) then d_div(d_sub(1.0, dt), 0.3) else 1.0
+      val fa = double_to_float(alpha_d)
+      val bx = f_sub(win_w, 42.0f)
+      val by = 10.0f
+      val bw = 34.0f
+      val bh = 30.0f
+
+      val () = glDisable(GL_DEPTH_TEST)
+      val () = glDisable(GL_TEXTURE_2D)
+      val () = glEnable(GL_BLEND)
+      val () = glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+      // Arka plan şık yarı saydam kutu
+      val () = gl_draw_rect(bx, by, bw, bh, 0.12f, 0.12f, 0.15f, f_mul(0.85f, fa))
+      val () = gl_draw_rect_outline(bx, by, bw, bh, 0.0f, 0.55f, 0.95f, f_mul(0.95f, fa))
+
+      // "<<" Sola Ok Metni
+      val () = glPointSize(2.0f)
+      val () = gl_draw_string(f_add(bx, 9.0f), f_add(by, 8.0f), 1.3f, "<<", 0.3f, 0.8f, 1.0f)
+    in () end
+  end
+end

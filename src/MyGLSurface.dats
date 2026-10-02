@@ -1,55 +1,60 @@
 // src/MyGLSurface.dats
+// Native ATS2 OpenGL Surface for MyPaint Engine (Tiled FBOs & Dab Rendering)
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
 staload UN = "prelude/SATS/unsafe.sats"
 
-// --- Harici C Kütüphaneleri (Sadece OpenGL ve Standart Kütüphaneler) ---
+// --- Harici Kütüphane Başlıkları (OpenGL ve C Standart Kütüphanesi) ---
 %{^
 #include <GL/gl.h>
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 %}
 
 // OpenGL Sabitleri
-macdef GL_BLEND = $extval(int, "GL_BLEND")
-macdef GL_ZERO = $extval(int, "GL_ZERO")
-macdef GL_ONE_MINUS_SRC_ALPHA = $extval(int, "GL_ONE_MINUS_SRC_ALPHA")
-macdef GL_SRC_ALPHA = $extval(int, "GL_SRC_ALPHA")
-macdef GL_ONE = $extval(int, "GL_ONE")
-macdef GL_TRIANGLE_FAN = $extval(int, "GL_TRIANGLE_FAN")
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
 macdef GL_DEPTH_TEST = $extval(int, "GL_DEPTH_TEST")
+macdef GL_BLEND = $extval(int, "GL_BLEND")
+macdef GL_ZERO = $extval(int, "GL_ZERO")
+macdef GL_ONE = $extval(int, "GL_ONE")
+macdef GL_SRC_ALPHA = $extval(int, "GL_SRC_ALPHA")
+macdef GL_ONE_MINUS_SRC_ALPHA = $extval(int, "GL_ONE_MINUS_SRC_ALPHA")
+macdef GL_TRIANGLE_FAN = $extval(int, "GL_TRIANGLE_FAN")
 
 // OpenGL Fonksiyonları
-extern fun glEnable(cap: int): void = "mac#"
 extern fun glDisable(cap: int): void = "mac#"
+extern fun glEnable(cap: int): void = "mac#"
 extern fun glBlendFunc(sfactor: int, dfactor: int): void = "mac#"
-extern fun glBlendFuncSeparate(srcRGB: int, dstRGB: int, srcAlpha: int, dstAlpha: int): void = "mac#"
-extern fun glColor4f(red: float, green: float, blue: float, alpha: float): void = "mac#"
-extern fun glBegin(mode: int): void = "mac#"
-extern fun glEnd(): void = "mac#"
-extern fun glVertex2f(x: float, y: float): void = "mac#"
+extern fun glColor4f(r: float, g: float, b: float, a: float): void = "mac#"
 extern fun glPushMatrix(): void = "mac#"
 extern fun glPopMatrix(): void = "mac#"
 extern fun glTranslatef(x: float, y: float, z: float): void = "mac#"
 extern fun glRotatef(angle: float, x: float, y: float, z: float): void = "mac#"
 extern fun glScalef(x: float, y: float, z: float): void = "mac#"
+extern fun glBegin(mode: int): void = "mac#"
+extern fun glEnd(): void = "mac#"
+extern fun glVertex2f(x: float, y: float): void = "mac#"
 
-// Matematik Fonksiyonları
+// Matematik ve Bellek Fonksiyonları
 extern fun cosf(x: float): float = "mac#"
 extern fun sinf(x: float): float = "mac#"
+extern fun expf(x: float): float = "mac#"
 extern fun floorf(x: float): float = "mac#"
-fn f2i(f: float): int = g0float2int_float_int(f)
-fn f_add(a: float, b: float): float = g0float_add_float(a, b)
+fn f2i(x: float): int = g0float2int_float_int(x)
 fn f_sub(a: float, b: float): float = g0float_sub_float(a, b)
+fn f_add(a: float, b: float): float = g0float_add_float(a, b)
+fn f_mul(a: float, b: float): float = g0float_mul_float(a, b)
 fn f_div(a: float, b: float): float = g0float_div_float(a, b)
+fn f_gt(a: float, b: float): bool = g0float_gt_float(a, b)
+fn f_lt(a: float, b: float): bool = g0float_lt_float(a, b)
 
-// Bellek ve Kütüphane Fonksiyonları
 extern fun malloc(size: size_t): ptr = "mac#"
 extern fun free(p: ptr): void = "mac#"
 extern fun memset(p: ptr, value: int, size: size_t): ptr = "mac#"
+
 // Layer / Tile FFI Fonksiyonları
 extern fun layer_find_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_find_tile"
 extern fun layer_get_or_create_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_get_or_create_tile"
@@ -87,49 +92,55 @@ extern fun glsurface_create(): glsurface_vtype = "ext#glsurface_create"
 extern fun glsurface_destroy(s: glsurface_vtype): void = "ext#glsurface_destroy"
 extern fun glsurface_set_erasing(s: glsurface_vtype, v: int): void = "ext#glsurface_set_erasing"
 extern fun mygl_surface_set_layer(s: glsurface_vtype, layer: ptr): void = "ext#mygl_surface_set_layer"
+extern fun mygl_surface_flush_batch(s: ptr): void = "ext#mygl_surface_flush_batch"
 
 // Eski adlar ile de uyumluluk için C FFI sembolleri
 extern fun mygl_surface_create_c(): ptr = "ext#mygl_surface_create_c"
 extern fun mygl_surface_destroy_c(s: ptr): void = "ext#mygl_surface_destroy_c"
 extern fun mygl_surface_set_erasing(s: ptr, v: int): void = "ext#mygl_surface_set_erasing"
 
-// --- Nokta Çizim Mantığı (MyGLSurface.cpp :: print_dot) ---
+implement mygl_surface_flush_batch(s) = ()
+
+// --- Nokta Çizim Mantığı ---
 fun print_dot(
   is_erasing: int, radius: float, color_r: float, color_g: float, color_b: float, opaque: float, hardness: float
 ): void = let
   val () = glEnable(GL_BLEND)
-  val actual_radius = if is_erasing > 0 then radius * 4.0f else radius
+  val actual_radius = if is_erasing > 0 then f_mul(radius, 4.0f) else radius
 
   val () = if is_erasing > 0 then let
     val () = glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA)
     val () = glColor4f(0.0f, 0.0f, 0.0f, 1.0f)
   in () end else let
-    val () = glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
-    val () = glColor4f(color_r, color_g, color_b, opaque)
+    val () = glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
+    val () = glColor4f(f_mul(color_r, opaque), f_mul(color_g, opaque), f_mul(color_b, opaque), opaque)
   in () end
 
-  val () = glBegin(GL_TRIANGLE_FAN)
-  val () = glVertex2f(0.0f, 0.0f)
-
-  val edge_alpha = if is_erasing > 0 then 1.0f else opaque * hardness
-  val () = if is_erasing > 0 then
-    glColor4f(0.0f, 0.0f, 0.0f, 1.0f)
-  else
-    glColor4f(color_r, color_g, color_b, edge_alpha)
-
-  val segments = 24
+  val segs = 16
   val PI = 3.14159265358979323846f
 
-  fun loop(i: int): void =
-    if i <= segments then let
-      val theta: float = 2.0f * PI * g0int2float(i) / g0int2float(segments)
-      val dx: float = g0float_mul(actual_radius, cosf(theta))
-      val dy: float = g0float_mul(actual_radius, sinf(theta))
-      val () = glVertex2f(dx, dy)
-    in loop(i + 1) end else ()
+  fun draw_segment(r_inner: float, r_outer: float, a_inner: float, a_outer: float): void = let
+    val () = glBegin(GL_TRIANGLE_FAN)
+    val () = if is_erasing > 0 then glColor4f(0.0f, 0.0f, 0.0f, a_inner)
+             else glColor4f(f_mul(color_r, a_inner), f_mul(color_g, a_inner), f_mul(color_b, a_inner), a_inner)
+    val () = glVertex2f(0.0f, 0.0f)
 
-  val () = loop(0)
-  val () = glEnd()
+    val () = if is_erasing > 0 then glColor4f(0.0f, 0.0f, 0.0f, a_outer)
+             else glColor4f(f_mul(color_r, a_outer), f_mul(color_g, a_outer), f_mul(color_b, a_outer), a_outer)
+
+    fun loop(i: int): void =
+      if i <= segs then let
+        val theta = f_div(f_mul(f_mul(g0int2float(i), 2.0f), PI), g0int2float(segs))
+        val () = glVertex2f(f_mul(r_outer, cosf(theta)), f_mul(r_outer, sinf(theta)))
+      in loop(i + 1) end else ()
+
+    val () = loop(0)
+    val () = glEnd()
+  in () end
+
+  val r_hard = f_mul(actual_radius, hardness)
+  val () = if f_gt(hardness, 0.001f) then draw_segment(0.0f, r_hard, opaque, opaque)
+  val () = draw_segment(r_hard, actual_radius, opaque, 0.0f)
 in () end
 
 // --- Dab Çizim Callback'i (Tiled Infinite Canvas Entegrasyonu) ---
@@ -138,8 +149,8 @@ implement draw_dab_callback(self, x, y, radius, r, g, b, opaque, hardness, softn
   val layer = surf->layer
   val is_erasing = surf->is_erasing
 in
-  if (layer != the_null_ptr) * (radius > 0.00001f) then let
-    val actual_radius = if is_erasing > 0 then radius * 4.0f else radius
+  if (layer != the_null_ptr) && (radius > 0.00001f) then let
+    val actual_radius = if is_erasing > 0 then f_mul(radius, 4.0f) else radius
     val min_tx: int = f2i(floorf(f_div(f_sub(x, actual_radius), 1024.0f)))
     val max_tx: int = f2i(floorf(f_div(f_add(x, actual_radius), 1024.0f)))
     val min_ty: int = f2i(floorf(f_div(f_sub(y, actual_radius), 1024.0f)))
@@ -147,7 +158,6 @@ in
 
     fun loop_y(tx: int, ty: int): void =
       if ty <= max_ty then let
-        // Silgi modunda boş yere tile oluşturma; sadece var olan tile'ı sil
         val tile =
           if is_erasing > 0 then layer_find_tile(layer, tx, ty)
           else layer_get_or_create_tile(layer, tx, ty)
@@ -160,11 +170,11 @@ in
           val () = glPushMatrix()
           val () = glTranslatef(x, y, 0.0f)
 
-          val angle_deg = angle * 180.0f / 3.14159265358979323846f
+          val angle_deg = f_div(f_mul(angle, 180.0f), 3.14159265f)
           val () = if angle_deg != 0.0f then glRotatef(angle_deg, 0.0f, 0.0f, 1.0f)
 
-          val () = if aspect > 1.0f then glScalef(1.0f, 1.0f / aspect, 1.0f)
-                   else if (aspect > 0.001f) * (aspect < 1.0f) then glScalef(aspect, 1.0f, 1.0f)
+          val () = if f_gt(aspect, 1.0f) then glScalef(1.0f, f_div(1.0f, aspect), 1.0f)
+                   else if f_gt(aspect, 0.001f) && f_lt(aspect, 1.0f) then glScalef(aspect, 1.0f, 1.0f)
                    else ()
 
           val () = print_dot(is_erasing, radius, r, g, b, opaque, hardness)
@@ -215,6 +225,7 @@ implement mygl_surface_set_layer(s, layer) = let
   val () = surf->layer := layer
 in () end
 
+// C Uyumluluk Wrapper'ları
 implement mygl_surface_create_c() = glsurface_create()
 implement mygl_surface_destroy_c(s) = glsurface_destroy(s)
 implement mygl_surface_set_erasing(s, v) = glsurface_set_erasing(s, v)

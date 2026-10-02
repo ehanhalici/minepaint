@@ -14,15 +14,20 @@ staload UN = "prelude/SATS/unsafe.sats"
 
 typedef GLuint = uint
 
+#define TILE_HASH_SIZE 1024
+#define TILE_HASH_MASK 1023
+
 typedef CanvasTile = @{
   tx= int,
   ty= int,
   texture= uint,
   fbo= uint,
-  next= ptr
+  next_in_bucket= ptr,
+  next_in_layer= ptr
 }
 
 typedef Layer_Record = @{
+  buckets= ptr,
   tiles= ptr,
   tile_count= int
 }
@@ -92,10 +97,32 @@ extern fun layer_unbind(l: ptr): void = "ext#layer_unbind"
 extern fun layer_bind_c(l: ptr): void = "ext#layer_bind_c"
 extern fun layer_unbind_c(l: ptr): void = "ext#layer_unbind_c"
 
-// --- Pür ATS2 ile Sonsuz Katman Oluşturma ---
+// 2D Karo Koordinat Hash Fonksiyonu - Saf ATS2
+fn tile_hash(tx: int, ty: int): int = let
+  val u_tx = g0int2uint_int_uint(tx)
+  val u_ty = g0int2uint_int_uint(ty)
+  val h1 = g0uint_mul_uint(u_tx, 73856093U)
+  val h2 = g0uint_mul_uint(u_ty, 19349663U)
+  val h = g0uint_lxor_uint(h1, h2)
+  val idx = g0uint_land_uint(h, 1023U)
+in
+  g0uint2int_uint_int(idx)
+end
+
+// --- Pür ATS2 ile Sonsuz Katman Oluşturma (O(1) Hash Tablosu ile) ---
 implement layer_create(w, h) = let
   val p = malloc(sizeof<Layer_Record>)
   val r = $UN.cast{ref(Layer_Record)}(p)
+  val buckets_mem = malloc(g0int2uint_int_size(TILE_HASH_SIZE) * sizeof<ptr>)
+  val () = assertloc(buckets_mem > the_null_ptr)
+
+  fun init_buckets(i: int): void =
+    if i < TILE_HASH_SIZE then let
+      val () = $UN.ptr0_set<ptr>(ptr_add<ptr>(buckets_mem, i), the_null_ptr)
+    in init_buckets(i + 1) end else ()
+
+  val () = init_buckets(0)
+  val () = r->buckets := buckets_mem
   val () = r->tiles := the_null_ptr
   val () = r->tile_count := 0
 in
@@ -104,25 +131,28 @@ end
 
 implement layer_create_c(w, h) = layer_create(w, h)
 
-// --- Tile Arama (Sparse Tile Lookup) ---
-fun find_tile_node(cur: ptr, tx: int, ty: int): ptr =
+// --- O(1) Hash Tablosu ile Tile Arama ---
+fun find_tile_in_bucket(cur: ptr, tx: int, ty: int): ptr =
   if cur = the_null_ptr then the_null_ptr
   else let
     val t = $UN.cast{ref(CanvasTile)}(cur)
   in
-    if (t->tx = tx) * (t->ty = ty) then cur
-    else find_tile_node(t->next, tx, ty)
+    if (t->tx = tx) && (t->ty = ty) then cur
+    else find_tile_in_bucket(t->next_in_bucket, tx, ty)
   end
 
 implement layer_find_tile(layer, tx, ty) = let
   val () = assertloc(layer != the_null_ptr)
   val lr = $UN.cast{ref(Layer_Record)}(layer)
+  val idx = tile_hash(tx, ty)
+  val slot = ptr_add<ptr>(lr->buckets, idx)
+  val head = $UN.ptr0_get<ptr>(slot)
 in
-  find_tile_node(lr->tiles, tx, ty)
+  find_tile_in_bucket(head, tx, ty)
 end
 
 // --- Tile Oluşturma (1024x1024 - 4MB Sparse Allocation) ---
-fun alloc_tile(tx: int, ty: int, next: ptr): ptr = let
+fun alloc_tile(tx: int, ty: int, next_bucket: ptr, next_layer: ptr): ptr = let
   val p = malloc(sizeof<CanvasTile>)
   val t = $UN.cast{ref(CanvasTile)}(p)
   val () = t->tx := tx
@@ -147,18 +177,23 @@ fun alloc_tile(tx: int, ty: int, next: ptr): ptr = let
 
   val () = t->texture := tex_id
   val () = t->fbo := fbo_id
-  val () = t->next := next
+  val () = t->next_in_bucket := next_bucket
+  val () = t->next_in_layer := next_layer
 in
   p
 end
 
 implement layer_get_or_create_tile(layer, tx, ty) = let
   val lr = $UN.cast{ref(Layer_Record)}(layer)
-  val found = find_tile_node(lr->tiles, tx, ty)
+  val found = layer_find_tile(layer, tx, ty)
 in
   if found != the_null_ptr then found
   else let
-    val nt = alloc_tile(tx, ty, lr->tiles)
+    val idx = tile_hash(tx, ty)
+    val slot = ptr_add<ptr>(lr->buckets, idx)
+    val old_head = $UN.ptr0_get<ptr>(slot)
+    val nt = alloc_tile(tx, ty, old_head, lr->tiles)
+    val () = $UN.ptr0_set<ptr>(slot, nt)
     val () = lr->tiles := nt
     val () = lr->tile_count := lr->tile_count + 1
   in
@@ -213,7 +248,7 @@ fun draw_tiles_rec(cur: ptr, vl: float, vt: float, vr: float, vb: float): void =
     val y1 = y0 + 1024.0f
 
     // Ekran görüş alanı (AABB) ile kesişim kontrolü
-    val visible = (x1 >= vl) * (x0 <= vr) * (y1 >= vt) * (y0 <= vb)
+    val visible = (x1 >= vl) && (x0 <= vr) && (y1 >= vt) && (y0 <= vb)
     val () = if visible then let
       val () = glBindTexture(GL_TEXTURE_2D, t->texture)
       val () = glBegin(GL_QUADS)
@@ -228,7 +263,7 @@ fun draw_tiles_rec(cur: ptr, vl: float, vt: float, vr: float, vb: float): void =
       val () = glEnd()
     in () end else ()
   in
-    draw_tiles_rec(t->next, vl, vt, vr, vb)
+    draw_tiles_rec(t->next_in_layer, vl, vt, vr, vb)
   end
 
 implement layer_draw_tiles(layer, vl, vt, vr, vb) = let
@@ -249,7 +284,7 @@ fun free_tiles_rec(cur: ptr): void =
   if cur = the_null_ptr then ()
   else let
     val t = $UN.cast{ref(CanvasTile)}(cur)
-    val next = t->next
+    val next = t->next_in_layer
     var tex: GLuint = t->texture
     var fbo: GLuint = t->fbo
     val () = glDeleteTextures(1, tex)
@@ -264,10 +299,19 @@ implement layer_clear(layer) = let
   val () = free_tiles_rec(lr->tiles)
   val () = lr->tiles := the_null_ptr
   val () = lr->tile_count := 0
+
+  fun clear_buckets(i: int): void =
+    if i < TILE_HASH_SIZE then let
+      val () = $UN.ptr0_set<ptr>(ptr_add<ptr>(lr->buckets, i), the_null_ptr)
+    in clear_buckets(i + 1) end else ()
+
+  val () = clear_buckets(0)
 in () end
 
 implement layer_destroy(layer) = let
+  val lr = $UN.cast{ref(Layer_Record)}(layer)
   val () = layer_clear(layer)
+  val () = free(lr->buckets)
   val () = free(layer)
 in () end
 
