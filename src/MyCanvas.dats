@@ -6,47 +6,22 @@
 staload UN = "prelude/SATS/unsafe.sats"
 staload "./MyGLSurface.dats"
 staload "./Layer.dats"
+staload "./draw_engine/settings.dats"
+staload "./draw_engine/draw_engine.dats"
 
-// --- Harici C Kütüphaneleri ve Tipler ---
+// --- Harici C Kütüphaneleri (Sadece OpenGL ve Zaman) ---
 %{^
 #include <GL/gl.h>
-#include <mypaint-brush.h>
-#include <mypaint-surface.h>
-#include <math.h>
-#include <stdlib.h>
 #include <sys/time.h>
-
-typedef struct {
-  void* brush;
-  void* surf;
-  void* layer;
-  float cam_x;
-  float cam_y;
-  float zoom;
-  int last_mouse_x;
-  int last_mouse_y;
-  double last_time;
-  void* q;
-} canvas_state_record;
 
 static double get_time_seconds(void) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (double)tv.tv_sec + ((double)tv.tv_usec / 1000000.0);
 }
-
-#define my_f2i(x) ((int)(x))
-#define my_i2f(x) ((float)(x))
-#define my_flt(a, b) ((a) < (b))
-#define my_fgt(a, b) ((a) > (b))
-#define my_fgte(a, b) ((a) >= (b))
-#define my_fadd(a, b) ((a) + (b))
-#define my_fsub(a, b) ((a) - (b))
-#define my_fmul(a, b) ((a) * (b))
-#define my_fdiv(a, b) ((a) / (b))
 %}
 
-typedef canvas_state_record = $extype_struct"canvas_state_record" of {
+typedef canvas_state_record = @{
   brush= ptr,
   surf= ptr,
   layer= ptr,
@@ -64,13 +39,13 @@ macdef GL_PROJECTION = $extval(int, "GL_PROJECTION")
 macdef GL_MODELVIEW = $extval(int, "GL_MODELVIEW")
 macdef GL_COLOR_BUFFER_BIT = $extval(int, "GL_COLOR_BUFFER_BIT")
 
-macdef MYPAINT_BRUSH_SETTING_OPAQUE = $extval(int, "MYPAINT_BRUSH_SETTING_OPAQUE")
-macdef MYPAINT_BRUSH_SETTING_RADIUS_LOGARITHMIC = $extval(int, "MYPAINT_BRUSH_SETTING_RADIUS_LOGARITHMIC")
-macdef MYPAINT_BRUSH_SETTING_HARDNESS = $extval(int, "MYPAINT_BRUSH_SETTING_HARDNESS")
-macdef MYPAINT_BRUSH_SETTING_SLOW_TRACKING = $extval(int, "MYPAINT_BRUSH_SETTING_SLOW_TRACKING")
-macdef MYPAINT_BRUSH_SETTING_COLOR_H = $extval(int, "MYPAINT_BRUSH_SETTING_COLOR_H")
-macdef MYPAINT_BRUSH_SETTING_COLOR_S = $extval(int, "MYPAINT_BRUSH_SETTING_COLOR_S")
-macdef MYPAINT_BRUSH_SETTING_COLOR_V = $extval(int, "MYPAINT_BRUSH_SETTING_COLOR_V")
+#define MYPAINT_BRUSH_SETTING_OPAQUE 0
+#define MYPAINT_BRUSH_SETTING_RADIUS_LOGARITHMIC 3
+#define MYPAINT_BRUSH_SETTING_HARDNESS 4
+#define MYPAINT_BRUSH_SETTING_SLOW_TRACKING 31
+#define MYPAINT_BRUSH_SETTING_COLOR_H 34
+#define MYPAINT_BRUSH_SETTING_COLOR_S 35
+#define MYPAINT_BRUSH_SETTING_COLOR_V 36
 
 // C Fonksiyon İmzaları
 extern fun malloc(n: size_t): ptr = "mac#"
@@ -91,25 +66,25 @@ extern fun mypaint_brush_stroke_to(
   x: float, y: float, pressure: float, 
   xtilt: float, ytilt: float, dtime: double, 
   viewzoom: float, viewrotation: float, barrel_rotation: float, dir: int
-): int = "mac#"
-extern fun mypaint_brush_reset(brush: ptr): void = "mac#"
-extern fun mypaint_brush_new_stroke(brush: ptr): void = "mac#"
-extern fun mypaint_brush_set_base_value(brush: ptr, setting: int, value: float): void = "mac#"
-extern fun mypaint_brush_get_base_value(brush: ptr, setting: int): float = "mac#"
+): int = "ext#mypaint_brush_stroke_to"
+extern fun mypaint_brush_reset(brush: ptr): void = "ext#mypaint_brush_reset"
+extern fun mypaint_brush_new_stroke(brush: ptr): void = "ext#mypaint_brush_new_stroke"
+extern fun mypaint_brush_set_base_value(brush: ptr, setting: int, value: float): void = "ext#mypaint_brush_set_base_value"
+extern fun mypaint_brush_get_base_value(brush: ptr, setting: int): float = "ext#mypaint_brush_get_base_value"
 
 extern fun get_time_seconds(): double = "mac#get_time_seconds"
 extern fun sqrtf(x: float): float = "mac#"
 extern fun powf(x: float, y: float): float = "mac#"
 
-extern fun f2i(f: float): int = "mac#my_f2i"
-extern fun i2f(i: int): float = "mac#my_i2f"
-extern fun f_lt(a: float, b: float): bool = "mac#my_flt"
-extern fun f_gt(a: float, b: float): bool = "mac#my_fgt"
-extern fun f_gte(a: float, b: float): bool = "mac#my_fgte"
-extern fun f_add(a: float, b: float): float = "mac#my_fadd"
-extern fun f_sub(a: float, b: float): float = "mac#my_fsub"
-extern fun f_mul(a: float, b: float): float = "mac#my_fmul"
-extern fun f_div(a: float, b: float): float = "mac#my_fdiv"
+fn f2i(f: float): int = g0float2int_float_int(f)
+fn i2f(i: int): float = g0int2float_int_float(i)
+fn f_lt(a: float, b: float): bool = a < b
+fn f_gt(a: float, b: float): bool = a > b
+fn f_gte(a: float, b: float): bool = a >= b
+fn f_add(a: float, b: float): float = g0float_add_float(a, b)
+fn f_sub(a: float, b: float): float = g0float_sub_float(a, b)
+fn f_mul(a: float, b: float): float = g0float_mul_float(a, b)
+fn f_div(a: float, b: float): float = g0float_div_float(a, b)
 
 // --- Nokta ve Kuyruk Veri Yapıları ---
 vtypedef input_point = @{ x= float, y= float, pressure= float, time= double }
@@ -409,7 +384,7 @@ implement canvas_state_create(brush) = let
   val surf_linear = glsurface_create()
   val surf_ptr = $UN.castvwtp0{ptr}(surf_linear)
 
-  val state = $UN.cast{ref(canvas_state_record)}(malloc($extval(size_t, "sizeof(canvas_state_record)")))
+  val state = $UN.cast{ref(canvas_state_record)}(malloc(sizeof<canvas_state_record>))
   val () = state->brush := brush
   val () = state->surf := surf_ptr
   val () = state->layer := the_null_ptr

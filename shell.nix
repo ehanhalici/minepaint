@@ -2,22 +2,13 @@
 pkgs.mkShell {
   nativeBuildInputs = with pkgs; [
     cmake
-    pkg-config  # CMake'in kütüphaneleri bulmasını kolaylaştırır
     ats2
   ];
 
   buildInputs = with pkgs; [
-    libmypaint
-    json_c
-    
-    # --- EKSİK OLAN OPENGL KÜTÜPHANELERİ ---
     libGL
-    libGLU
-    # ---------------------------------------
-    
     libx11
     libxext
-    libxrender
   ];
   
 shellHook = ''

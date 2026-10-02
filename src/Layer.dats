@@ -5,29 +5,16 @@
 
 staload UN = "prelude/SATS/unsafe.sats"
 
-// --- Harici C Kütüphane Başlıkları (Sadece bağımlılık bağlantısı) ---
+// --- Harici C Kütüphaneleri (Sadece OpenGL) ---
 %{^
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <stdlib.h>
-
-typedef struct CanvasTile {
-  int tx;
-  int ty;
-  unsigned int texture;
-  unsigned int fbo;
-  struct CanvasTile* next;
-} CanvasTile;
-
-typedef struct {
-  CanvasTile* tiles;
-  int tile_count;
-} Layer_Record;
 %}
 
 typedef GLuint = uint
 
-typedef CanvasTile = $extype_struct"CanvasTile" of {
+typedef CanvasTile = @{
   tx= int,
   ty= int,
   texture= uint,
@@ -35,7 +22,7 @@ typedef CanvasTile = $extype_struct"CanvasTile" of {
   next= ptr
 }
 
-typedef Layer_Record = $extype_struct"Layer_Record" of {
+typedef Layer_Record = @{
   tiles= ptr,
   tile_count= int
 }
@@ -107,7 +94,7 @@ extern fun layer_unbind_c(l: ptr): void = "ext#layer_unbind_c"
 
 // --- Pür ATS2 ile Sonsuz Katman Oluşturma ---
 implement layer_create(w, h) = let
-  val p = malloc($extval(size_t, "sizeof(Layer_Record)"))
+  val p = malloc(sizeof<Layer_Record>)
   val r = $UN.cast{ref(Layer_Record)}(p)
   val () = r->tiles := the_null_ptr
   val () = r->tile_count := 0
@@ -136,7 +123,7 @@ end
 
 // --- Tile Oluşturma (1024x1024 - 4MB Sparse Allocation) ---
 fun alloc_tile(tx: int, ty: int, next: ptr): ptr = let
-  val p = malloc($extval(size_t, "sizeof(CanvasTile)"))
+  val p = malloc(sizeof<CanvasTile>)
   val t = $UN.cast{ref(CanvasTile)}(p)
   val () = t->tx := tx
   val () = t->ty := ty

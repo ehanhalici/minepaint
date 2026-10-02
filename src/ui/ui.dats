@@ -3,38 +3,30 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-%{^
-#include <mypaint-brush.h>
-#include <mypaint-brush-settings-gen.h>
 
-extern void* canvas_state_create(void* brush);
-extern int window_create_and_run(void* canvas_ptr);
-extern void canvas_set_brush_color(void* canvas_ptr, float r, float g, float b);
-extern void canvas_set_brush_setting(void* canvas_ptr, int setting_id, float value);
-%}
 
 // FFI Fonksiyon İmzaları
-extern fun mypaint_brush_new(): ptr = "mac#"
-extern fun mypaint_brush_set_base_value(brush: ptr, setting: int, value: float): void = "mac#"
+extern fun mypaint_brush_new(): ptr = "ext#mypaint_brush_new"
+extern fun mypaint_brush_set_base_value(brush: ptr, setting: int, value: float): void = "ext#mypaint_brush_set_base_value"
 extern fun canvas_state_create(brush: ptr): ptr = "ext#canvas_state_create"
 extern fun window_create_and_run(canvas_ptr: ptr): int = "ext#window_create_and_run"
 extern fun canvas_set_brush_color(canvas_ptr: ptr, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
 extern fun canvas_set_brush_setting(canvas_ptr: ptr, setting_id: int, value: float): void = "ext#canvas_set_brush_setting"
 
 // MyPaint Fırça Ayar Sabitleri
-macdef MYPAINT_BRUSH_SETTING_OPAQUE = $extval(int, "MYPAINT_BRUSH_SETTING_OPAQUE")
-macdef MYPAINT_BRUSH_SETTING_OPAQUE_LINEARIZE = $extval(int, "MYPAINT_BRUSH_SETTING_OPAQUE_LINEARIZE")
-macdef MYPAINT_BRUSH_SETTING_OPAQUE_MULTIPLY = $extval(int, "MYPAINT_BRUSH_SETTING_OPAQUE_MULTIPLY")
-macdef MYPAINT_BRUSH_SETTING_RADIUS_LOGARITHMIC = $extval(int, "MYPAINT_BRUSH_SETTING_RADIUS_LOGARITHMIC")
-macdef MYPAINT_BRUSH_SETTING_HARDNESS = $extval(int, "MYPAINT_BRUSH_SETTING_HARDNESS")
-macdef MYPAINT_BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS = $extval(int, "MYPAINT_BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS")
-macdef MYPAINT_BRUSH_SETTING_DABS_PER_SECOND = $extval(int, "MYPAINT_BRUSH_SETTING_DABS_PER_SECOND")
-macdef MYPAINT_BRUSH_SETTING_SLOW_TRACKING = $extval(int, "MYPAINT_BRUSH_SETTING_SLOW_TRACKING")
-macdef MYPAINT_BRUSH_SETTING_TRACKING_NOISE = $extval(int, "MYPAINT_BRUSH_SETTING_TRACKING_NOISE")
-macdef MYPAINT_BRUSH_SETTING_ANTI_ALIASING = $extval(int, "MYPAINT_BRUSH_SETTING_ANTI_ALIASING")
-macdef MYPAINT_BRUSH_SETTING_COLOR_H = $extval(int, "MYPAINT_BRUSH_SETTING_COLOR_H")
-macdef MYPAINT_BRUSH_SETTING_COLOR_S = $extval(int, "MYPAINT_BRUSH_SETTING_COLOR_S")
-macdef MYPAINT_BRUSH_SETTING_COLOR_V = $extval(int, "MYPAINT_BRUSH_SETTING_COLOR_V")
+#define MYPAINT_BRUSH_SETTING_OPAQUE 0
+#define MYPAINT_BRUSH_SETTING_OPAQUE_LINEARIZE 2
+#define MYPAINT_BRUSH_SETTING_OPAQUE_MULTIPLY 1
+#define MYPAINT_BRUSH_SETTING_RADIUS_LOGARITHMIC 3
+#define MYPAINT_BRUSH_SETTING_HARDNESS 4
+#define MYPAINT_BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS 8
+#define MYPAINT_BRUSH_SETTING_DABS_PER_SECOND 9
+#define MYPAINT_BRUSH_SETTING_SLOW_TRACKING 31
+#define MYPAINT_BRUSH_SETTING_TRACKING_NOISE 33
+#define MYPAINT_BRUSH_SETTING_ANTI_ALIASING 6
+#define MYPAINT_BRUSH_SETTING_COLOR_H 34
+#define MYPAINT_BRUSH_SETTING_COLOR_S 35
+#define MYPAINT_BRUSH_SETTING_COLOR_V 36
 
 // UI Başlatıcı
 extern fun ui_init {n:int} (argc: int(n), argv: !argv(n)): int = "ext#ui_init"

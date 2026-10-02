@@ -5,23 +5,11 @@
 
 staload UN = "prelude/SATS/unsafe.sats"
 
-// --- Harici Kütüphane Başlıkları (Sadece bağımlılık bağlantısı) ---
+// --- Harici C Kütüphaneleri (Sadece OpenGL ve Standart Kütüphaneler) ---
 %{^
 #include <GL/gl.h>
-#include <mypaint-surface.h>
 #include <math.h>
 #include <stdlib.h>
-
-typedef struct {
-    MyPaintSurface parent;
-    int is_erasing;
-    void* layer;
-} MyGLSurface_Record;
-
-#define my_f2i(x) ((int)(x))
-#define my_fadd(a, b) ((a) + (b))
-#define my_fsub(a, b) ((a) - (b))
-#define my_fdiv(a, b) ((a) / (b))
 %}
 
 // OpenGL Sabitleri
@@ -53,17 +41,15 @@ extern fun glScalef(x: float, y: float, z: float): void = "mac#"
 extern fun cosf(x: float): float = "mac#"
 extern fun sinf(x: float): float = "mac#"
 extern fun floorf(x: float): float = "mac#"
-extern fun f2i(f: float): int = "mac#my_f2i"
-extern fun f_add(a: float, b: float): float = "mac#my_fadd"
-extern fun f_sub(a: float, b: float): float = "mac#my_fsub"
-extern fun f_div(a: float, b: float): float = "mac#my_fdiv"
+fn f2i(f: float): int = g0float2int_float_int(f)
+fn f_add(a: float, b: float): float = g0float_add_float(a, b)
+fn f_sub(a: float, b: float): float = g0float_sub_float(a, b)
+fn f_div(a: float, b: float): float = g0float_div_float(a, b)
 
 // Bellek ve Kütüphane Fonksiyonları
 extern fun malloc(size: size_t): ptr = "mac#"
 extern fun free(p: ptr): void = "mac#"
 extern fun memset(p: ptr, value: int, size: size_t): ptr = "mac#"
-extern fun mypaint_surface_init(s: ptr): void = "mac#"
-
 // Layer / Tile FFI Fonksiyonları
 extern fun layer_find_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_find_tile"
 extern fun layer_get_or_create_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_get_or_create_tile"
@@ -82,10 +68,9 @@ typedef MyPaintSurface_Record = @{
   get_color= ptr,
   begin_atomic= ptr,
   end_atomic= ptr,
+  destroy= ptr,
   save_png= ptr,
-  refcount= int,
-  _pad= int,
-  refcount_mutex= int
+  refcount= int
 }
 
 typedef MyGLSurface_Record = @{
@@ -148,7 +133,7 @@ fun print_dot(
 in () end
 
 // --- Dab Çizim Callback'i (Tiled Infinite Canvas Entegrasyonu) ---
-implement draw_dab_callback(self, x, y, radius, r, g, b, opaque, hardness, eraser, aspect, angle, lock, colorize, snap, zoom, rot, barrel): int = let
+implement draw_dab_callback(self, x, y, radius, r, g, b, opaque, hardness, softness, alpha_eraser, aspect, angle, lock_alpha, colorize, posterize, posterize_num, paint): int = let
   val surf = $UN.cast{ref(MyGLSurface_Record)}(self)
   val layer = surf->layer
   val is_erasing = surf->is_erasing
@@ -176,10 +161,10 @@ in
           val () = glTranslatef(x, y, 0.0f)
 
           val angle_deg = angle * 180.0f / 3.14159265358979323846f
-          val () = glRotatef(angle_deg, 0.0f, 0.0f, 1.0f)
+          val () = if angle_deg != 0.0f then glRotatef(angle_deg, 0.0f, 0.0f, 1.0f)
 
           val () = if aspect > 1.0f then glScalef(1.0f, 1.0f / aspect, 1.0f)
-                   else if aspect < 1.0f then glScalef(aspect, 1.0f, 1.0f)
+                   else if (aspect > 0.001f) * (aspect < 1.0f) then glScalef(aspect, 1.0f, 1.0f)
                    else ()
 
           val () = print_dot(is_erasing, radius, r, g, b, opaque, hardness)
@@ -207,10 +192,6 @@ implement glsurface_create() = let
   val sz = $UN.cast{size_t}(sizeof<MyGLSurface_Record>)
   val p = malloc(sz)
   val () = assertloc(p > the_null_ptr)
-  val _ = memset(p, 0, sz)
-
-  val () = mypaint_surface_init(p)
-
   val p1 = $UN.cast{ref(MyGLSurface_Record)}(p)
   val () = p1->parent.draw_dab := draw_dab_callback
   val () = p1->parent.refcount := 1

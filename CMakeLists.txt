@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
-project(minepaint C CXX)
+project(minepaint C)
 
-set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 99) 
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -include math.h -include stdlib.h -include string.h -Wno-implicit-function-declaration")
 
 # --- ATS2 ENTEGRASYONU ---
 set(PATSHOME $ENV{PATSHOME})
@@ -20,42 +20,35 @@ include_directories(${X11_INCLUDE_DIR})
 
 set(OpenGL_GL_PREFERENCE LEGACY)
 find_package(OpenGL REQUIRED)
-find_package(PkgConfig REQUIRED)
 
-# PkgConfig ile bağımlılıkları kontrol et
-set(PKG_CONFIG_STATIC_LIBS TRUE)
-pkg_check_modules(DEPS REQUIRED json-c glib-2.0)
-
-# --- LIBMYPAINT BAĞLANTISI ---
-find_library(MYPAINT_LIB 
-    NAMES mypaint mypaint-2.0 mypaint-1.5
-    PATHS 
-        "${CMAKE_SOURCE_DIR}/dependencies/libmypaint/.libs" 
-        "${CMAKE_SOURCE_DIR}/dependencies/libmypaint"
-    NO_DEFAULT_PATH
-)
-
-if(NOT MYPAINT_LIB)
-    message(FATAL_ERROR "HATA: libmypaint kütüphanesi bulunamadı! 'dependencies/libmypaint' içinde 'make' çalıştırdın mı?")
-else()
-    message(STATUS "LibMyPaint Bulundu: ${MYPAINT_LIB}")
-endif()
-
-# Header dosyalarının yeri
-include_directories(dependencies/libmypaint) 
-link_directories(dependencies/libmypaint/.libs)
-
-include_directories(${X11_INCLUDE_DIR} ${OPENGL_INCLUDE_DIR} ${DEPS_INCLUDE_DIRS})
+include_directories(${X11_INCLUDE_DIR} ${OPENGL_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src/draw_engine)
 
 # --- 1. ATS DOSYALARINI TANIMLAMA ---
 set(ATS_SOURCES
-    src/main.dats
+    src/draw_engine/settings.dats
+    src/draw_engine/helpers.dats
+    src/draw_engine/fifo.dats
+    src/draw_engine/rectangle.dats
+    src/draw_engine/matrix.dats
+    src/draw_engine/rng.dats
+    src/draw_engine/mapping.dats
+    src/draw_engine/symmetry.dats
+    src/draw_engine/tilemap.dats
+    src/draw_engine/operationqueue.dats
+    src/draw_engine/brushmodes.dats
+    src/draw_engine/surface.dats
+    src/draw_engine/tiled_surface.dats
+    src/draw_engine/fixed_tiled_surface.dats
+    src/draw_engine/brush_settings.dats
+    src/draw_engine/brush.dats
+    src/draw_engine/draw_engine.dats
     src/Layer.dats
-    src/MyCanvas.dats
     src/MyGLSurface.dats
+    src/MyCanvas.dats
     src/ui/widgets.dats
     src/ui/window.dats
     src/ui/ui.dats
+    src/main.dats
 )
 
 set(GENERATED_C_SOURCES "")
@@ -67,7 +60,7 @@ foreach(ATS_FILE ${ATS_SOURCES})
     
     add_custom_command(
         OUTPUT ${C_OUT}
-        COMMAND patsopt --debug --debug2 -IATS $ENV{PATSHOME} -IATS $ENV{PATSHOME}/share -o ${C_OUT} -d ${CMAKE_CURRENT_SOURCE_DIR}/${ATS_FILE} 
+        COMMAND patsopt --debug --debug2 -IATS ${CMAKE_CURRENT_SOURCE_DIR}/src -IATS ${CMAKE_CURRENT_SOURCE_DIR}/src/draw_engine -IATS $ENV{PATSHOME} -IATS $ENV{PATSHOME}/share -o ${C_OUT} -d ${CMAKE_CURRENT_SOURCE_DIR}/${ATS_FILE} 
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${ATS_FILE}
         COMMENT "[ATS] ${ATS_FILE} -> ${BASE_NAME}_dats.c C dönüşümü yapılıyor..."
     )
@@ -80,16 +73,10 @@ add_executable(minepaint
 )
 target_compile_definitions(minepaint PRIVATE ATS_MEMALLOC_LIBC)
 
-# Kütüphaneleri linkle
+# Kütüphaneleri linkle (LibMyPaint tamamen kaldırıldı, yerli draw_engine ile bağlandı)
 target_link_libraries(minepaint 
-    # YEREL VE STATİK KALACAK KÜTÜPHANELER
-    ${MYPAINT_LIB}
-
-    # SİSTEM KÜTÜPHANELERİ
     -Wl,-Bdynamic ${X11_LIBRARIES}
     -Wl,-Bdynamic ${OPENGL_LIBRARIES}
-    -Wl,-Bdynamic ${DEPS_LIBRARIES}
     -Wl,-Bdynamic m
     -Wl,-Bdynamic pthread
-    -Wl,-Bdynamic gomp
 )
