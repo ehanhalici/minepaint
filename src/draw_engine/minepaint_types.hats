@@ -1,39 +1,39 @@
-// src/draw_engine/mypaint_types.hats
-// Native ATS2 Type Definitions for MyPaint Engine
-#ifndef MYPAINT_TYPES_HATS
-#define MYPAINT_TYPES_HATS
+// src/draw_engine/minepaint_types.hats
+// Native ATS2 Type Definitions for MinePaint Engine
+#ifndef MINEPAINT_TYPES_HATS
+#define MINEPAINT_TYPES_HATS
 
-#define MYPAINT_TILE_SIZE 64
+#define MINEPAINT_TILE_SIZE 64
 #define NUM_BBOXES_DEFAULT 32
 
-typedef MyPaintRectangle = @{
+typedef MinePaintRectangle = @{
   x= int,
   y= int,
   width= int,
   height= int
 }
 
-typedef MyPaintRectangles = @{
+typedef MinePaintRectangles = @{
   num_rectangles= int,
   rectangles= ptr
 }
 
-typedef MyPaintSurfaceGetColorFunction = (
+typedef MinePaintSurfaceGetColorFunction = (
   ptr, float, float, float, ptr, ptr, ptr, ptr, float
 ) -> void
 
-typedef MyPaintSurfaceDrawDabFunction = (
+typedef MinePaintSurfaceDrawDabFunction = (
   ptr, float, float, float, float, float, float,
   float, float, float, float, float, float,
   float, float, float, float, float
 ) -> int
 
-typedef MyPaintSurfaceDestroyFunction = (ptr) -> void
-typedef MyPaintSurfaceSavePngFunction = (ptr, string, int, int, int, int) -> void
-typedef MyPaintSurfaceBeginAtomicFunction = (ptr) -> void
-typedef MyPaintSurfaceEndAtomicFunction = (ptr, ptr) -> void
+typedef MinePaintSurfaceDestroyFunction = (ptr) -> void
+typedef MinePaintSurfaceSavePngFunction = (ptr, string, int, int, int, int) -> void
+typedef MinePaintSurfaceBeginAtomicFunction = (ptr) -> void
+typedef MinePaintSurfaceEndAtomicFunction = (ptr, ptr) -> void
 
-typedef MyPaintSurface = @{
+typedef MinePaintSurface = @{
   draw_dab= ptr,
   get_color= ptr,
   begin_atomic= ptr,
@@ -43,7 +43,7 @@ typedef MyPaintSurface = @{
   refcount= int
 }
 
-typedef MyPaintSymmetryState = @{
+typedef MinePaintSymmetryState = @{
   type= int,
   center_x= float,
   center_y= float,
@@ -51,16 +51,16 @@ typedef MyPaintSymmetryState = @{
   num_lines= float
 }
 
-typedef MyPaintSymmetryData = @{
+typedef MinePaintSymmetryData = @{
   active= int,
   pending_active= int,
-  state_current= MyPaintSymmetryState,
-  state_pending= MyPaintSymmetryState,
+  state_current= MinePaintSymmetryState,
+  state_pending= MinePaintSymmetryState,
   num_symmetry_matrices= int,
   symmetry_matrices= ptr
 }
 
-typedef MyPaintTileRequest = @{
+typedef MinePaintTileRequest = @{
   tx= int,
   ty= int,
   readonly= int,
@@ -70,11 +70,11 @@ typedef MyPaintTileRequest = @{
   mipmap_level= int
 }
 
-typedef MyPaintTileRequestStartFunction = (ptr, ptr) -> void
-typedef MyPaintTileRequestEndFunction = (ptr, ptr) -> void
+typedef MinePaintTileRequestStartFunction = (ptr, ptr) -> void
+typedef MinePaintTileRequestEndFunction = (ptr, ptr) -> void
 
-typedef MyPaintTiledSurface = @{
-  parent= MyPaintSurface,
+typedef MinePaintTiledSurface = @{
+  parent= MinePaintSurface,
   tile_request_start= ptr,
   tile_request_end= ptr,
   symmetry_data= ptr,
@@ -108,4 +108,4 @@ typedef OperationDataDrawDab = @{
   paint= float
 }
 
-#endif // MYPAINT_TYPES_HATS
+#endif // MINEPAINT_TYPES_HATS

@@ -5,10 +5,6 @@
 
 staload UN = "prelude/SATS/unsafe.sats"
 
-%{^
-#include <math.h>
-%}
-
 // Standart Matematik FFI
 extern fun expf(x: float): float = "mac#expf"
 extern fun floorf(x: float): float = "mac#floorf"

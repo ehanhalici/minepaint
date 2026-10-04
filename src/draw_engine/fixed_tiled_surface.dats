@@ -1,5 +1,5 @@
 // src/draw_engine/fixed_tiled_surface.dats
-// Native ATS2 implementation of MyPaint Fixed Tiled Surface
+// Native ATS2 implementation of MinePaint Fixed Tiled Surface
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
@@ -8,8 +8,8 @@ staload UN = "prelude/SATS/unsafe.sats"
 staload "./surface.dats"
 staload "./tiled_surface.dats"
 
-typedef MyPaintFixedTiledSurface_struct = @{
-  parent= MyPaintTiledSurface_struct,
+typedef MinePaintFixedTiledSurface_struct = @{
+  parent= MinePaintTiledSurface_struct,
   tile_size= size_t,
   tile_buffer= ptr,
   null_tile= ptr,
@@ -33,19 +33,19 @@ extern fun fixed_tile_request_start(tiled_surface: ptr, request: ptr): void = "e
 extern fun fixed_tile_request_end(tiled_surface: ptr, request: ptr): void = "ext#fixed_tile_request_end"
 extern fun free_simple_tiledsurf(surface: ptr): void = "ext#free_simple_tiledsurf"
 
-extern fun mypaint_fixed_tiled_surface_new(width: int, height: int): ptr = "ext#mypaint_fixed_tiled_surface_new"
-extern fun mypaint_fixed_tiled_surface_get_width(self: ptr): int = "ext#mypaint_fixed_tiled_surface_get_width"
-extern fun mypaint_fixed_tiled_surface_get_height(self: ptr): int = "ext#mypaint_fixed_tiled_surface_get_height"
-extern fun mypaint_fixed_tiled_surface_interface(self: ptr): ptr = "ext#mypaint_fixed_tiled_surface_interface"
+extern fun minepaint_fixed_tiled_surface_new(width: int, height: int): ptr = "ext#minepaint_fixed_tiled_surface_new"
+extern fun minepaint_fixed_tiled_surface_get_width(self: ptr): int = "ext#minepaint_fixed_tiled_surface_get_width"
+extern fun minepaint_fixed_tiled_surface_get_height(self: ptr): int = "ext#minepaint_fixed_tiled_surface_get_height"
+extern fun minepaint_fixed_tiled_surface_interface(self: ptr): ptr = "ext#minepaint_fixed_tiled_surface_interface"
 
 fn reset_null_tile(self_p: ptr): void = let
-  val self = $UN.cast{ref(MyPaintFixedTiledSurface_struct)}(self_p)
+  val self = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(self_p)
   val _ = memset(self->null_tile, 0, self->tile_size)
 in () end
 
 implement fixed_tile_request_start(tiled_surface, request) = let
-  val self = $UN.cast{ref(MyPaintFixedTiledSurface_struct)}(tiled_surface)
-  val req = $UN.cast{ref(MyPaintTileRequest_struct)}(request)
+  val self = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(tiled_surface)
+  val req = $UN.cast{ref(MinePaintTileRequest_struct)}(request)
   val tx = req->tx
   val ty = req->ty
 in
@@ -62,8 +62,8 @@ in
 end
 
 implement fixed_tile_request_end(tiled_surface, request) = let
-  val self = $UN.cast{ref(MyPaintFixedTiledSurface_struct)}(tiled_surface)
-  val req = $UN.cast{ref(MyPaintTileRequest_struct)}(request)
+  val self = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(tiled_surface)
+  val req = $UN.cast{ref(MinePaintTileRequest_struct)}(request)
   val tx = req->tx
   val ty = req->ty
 in
@@ -72,39 +72,39 @@ in
   else ()
 end
 
-implement mypaint_fixed_tiled_surface_interface(self) = self
+implement minepaint_fixed_tiled_surface_interface(self) = self
 
-implement mypaint_fixed_tiled_surface_get_width(self) =
+implement minepaint_fixed_tiled_surface_get_width(self) =
   if self != the_null_ptr then let
-    val s = $UN.cast{ref(MyPaintFixedTiledSurface_struct)}(self)
+    val s = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(self)
   in s->width end
   else 0
 
-implement mypaint_fixed_tiled_surface_get_height(self) =
+implement minepaint_fixed_tiled_surface_get_height(self) =
   if self != the_null_ptr then let
-    val s = $UN.cast{ref(MyPaintFixedTiledSurface_struct)}(self)
+    val s = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(self)
   in s->height end
   else 0
 
 implement free_simple_tiledsurf(surface) =
   if surface != the_null_ptr then let
-    val self = $UN.cast{ref(MyPaintFixedTiledSurface_struct)}(surface)
-    val () = mypaint_tiled_surface_destroy(surface)
+    val self = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(surface)
+    val () = minepaint_tiled_surface_destroy(surface)
     val () = if self->tile_buffer != the_null_ptr then free(self->tile_buffer)
     val () = if self->null_tile != the_null_ptr then free(self->null_tile)
     val () = free(surface)
   in () end
 
-implement mypaint_fixed_tiled_surface_new(width, height) = let
+implement minepaint_fixed_tiled_surface_new(width, height) = let
   val () = assertloc(width > 0)
   val () = assertloc(height > 0)
-  val sz_self = sizeof<MyPaintFixedTiledSurface_struct>
+  val sz_self = sizeof<MinePaintFixedTiledSurface_struct>
   val self_p = malloc(sz_self)
 in
   if self_p = the_null_ptr then the_null_ptr
   else let
-    val self = $UN.cast{ref(MyPaintFixedTiledSurface_struct)}(self_p)
-    val () = mypaint_tiled_surface_init(
+    val self = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(self_p)
+    val () = minepaint_tiled_surface_init(
       self_p,
       $UN.cast{ptr}(fixed_tile_request_start),
       $UN.cast{ptr}(fixed_tile_request_end)

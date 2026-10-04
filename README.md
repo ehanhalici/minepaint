@@ -23,7 +23,7 @@ MinePaint features a native ATS2 reimplementation of the MyPaint brush drawing e
   - `brush.dats` & `brushmodes.dats`: Brush state dynamics, dab calculation, and blending modes.
   - `surface.dats` & `tiled_surface.dats`: Tiled surface management and tile request caching.
   - `brush_settings.dats` & `brushsettings_gen.hats`: Brush parameter and input metadata tables.
-  - `mypaint_types.hats`: Core type definitions and data structures.
+  - `minepaint_types.hats`: Core type definitions and data structures.
   - `matrix.dats`, `symmetry.dats`, `helpers.dats`, `rng.dats`: Linear algebra, symmetry reflection, PRNG, and color spaces.
 - **`src/ui/`**: Pure ATS2 user interface and window management:
   - `widgets.dats`: Sliders, HSV color wheel, palette swatches, 4 brush presets (`PEN`, `INK`, `AIR`, `MRK`), collapsible sidebar controls, and vector font rasterizer.
@@ -61,8 +61,7 @@ Prerequisites:
 Ensure `PATSHOME` points to your ATS2 installation directory, then run:
 
 ```bash
-cmake -B build -S .
-cmake --build build
+sh compile.sh -r
 ```
 
 The resulting executable will be created at:

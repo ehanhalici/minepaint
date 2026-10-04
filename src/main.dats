@@ -1,34 +1,28 @@
-// --- 1. ATS PRELUDE VE STANDART KÜTÜPHANELER ---
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-// --- 2. MODÜL YÜKLEMELERİ (STALOAD) ---
-// Uygulamanın UI mantığını ve state yönetimini barındıran modülü dahil ediyoruz.
-// Bu dosya, FFI üzerinden ffi_bindings.cpp ile konuşacak olan arayüzdür.
-staload "./ui/ui.dats"
+staload "app/ui.dats"
 
-// --- 3. ANA GİRİŞ NOKTASI (ENTRY POINT) ---
+val g_slot_settings = ref<ptr>(the_null_ptr)
+val g_slot_inputs = ref<ptr>(the_null_ptr)
+val g_slot_ui = ref<ptr>(the_null_ptr)
 
-(*
- * implement main0: ATS'nin standart main fonksiyonu uygulamasıdır.
- * * argc: Argüman sayısı (statik olarak tamsayı olduğu ispatlıdır).
- * argv: Argüman listesi (pointer güvenliği ATS'nin bağımlı tipleriyle korunur).
- *)
-implement main0 (argc, argv) = let
-  // ATS dünyasında programın yaşam döngüsü burada başlar.
-  
-  // ui_init fonksiyonu:
-  // 1. Ui.dats içinde tanımlanmıştır.
-  // 2. ffi_bindings.cpp üzerindeki ffi_ui_init() fonksiyonunu tetikler.
-  // 3. FLTK pencerelerini, MyCanvas'ı ve MyPaint fırça motorunu ayağa kaldırır.
-  
-  // val status: Fl::run() döngüsü bittiğinde dönen çıkış kodu (0 veya 1).
-  val status = ui_init(argc, argv)
-  
+extern fun slot_settings_get(): ptr = "ext#slot_settings_get"
+implement slot_settings_get() = !g_slot_settings
+extern fun slot_settings_set(p: ptr): void = "ext#slot_settings_set"
+implement slot_settings_set(p) = !g_slot_settings := p
+
+extern fun slot_inputs_get(): ptr = "ext#slot_inputs_get"
+implement slot_inputs_get() = !g_slot_inputs
+extern fun slot_inputs_set(p: ptr): void = "ext#slot_inputs_set"
+implement slot_inputs_set(p) = !g_slot_inputs := p
+
+extern fun slot_ui_get(): ptr = "ext#slot_ui_get"
+implement slot_ui_get() = !g_slot_ui
+extern fun slot_ui_set(p: ptr): void = "ext#slot_ui_set"
+implement slot_ui_set(p) = !g_slot_ui := p
+
+implement main0(argc, argv) = let
+  val _ = ui_init(argc, argv)
 in
-  // Not: ATS'de main0 void (unit) tipi döner. 
-  // İşlem sona erdiğinde çalışma zamanı (runtime) otomatik olarak temizlik yapar.
-  // Eğer özel bir çıkış kodu (exit code) ile çıkmak isterseniz 'main1' kullanılabilir.
-  
-  // Program FLTK olay döngüsünden çıktığında kontrol buraya döner.
 end

@@ -6,21 +6,21 @@
 
 staload UN = "prelude/SATS/unsafe.sats"
 
-#define MYPAINT_SYMMETRY_TYPE_VERTICAL 0
-#define MYPAINT_SYMMETRY_TYPE_HORIZONTAL 1
-#define MYPAINT_SYMMETRY_TYPE_VERTHORZ 2
-#define MYPAINT_SYMMETRY_TYPE_ROTATIONAL 3
-#define MYPAINT_SYMMETRY_TYPE_SNOWFLAKE 4
+#define MINEPAINT_SYMMETRY_TYPE_VERTICAL 0
+#define MINEPAINT_SYMMETRY_TYPE_HORIZONTAL 1
+#define MINEPAINT_SYMMETRY_TYPE_VERTHORZ 2
+#define MINEPAINT_SYMMETRY_TYPE_ROTATIONAL 3
+#define MINEPAINT_SYMMETRY_TYPE_SNOWFLAKE 4
 
 #define DEFAULT_NUM_MATRICES 16
 
-typedef MyPaintTransform = @{
+typedef MinePaintTransform = @{
   r0= float, r1= float, r2= float,
   r3= float, r4= float, r5= float,
   r6= float, r7= float, r8= float
 }
 
-typedef MyPaintSymmetryState_struct = @{
+typedef MinePaintSymmetryState_struct = @{
   type= int,
   center_x= float,
   center_y= float,
@@ -28,9 +28,9 @@ typedef MyPaintSymmetryState_struct = @{
   num_lines= float
 }
 
-typedef MyPaintSymmetryData_struct = @{
-  state_current= MyPaintSymmetryState_struct,
-  state_pending= MyPaintSymmetryState_struct,
+typedef MinePaintSymmetryData_struct = @{
+  state_current= MinePaintSymmetryState_struct,
+  state_pending= MinePaintSymmetryState_struct,
   pending_changes= int,
   active= int,
   num_symmetry_matrices= int,
@@ -47,28 +47,28 @@ extern fun free(p: ptr): void = "mac#free"
 extern fun realloc(p: ptr, sz: size_t): ptr = "mac#realloc"
 
 // External functions from matrix.dats
-extern fun mypaint_transform_unit(out: ptr): void = "ext#mypaint_transform_unit"
-extern fun mypaint_transform_translate(transform: ptr, x: float, y: float, out: ptr): void = "ext#mypaint_transform_translate"
-extern fun mypaint_transform_rotate_cw(transform: ptr, angle_rad: float, out: ptr): void = "ext#mypaint_transform_rotate_cw"
-extern fun mypaint_transform_reflect(transform: ptr, angle_rad: float, out: ptr): void = "ext#mypaint_transform_reflect"
+extern fun minepaint_transform_unit(out: ptr): void = "ext#minepaint_transform_unit"
+extern fun minepaint_transform_translate(transform: ptr, x: float, y: float, out: ptr): void = "ext#minepaint_transform_translate"
+extern fun minepaint_transform_rotate_cw(transform: ptr, angle_rad: float, out: ptr): void = "ext#minepaint_transform_rotate_cw"
+extern fun minepaint_transform_reflect(transform: ptr, angle_rad: float, out: ptr): void = "ext#minepaint_transform_reflect"
 
 fn get_matrix_ptr(matrices: ptr, idx: int): ptr =
-  ptr_add<MyPaintTransform>(matrices, idx)
+  ptr_add<MinePaintTransform>(matrices, idx)
 
 fn num_matrices_required(t: int, num_lines: float): int = let
   val n_lines: int = g0float2int(num_lines)
 in
-  if t = MYPAINT_SYMMETRY_TYPE_VERTICAL then 1
-  else if t = MYPAINT_SYMMETRY_TYPE_HORIZONTAL then 1
-  else if t = MYPAINT_SYMMETRY_TYPE_VERTHORZ then 3
-  else if t = MYPAINT_SYMMETRY_TYPE_ROTATIONAL then n_lines - 1
-  else if t = MYPAINT_SYMMETRY_TYPE_SNOWFLAKE then 2 * n_lines - 1
+  if t = MINEPAINT_SYMMETRY_TYPE_VERTICAL then 1
+  else if t = MINEPAINT_SYMMETRY_TYPE_HORIZONTAL then 1
+  else if t = MINEPAINT_SYMMETRY_TYPE_VERTHORZ then 3
+  else if t = MINEPAINT_SYMMETRY_TYPE_ROTATIONAL then n_lines - 1
+  else if t = MINEPAINT_SYMMETRY_TYPE_SNOWFLAKE then 2 * n_lines - 1
   else 0
 end
 
 fn allocate_symmetry_matrices(self: ptr, num_matrices: int): bool = let
-  val data = $UN.cast{ref(MyPaintSymmetryData_struct)}(self)
-  val bytes = g0int2uint_int_size(num_matrices) * sizeof<MyPaintTransform>
+  val data = $UN.cast{ref(MinePaintSymmetryData_struct)}(self)
+  val bytes = g0int2uint_int_size(num_matrices) * sizeof<MinePaintTransform>
   val allocated = realloc(data->symmetry_matrices, bytes)
 in
   if allocated = the_null_ptr then let
@@ -83,10 +83,10 @@ in
   end
 end
 
-extern fun mypaint_update_symmetry_state(self_p: ptr): void = "ext#mypaint_update_symmetry_state"
-implement mypaint_update_symmetry_state(self_p) =
+extern fun minepaint_update_symmetry_state(self_p: ptr): void = "ext#minepaint_update_symmetry_state"
+implement minepaint_update_symmetry_state(self_p) =
   if self_p != the_null_ptr then let
-    val self = $UN.cast{ref(MyPaintSymmetryData_struct)}(self_p)
+    val self = $UN.cast{ref(MinePaintSymmetryData_struct)}(self_p)
     val cur_t = self->state_current.type
     val cur_cx = self->state_current.center_x
     val cur_cy = self->state_current.center_y
@@ -132,38 +132,41 @@ implement mypaint_update_symmetry_state(self_p) =
 
         var m_buf: @[float][9]
         val m_ptr = addr@(m_buf)
-        val () = mypaint_transform_unit(m_ptr)
-        val () = mypaint_transform_translate(m_ptr, f_sub(0.0f, cx), f_sub(0.0f, cy), m_ptr)
+        val () = minepaint_transform_unit(m_ptr)
+        // Merkezleme: m = T(-cx,-cy). Helper'lar pre-multiply
+        // (out = Factor * transform) olduğu için zincir
+        // Final = T(cx,cy) * R * T(-cx,-cy) verir (multiply artık standart).
+        val () = minepaint_transform_translate(m_ptr, f_sub(0.0f, cx), f_sub(0.0f, cy), m_ptr)
 
         val st_type = pend_t
         val num_l: int = g0float2int(pend_nl)
 
         val () =
-          if (st_type = MYPAINT_SYMMETRY_TYPE_HORIZONTAL) || (st_type = MYPAINT_SYMMETRY_TYPE_VERTICAL) then let
-            val a = if st_type = MYPAINT_SYMMETRY_TYPE_VERTICAL then f_add(angle_rad, f_div(pi, 2.0f)) else angle_rad
+          if (st_type = MINEPAINT_SYMMETRY_TYPE_HORIZONTAL) || (st_type = MINEPAINT_SYMMETRY_TYPE_VERTICAL) then let
+            val a = if st_type = MINEPAINT_SYMMETRY_TYPE_VERTICAL then f_add(angle_rad, f_div(pi, 2.0f)) else angle_rad
             val target = get_matrix_ptr(matrices, 0)
-            val () = mypaint_transform_reflect(m_ptr, f_sub(0.0f, a), target)
+            val () = minepaint_transform_reflect(m_ptr, f_sub(0.0f, a), target)
           in () end
-          else if st_type = MYPAINT_SYMMETRY_TYPE_VERTHORZ then let
+          else if st_type = MINEPAINT_SYMMETRY_TYPE_VERTHORZ then let
             val v_angle = f_add(angle_rad, f_div(pi, 2.0f))
             val m0 = get_matrix_ptr(matrices, 0)
             val m1 = get_matrix_ptr(matrices, 1)
             val m2 = get_matrix_ptr(matrices, 2)
-            val () = mypaint_transform_reflect(m_ptr, f_sub(0.0f, angle_rad), m0)
-            val () = mypaint_transform_reflect(m0, f_sub(0.0f, v_angle), m1)
-            val () = mypaint_transform_reflect(m1, f_sub(0.0f, angle_rad), m2)
+            val () = minepaint_transform_reflect(m_ptr, f_sub(0.0f, angle_rad), m0)
+            val () = minepaint_transform_reflect(m0, f_sub(0.0f, v_angle), m1)
+            val () = minepaint_transform_reflect(m1, f_sub(0.0f, angle_rad), m2)
           in () end
-          else if st_type = MYPAINT_SYMMETRY_TYPE_SNOWFLAKE then let
+          else if st_type = MINEPAINT_SYMMETRY_TYPE_SNOWFLAKE then let
             val base_idx = num_l - 1
             fun loop_snow(i: int): void =
               if i < num_l then let
                 var rot_m: @[float][9]
                 val rot_m_ptr = addr@(rot_m)
                 val cur_rot = f_mul(rot_angle, g0int2float_int_float(i))
-                val () = mypaint_transform_rotate_cw(m_ptr, cur_rot, rot_m_ptr)
+                val () = minepaint_transform_rotate_cw(m_ptr, cur_rot, rot_m_ptr)
                 val ref_angle = f_sub(f_sub(0.0f, cur_rot), angle_rad)
                 val target = get_matrix_ptr(matrices, base_idx + i)
-                val () = mypaint_transform_reflect(rot_m_ptr, ref_angle, target)
+                val () = minepaint_transform_reflect(rot_m_ptr, ref_angle, target)
               in
                 loop_snow(i + 1)
               end else ()
@@ -174,19 +177,19 @@ implement mypaint_update_symmetry_state(self_p) =
                   if i > 0 then let
                     val cur_rot = f_mul(rot_angle, g0int2float_int_float(i))
                     val target = get_matrix_ptr(matrices, i - 1)
-                    val () = mypaint_transform_rotate_cw(m_ptr, cur_rot, target)
+                    val () = minepaint_transform_rotate_cw(m_ptr, cur_rot, target)
                   in () end
               in
                 loop_rot(i + 1)
               end else ()
             val () = loop_rot(1)
           in () end
-          else if st_type = MYPAINT_SYMMETRY_TYPE_ROTATIONAL then let
+          else if st_type = MINEPAINT_SYMMETRY_TYPE_ROTATIONAL then let
             fun loop_rot_only(i: int): void =
               if i < num_l then let
                 val cur_rot = f_mul(rot_angle, g0int2float_int_float(i))
                 val target = get_matrix_ptr(matrices, i - 1)
-                val () = mypaint_transform_rotate_cw(m_ptr, cur_rot, target)
+                val () = minepaint_transform_rotate_cw(m_ptr, cur_rot, target)
               in
                 loop_rot_only(i + 1)
               end else ()
@@ -194,11 +197,12 @@ implement mypaint_update_symmetry_state(self_p) =
           in () end
           else ()
 
-        // Translate each matrix back by (cx, cy)
+        // Translate each matrix back by (cx, cy):
+        // target = T(cx,cy) * target -> Final = T(c) * R * T(-c)
         fun loop_trans_back(i: int): void =
           if i < required then let
             val target = get_matrix_ptr(matrices, i)
-            val () = mypaint_transform_translate(target, cx, cy, target)
+            val () = minepaint_transform_translate(target, cx, cy, target)
           in
             loop_trans_back(i + 1)
           end else ()
@@ -208,12 +212,12 @@ implement mypaint_update_symmetry_state(self_p) =
     end
   ) end else ()
 
-extern fun mypaint_symmetry_data_new(): ptr = "ext#mypaint_symmetry_data_new"
-implement mypaint_symmetry_data_new() = let
-  val sz = sizeof<MyPaintSymmetryData_struct>
+extern fun minepaint_symmetry_data_new(): ptr = "ext#minepaint_symmetry_data_new"
+implement minepaint_symmetry_data_new() = let
+  val sz = sizeof<MinePaintSymmetryData_struct>
   val p = malloc(sz)
   val () = assertloc(p > the_null_ptr)
-  val self = $UN.cast{ref(MyPaintSymmetryData_struct)}(p)
+  val self = $UN.cast{ref(MinePaintSymmetryData_struct)}(p)
 
   val () = self->state_current.type := ~1
   val () = self->state_current.center_x := 0.0f
@@ -221,7 +225,7 @@ implement mypaint_symmetry_data_new() = let
   val () = self->state_current.angle := 0.0f
   val () = self->state_current.num_lines := 2.0f
 
-  val () = self->state_pending.type := MYPAINT_SYMMETRY_TYPE_VERTICAL
+  val () = self->state_pending.type := MINEPAINT_SYMMETRY_TYPE_VERTICAL
   val () = self->state_pending.center_x := 0.0f
   val () = self->state_pending.center_y := 0.0f
   val () = self->state_pending.angle := 0.0f
@@ -233,20 +237,20 @@ implement mypaint_symmetry_data_new() = let
   val () = self->symmetry_matrices := the_null_ptr
 
   val ok = allocate_symmetry_matrices(p, DEFAULT_NUM_MATRICES)
-  val () = if ok then mypaint_update_symmetry_state(p)
+  val () = if ok then minepaint_update_symmetry_state(p)
 in
   p
 end
 
-extern fun mypaint_symmetry_data_destroy(data_p: ptr): void = "ext#mypaint_symmetry_data_destroy"
-implement mypaint_symmetry_data_destroy(data_p) =
+extern fun minepaint_symmetry_data_destroy(data_p: ptr): void = "ext#minepaint_symmetry_data_destroy"
+implement minepaint_symmetry_data_destroy(data_p) =
   if data_p != the_null_ptr then let
-    val self = $UN.cast{ref(MyPaintSymmetryData_struct)}(data_p)
+    val self = $UN.cast{ref(MinePaintSymmetryData_struct)}(data_p)
     val () = if self->symmetry_matrices != the_null_ptr then free(self->symmetry_matrices)
     val () = free(data_p)
   in () end
 
-extern fun mypaint_symmetry_set_pending(
+extern fun minepaint_symmetry_set_pending(
   data_p: ptr,
   active: bool,
   center_x: float,
@@ -254,10 +258,10 @@ extern fun mypaint_symmetry_set_pending(
   symmetry_angle: float,
   symmetry_type: int,
   rot_symmetry_lines: int
-): void = "ext#mypaint_symmetry_set_pending"
-implement mypaint_symmetry_set_pending(data_p, active, center_x, center_y, symmetry_angle, symmetry_type, rot_symmetry_lines) =
+): void = "ext#minepaint_symmetry_set_pending"
+implement minepaint_symmetry_set_pending(data_p, active, center_x, center_y, symmetry_angle, symmetry_type, rot_symmetry_lines) =
   if data_p != the_null_ptr then let
-    val self = $UN.cast{ref(MyPaintSymmetryData_struct)}(data_p)
+    val self = $UN.cast{ref(MinePaintSymmetryData_struct)}(data_p)
     val () = self->active := (if active then 1 else 0)
     val () = self->state_pending.center_x := center_x
     val () = self->state_pending.center_y := center_y

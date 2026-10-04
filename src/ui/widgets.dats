@@ -6,75 +6,24 @@
 
 staload UN = "prelude/SATS/unsafe.sats"
 
-// --- Harici Kütüphane Başlıkları (Sadece OpenGL ve libc snprintf / sys/time) ---
-%{^
-#include <GL/gl.h>
-#include <math.h>
-#include <stdio.h>
-#include <sys/time.h>
-
-static inline void format_slider_val(char* buf, int sz, float v) {
-    snprintf(buf, sz, "%.2f", v);
-}
-
-static inline float double_to_float(double d) {
-    return (float)d;
-}
-
-static struct {
-    double edge_hover_time;
-    float cur_r, cur_g, cur_b;
-    float cur_h, cur_s, cur_v;
-    float val0, val1, val2, val3;
-    int active_drag;
-    int active_preset;
-    int sidebar_visible;
-    int dummy;
-} g_ui_state = {
-    0.0,
-    0.73f, 0.73f, 0.73f,
-    0.0f, 0.0f, 0.73f,
-    1.2f, 0.1f, 0.9f, 3.0f,
-    -1,
-    1,
-    1,
-    0
-};
-
-static inline void* get_g_ui_ptr(void) { return &g_ui_state; }
-%}
-
-extern fun format_slider_val(buf: ptr, sz: int, v: float): void = "mac#"
-extern fun double_to_float(d: double): float = "mac#"
-extern fun get_g_ui_ptr(): ptr = "mac#"
-
-// OpenGL Sabitleri
-macdef GL_QUADS = $extval(int, "GL_QUADS")
-macdef GL_QUAD_STRIP = $extval(int, "GL_QUAD_STRIP")
-macdef GL_LINE_LOOP = $extval(int, "GL_LINE_LOOP")
-macdef GL_TRIANGLE_FAN = $extval(int, "GL_TRIANGLE_FAN")
-macdef GL_POINTS = $extval(int, "GL_POINTS")
-macdef GL_DEPTH_TEST = $extval(int, "GL_DEPTH_TEST")
-macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
-macdef GL_BLEND = $extval(int, "GL_BLEND")
-macdef GL_SRC_ALPHA = $extval(int, "GL_SRC_ALPHA")
-macdef GL_ONE_MINUS_SRC_ALPHA = $extval(int, "GL_ONE_MINUS_SRC_ALPHA")
-
-// OpenGL Fonksiyonları
-extern fun glDisable(cap: int): void = "mac#"
-extern fun glEnable(cap: int): void = "mac#"
-extern fun glBlendFunc(sfactor: int, dfactor: int): void = "mac#"
-extern fun glColor3f(r: float, g: float, b: float): void = "mac#"
-extern fun glColor4f(r: float, g: float, b: float, a: float): void = "mac#"
-extern fun glPointSize(sz: float): void = "mac#"
-extern fun glBegin(mode: int): void = "mac#"
-extern fun glEnd(): void = "mac#"
-extern fun glVertex2f(x: float, y: float): void = "mac#"
-extern fun cosf(x: float): float = "mac#"
-extern fun sinf(x: float): float = "mac#"
+staload "gl/gl.dats"
+staload "sys/libc.dats"
+staload "ui/state.dats"
+staload "ui/palette.dats"
+staload "ui/session.dats"
 
 extern fun canvas_set_brush_setting(p: ptr, id: int, v: float): void = "ext#canvas_set_brush_setting"
 extern fun canvas_set_brush_color(p: ptr, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
+extern fun canvas_apply_startup(p: ptr): void = "ext#canvas_apply_startup"
+extern fun canvas_apply_catalog_brush(p: ptr, g: int, i: int): void = "ext#canvas_apply_catalog_brush"
+extern fun canvas_get_brush_setting(p: ptr, id: int): float = "ext#canvas_get_brush_setting"
+extern fun brush_group_count(): int = "ext#brush_group_count"
+extern fun brush_count(g: int): int = "ext#brush_count"
+extern fun brush_name(g: int, i: int): string = "ext#brush_name"
+
+fn format_slider_val(buf: ptr, sz: int, v: float): void = let
+  val _ = mp_snprintf_f(buf, g0int2uint_int_size(sz), "%.2f", g0float2float_float_double(v))
+in () end
 
 // Float ve Double Aritmetik Yardımcıları
 fn f_add(a: float, b: float): float = g0float_add_float(a, b)
@@ -290,49 +239,21 @@ end
 
 // --- Renk Paleti (Pür ATS2) ---
 fun get_palette_color(i: int): @(float, float, float) =
-  case+ i of
-  | 0  => @(1.00f, 1.00f, 1.00f) // Beyaz
-  | 1  => @(0.73f, 0.73f, 0.73f) // Gri
-  | 2  => @(0.30f, 0.30f, 0.30f) // Koyu Gri
-  | 3  => @(0.00f, 0.00f, 0.00f) // Siyah
-  | 4  => @(0.95f, 0.20f, 0.20f) // Kırmızı
-  | 5  => @(1.00f, 0.55f, 0.00f) // Turuncu
-  | 6  => @(1.00f, 0.90f, 0.10f) // Sarı
-  | 7  => @(0.20f, 0.85f, 0.30f) // Yeşil
-  | 8  => @(0.10f, 0.85f, 0.85f) // Camgöbeği
-  | 9  => @(0.20f, 0.45f, 0.95f) // Mavi
-  | 10 => @(0.65f, 0.25f, 0.85f) // Mor
-  | _  => @(0.55f, 0.35f, 0.20f) // Kahverengi
-
-// --- Widget Durumu (State Record - Tam C struct uyumlu) ---
-typedef UIWidgetsState = @{
-  edge_hover_time= double,
-  cur_r= float,
-  cur_g= float,
-  cur_b= float,
-  cur_h= float,
-  cur_s= float,
-  cur_v= float,
-  val0= float,
-  val1= float,
-  val2= float,
-  val3= float,
-  active_drag= int,
-  active_preset= int,
-  sidebar_visible= int,
-  dummy= int
-}
-
-fn ui_get(): ref(UIWidgetsState) = $UN.cast{ref(UIWidgetsState)}(get_g_ui_ptr())
+  @(pal_get(i, 0), pal_get(i, 1), pal_get(i, 2))
 
 fn get_slider_info(i: int): @(string, int, float, float, float) = let
   val u = ui_get()
 in
   case+ i of
-  | 0 => @("BOYUT", 3, 0.0f, 4.0f, u->val0)
-  | 1 => @("SERTLIK", 4, 0.0f, 1.0f, u->val1)
-  | 2 => @("OPAKLIK", 0, 0.0f, 1.0f, u->val2)
-  | _ => @("YUMUSATMA", 31, 0.0f, 5.0f, u->val3)
+  | 0 => @("SIZE", 3, ~2.0f, 6.0f, u->val0)
+  | 1 => @("OPAQUE", 0, 0.0f, 2.0f, u->val1)
+  | 2 => @("SHARP", 4, 0.0f, 1.0f, u->val2)
+  | 3 => @("GRAIN", 18, 0.0f, 25.0f, u->val3)
+  | 4 => @("PIGMENT", 44, 0.0f, 1.0f, u->val4)
+  | 5 => @("SMOOTH", 31, 0.0f, 10.0f, u->val5)
+  | 6 => @("PRESSURE", 64, ~1.8f, 1.8f, u->val6)
+  | 7 => @("TWIST", 56, 1.0f, 10.0f, u->val7)
+  | _ => @("SIZE", 3, ~2.0f, 6.0f, u->val0)
 end
 
 fn set_slider_val(i: int, v: float): void = let
@@ -342,32 +263,129 @@ in
   | 0 => u->val0 := v
   | 1 => u->val1 := v
   | 2 => u->val2 := v
-  | _ => u->val3 := v
+  | 3 => u->val3 := v
+  | 4 => u->val4 := v
+  | 5 => u->val5 := v
+  | 6 => u->val6 := v
+  | _ => u->val7 := v
 end
 
-// --- Fırça Profilleri (4 Preset Desteği) ---
-fn apply_preset(canvas_ptr: ptr, preset_id: int): void = let
+fn sync_sliders(canvas_ptr: ptr): void = let
   val u = ui_get()
-  val () = u->active_preset := preset_id
-  val () =
-    case+ preset_id of
-    | 0 => begin
-        u->val0 := 0.80f; u->val1 := 0.85f; u->val2 := 1.00f; u->val3 := 0.50f
-      end
-    | 1 => begin
-        u->val0 := 1.20f; u->val1 := 0.10f; u->val2 := 0.90f; u->val3 := 3.00f
-      end
-    | 2 => begin
-        u->val0 := 2.60f; u->val1 := 0.05f; u->val2 := 0.35f; u->val3 := 0.00f
-      end
-    | _ => begin
-        u->val0 := 2.20f; u->val1 := 0.70f; u->val2 := 0.55f; u->val3 := 1.00f
-      end
-  val () = canvas_set_brush_setting(canvas_ptr, 3, u->val0)   // RADIUS
-  val () = canvas_set_brush_setting(canvas_ptr, 4, u->val1)   // HARDNESS
-  val () = canvas_set_brush_setting(canvas_ptr, 0, u->val2)   // OPAQUE
-  val () = canvas_set_brush_setting(canvas_ptr, 31, u->val3)  // SLOW_TRACKING
+  val () = u->val0 := canvas_get_brush_setting(canvas_ptr, 3)
+  val () = u->val1 := canvas_get_brush_setting(canvas_ptr, 0)
+  val () = u->val2 := canvas_get_brush_setting(canvas_ptr, 4)
+  val () = u->val3 := canvas_get_brush_setting(canvas_ptr, 18)
+  val () = u->val4 := canvas_get_brush_setting(canvas_ptr, 44)
+  val () = u->val5 := canvas_get_brush_setting(canvas_ptr, 31)
+  val () = u->val6 := canvas_get_brush_setting(canvas_ptr, 64)
+  val () = u->val7 := canvas_get_brush_setting(canvas_ptr, 56)
 in () end
+
+fn list_visible(sh: float): int = let
+  val space = f_sub(sh, 578.0f)
+  val n = g0float2int_float_int(f_div(space, 18.0f))
+in
+  if n < 1 then 1 else n
+end
+
+fn clamp_scroll(scroll: int, count: int, vis: int): int = let
+  val maxs = if count > vis then count - vis else 0
+in
+  if scroll < 0 then 0 else if scroll > maxs then maxs else scroll
+end
+
+fn tab_label(i: int): string =
+  case+ i of
+  | 0 => "DIET"
+  | 1 => "CLAS"
+  | 2 => "DEEV"
+  | 3 => "FAV"
+  | 4 => "RAMO"
+  | 5 => "EXPR"
+  | 6 => "TAND"
+  | _ => "KAER"
+
+fn commit_swatch(): void = let
+  val u = ui_get()
+  val i = u->active_swatch
+in
+  if (i >= 0) * (i < 12) then let
+    val () = pal_set(i, 0, u->cur_r)
+    val () = pal_set(i, 1, u->cur_g)
+    val () = pal_set(i, 2, u->cur_b)
+  in () end else ()
+end
+
+fn push_sliders(canvas_ptr: ptr): void = let
+  fun loop(i: int): void =
+    if i < 8 then let
+      val @(_, set_id, lo, hi, v) = get_slider_info(i)
+      val c = f_clamp(v, lo, hi)
+      val () = set_slider_val(i, c)
+      val () = canvas_set_brush_setting(canvas_ptr, set_id, c)
+    in loop(i + 1) end else ()
+in
+  loop(0)
+end
+
+fn do_reset(canvas_ptr: ptr): void = let
+  val u = ui_get()
+  val () = canvas_apply_startup(canvas_ptr)
+  val () = sync_sliders(canvas_ptr)
+  val () = u->active_brush := ~1
+  val () = u->cur_h := 1.0f
+  val () = u->cur_s := 0.0f
+  val () = u->cur_v := 0.729f
+  val @(nr, ng, nb) = hsv_to_rgb(1.0f, 0.0f, 0.729f)
+  val () = u->cur_r := nr
+  val () = u->cur_g := ng
+  val () = u->cur_b := nb
+  val () = canvas_set_brush_color(canvas_ptr, nr, ng, nb)
+  val () = commit_swatch()
+in () end
+
+extern fun widgets_save_session(): void = "ext#widgets_save_session"
+implement widgets_save_session() = session_save()
+
+fn apply_saved_brush(canvas_ptr: ptr): void = let
+  val u = ui_get()
+  val g0 = u->active_group
+  val g = if (g0 >= 0) * (g0 < 8) then g0 else 1
+  val () = u->active_group := g
+  val n = brush_count(g)
+  val b = u->active_brush
+in
+  if (b >= 0) * (b < n) then
+    canvas_apply_catalog_brush(canvas_ptr, g, b)
+  else let
+    val () = u->active_brush := ~1
+  in
+    canvas_apply_startup(canvas_ptr)
+  end
+end
+
+extern fun widgets_restore_session(canvas_ptr: ptr): void = "ext#widgets_restore_session"
+implement widgets_restore_session(canvas_ptr) = let
+  val loaded = session_load()
+in
+  if loaded <= 0 then ()
+  else let
+    val u = ui_get()
+    val () = apply_saved_brush(canvas_ptr)
+    val () = push_sliders(canvas_ptr)
+    val scroll0 = u->brush_scroll
+    val () = if scroll0 < 0 then u->brush_scroll := 0 else ()
+    val sw = u->active_swatch
+    val sw2 = if sw < ~1 then ~1 else if sw > 11 then ~1 else sw
+    val () = u->active_swatch := sw2
+    val @(h, s, v) = rgb_to_hsv(u->cur_r, u->cur_g, u->cur_b)
+    val () = u->cur_h := h
+    val () = u->cur_s := s
+    val () = u->cur_v := v
+    val () = canvas_set_brush_color(canvas_ptr, u->cur_r, u->cur_g, u->cur_b)
+  in () end
+end
 
 // --- Widget Olay ve Render Fonksiyonları (Pür ATS2) ---
 extern fun widgets_is_dragging(): int = "ext#widgets_is_dragging"
@@ -410,6 +428,7 @@ implement widgets_on_mouse_down(mx, my, btn, canvas_ptr) =
         in
           if hit then let
             val @(pr, pg, pb) = get_palette_color(i)
+            val () = u->active_swatch := i
             val () = u->cur_r := pr
             val () = u->cur_g := pg
             val () = u->cur_b := pb
@@ -439,6 +458,7 @@ implement widgets_on_mouse_down(mx, my, btn, canvas_ptr) =
           val () = u->cur_g := ng
           val () = u->cur_b := nb
           val () = canvas_set_brush_color(canvas_ptr, nr, ng, nb)
+          val () = commit_swatch()
         in 1 end
         else let
           val in_sv = (mx >= 20.0f) * (mx <= f_add(20.0f, bar_w)) * (my >= 145.0f) * (my <= 220.0f)
@@ -456,18 +476,18 @@ implement widgets_on_mouse_down(mx, my, btn, canvas_ptr) =
             val () = u->cur_g := ng
             val () = u->cur_b := nb
             val () = canvas_set_brush_color(canvas_ptr, nr, ng, nb)
+            val () = commit_swatch()
           in 1 end
           else let
-            val slider_base_y = 250.0f
-            val slider_spacing = 58.0f
+            val slider_base_y = 242.0f
+            val slider_spacing = 30.0f
             fun check_slider(i: int): int =
-              if i < 4 then let
+              if i < 8 then let
                 val sy_pos = f_add(slider_base_y, f_mul(g0int2float(i), slider_spacing))
-                val in_sl = (mx >= 15.0f) * (mx <= 235.0f) * (my >= f_add(sy_pos, 10.0f)) * (my <= f_add(sy_pos, 35.0f))
+                val in_sl = (mx >= 15.0f) * (mx <= 235.0f) * (my >= f_add(sy_pos, 8.0f)) * (my <= f_add(sy_pos, 28.0f))
               in
                 if in_sl then let
                   val () = u->active_drag := i
-                  val () = u->active_preset := ~1
                   val raw_pct = f_div(f_sub(mx, 20.0f), bar_w)
                   val pct = f_clamp(raw_pct, 0.0f, 1.0f)
                   val @(_, set_id, min_v, max_v, _) = get_slider_info(i)
@@ -482,23 +502,47 @@ implement widgets_on_mouse_down(mx, my, btn, canvas_ptr) =
           in
             if sl_hit > 0 then 1
             else let
-              // 4 Profil Düğmesi Kontrolü (PEN, INK, AIR, MRK)
-              val in_presets = (my >= 510.0f) * (my <= 538.0f)
+              val in_reset = (mx >= 168.0f) * (mx <= 234.0f) * (my >= 492.0f) * (my <= 514.0f)
             in
-              if in_presets then let
-                fun check_pbtn(p: int): int =
-                  if p < 4 then let
-                    val bx = f_add(20.0f, f_mul(g0int2float(p), 54.0f))
-                    val hit = (mx >= bx) * (mx <= f_add(bx, 48.0f))
+              if in_reset then let
+                val () = do_reset(canvas_ptr)
+              in 1 end
+              else let
+                fun check_tab(t: int): int =
+                  if t < 8 then let
+                    val col = t % 4
+                    val row = t / 4
+                    val bx = f_add(16.0f, f_mul(g0int2float(col), 54.0f))
+                    val by = f_add(516.0f, f_mul(g0int2float(row), 26.0f))
+                    val hit = (mx >= bx) * (mx <= f_add(bx, 50.0f)) * (my >= by) * (my <= f_add(by, 22.0f))
                   in
                     if hit then let
-                      val () = apply_preset(canvas_ptr, p)
+                      val () = u->active_group := t
+                      val () = u->brush_scroll := 0
                     in 1 end
-                    else check_pbtn(p + 1)
+                    else check_tab(t + 1)
                   end else 0
+                val tab_hit = check_tab(0)
               in
-                check_pbtn(0)
-              end else 0
+                if tab_hit > 0 then 1
+                else let
+                  val ph = g0int2float(u->panel_h)
+                  val in_list = (mx >= 16.0f) * (mx <= 234.0f) * (my >= 568.0f) * (f_lt(my, f_sub(ph, 8.0f)))
+                in
+                  if in_list then let
+                    val vis = list_visible(ph)
+                    val rel = g0float2int_float_int(f_div(f_sub(my, 568.0f), 18.0f))
+                    val idx = u->brush_scroll + rel
+                    val n = brush_count(u->active_group)
+                  in
+                    if (rel >= 0) * (rel < vis) * (idx >= 0) * (idx < n) then let
+                      val () = canvas_apply_catalog_brush(canvas_ptr, u->active_group, idx)
+                      val () = sync_sliders(canvas_ptr)
+                      val () = u->active_brush := idx
+                    in 1 end else 0
+                  end else 0
+                end
+              end
             end
           end
         end
@@ -523,6 +567,7 @@ in
       val () = u->cur_g := ng
       val () = u->cur_b := nb
       val () = canvas_set_brush_color(canvas_ptr, nr, ng, nb)
+      val () = commit_swatch()
     in 1 end
     else if u->active_drag = 11 then let
       val raw_s = f_div(f_sub(mx, 20.0f), bar_w)
@@ -536,10 +581,10 @@ in
       val () = u->cur_g := ng
       val () = u->cur_b := nb
       val () = canvas_set_brush_color(canvas_ptr, nr, ng, nb)
+      val () = commit_swatch()
     in 1 end
-    else if (u->active_drag >= 0) * (u->active_drag < 4) then let
+    else if (u->active_drag >= 0) * (u->active_drag < 8) then let
       val i = u->active_drag
-      val () = u->active_preset := ~1
       val raw_pct = f_div(f_sub(mx, 20.0f), bar_w)
       val pct = f_clamp(raw_pct, 0.0f, 1.0f)
       val @(_, set_id, min_v, max_v, _) = get_slider_info(i)
@@ -551,9 +596,24 @@ in
   end
 end
 
+extern fun widgets_on_wheel(mx: float, my: float, dy: int): int = "ext#widgets_on_wheel"
+implement widgets_on_wheel(mx, my, dy) = let
+  val u = ui_get()
+  val sh = g0int2float(u->panel_h)
+  val in_win = (mx >= 8.0f) * (mx <= 242.0f) * (my >= 488.0f) * (f_lt(my, sh))
+in
+  if in_win then let
+    val vis = list_visible(sh)
+    val n = brush_count(u->active_group)
+    val () = u->brush_scroll := clamp_scroll(u->brush_scroll + dy, n, vis)
+  in 1 end else 0
+end
+
 extern fun widgets_render(sx: float, sy: float, sw: float, sh: float): void = "ext#widgets_render"
 implement widgets_render(sx, sy, sw, sh) = let
   val u = ui_get()
+  val () = u->panel_h := g0float2int_float_int(sh)
+  val () = u->brush_scroll := clamp_scroll(u->brush_scroll, brush_count(u->active_group), list_visible(sh))
   val () = glDisable(GL_DEPTH_TEST)
   val () = glDisable(GL_TEXTURE_2D)
   val () = glEnable(GL_BLEND)
@@ -592,7 +652,15 @@ implement widgets_render(sx, sy, sw, sh) = let
       val by = f_add(55.0f, f_mul(g0int2float(row), f_add(swatch_h, 5.0f)))
       val @(pr, pg, pb) = get_palette_color(i)
       val () = gl_draw_rect(bx, by, swatch_w, swatch_h, pr, pg, pb, 1.0f)
-      val () = gl_draw_rect_outline(bx, by, swatch_w, swatch_h, 0.3f, 0.3f, 0.35f, 1.0f)
+      val () = if u->active_swatch = i then let
+        val t = 2.0f
+        val fw = f_add(swatch_w, f_mul(t, 2.0f))
+        val () = gl_draw_rect(f_sub(bx, t), f_sub(by, t), fw, t, 0.15f, 0.55f, 1.0f, 1.0f)
+        val () = gl_draw_rect(f_sub(bx, t), f_add(by, swatch_h), fw, t, 0.15f, 0.55f, 1.0f, 1.0f)
+        val () = gl_draw_rect(f_sub(bx, t), by, t, swatch_h, 0.15f, 0.55f, 1.0f, 1.0f)
+        val () = gl_draw_rect(f_add(bx, swatch_w), by, t, swatch_h, 0.15f, 0.55f, 1.0f, 1.0f)
+      in () end else
+        gl_draw_rect_outline(bx, by, swatch_w, swatch_h, 0.3f, 0.3f, 0.35f, 1.0f)
     in draw_palette(i + 1) end else ()
   val () = draw_palette(0)
 
@@ -643,23 +711,23 @@ implement widgets_render(sx, sy, sw, sh) = let
   val () = gl_draw_rect(f_add(sx, 20.0f), 235.0f, bar_w, 1.0f, 0.2f, 0.2f, 0.22f, 1.0f)
 
   // 4. Sürgüler (Sliders)
-  val slider_base_y = 250.0f
-  val slider_spacing = 58.0f
+  val slider_base_y = 242.0f
+  val slider_spacing = 30.0f
   var val_buf = @[byte][16]()
   val p_buf = addr@(val_buf)
   fun draw_sliders(i: int): void =
-    if i < 4 then let
+    if i < 8 then let
       val sy_pos = f_add(slider_base_y, f_mul(g0int2float(i), slider_spacing))
       val @(lbl, _, min_v, max_v, v) = get_slider_info(i)
-      val () = glPointSize(1.5f)
-      val () = gl_draw_string(f_add(sx, 20.0f), sy_pos, 1.2f, lbl, 0.85f, 0.85f, 0.85f)
+      val () = glPointSize(1.2f)
+      val () = gl_draw_string(f_add(sx, 20.0f), sy_pos, 1.0f, lbl, 0.85f, 0.85f, 0.85f)
 
       val () = format_slider_val(p_buf, 16, v)
       val val_str = $UN.cast{string}(p_buf)
-      val () = gl_draw_string(f_sub(f_add(sx, sw), 60.0f), sy_pos, 1.1f, val_str, 0.6f, 0.6f, 0.65f)
+      val () = gl_draw_string(f_sub(f_add(sx, sw), 60.0f), sy_pos, 1.0f, val_str, 0.6f, 0.6f, 0.65f)
 
-      val track_y = f_add(sy_pos, 18.0f)
-      val track_h = 6.0f
+      val track_y = f_add(sy_pos, 12.0f)
+      val track_h = 4.0f
       val () = gl_draw_rect(f_add(sx, 20.0f), track_y, bar_w, track_h, 0.18f, 0.18f, 0.20f, 1.0f)
 
       val raw_pct = f_div(f_sub(v, min_v), f_sub(max_v, min_v))
@@ -667,43 +735,86 @@ implement widgets_render(sx, sy, sw, sh) = let
       val () = gl_draw_rect(f_add(sx, 20.0f), track_y, f_mul(pct, bar_w), track_h, 0.0f, 0.48f, 0.80f, 1.0f)
 
       val thumb_x = f_add(f_add(sx, 20.0f), f_mul(pct, bar_w))
-      val () = gl_draw_circle(thumb_x, f_add(track_y, f_div(track_h, 2.0f)), 7.0f, 0.9f, 0.9f, 0.95f, 1.0f)
-      val () = gl_draw_circle(thumb_x, f_add(track_y, f_div(track_h, 2.0f)), 4.0f, 0.0f, 0.48f, 0.80f, 1.0f)
+      val thumb_y = f_add(track_y, f_div(track_h, 2.0f))
+      val () = gl_draw_circle(thumb_x, thumb_y, 5.0f, 0.9f, 0.9f, 0.95f, 1.0f)
+      val () = gl_draw_circle(thumb_x, thumb_y, 3.0f, 0.0f, 0.48f, 0.80f, 1.0f)
     in draw_sliders(i + 1) end else ()
   val () = draw_sliders(0)
 
-  // 5. Fırça Profilleri (Presets: PEN, INK, AIR, MRK)
-  val () = gl_draw_rect(f_add(sx, 20.0f), 485.0f, bar_w, 1.0f, 0.2f, 0.2f, 0.22f, 1.0f)
+  // Fırça penceresi: grup sekmeleri ve o grubun fırçaları
+  val win_x = f_add(sx, 12.0f)
+  val win_y = 488.0f
+  val win_w = f_sub(sw, 24.0f)
+  val win_h = f_sub(sh, f_add(win_y, 8.0f))
+  val () = gl_draw_rect(win_x, win_y, win_w, win_h, 0.10f, 0.10f, 0.11f, 1.0f)
+  val () = gl_draw_rect_outline(win_x, win_y, win_w, win_h, 0.28f, 0.28f, 0.32f, 1.0f)
   val () = glPointSize(1.5f)
-  val () = gl_draw_string(f_add(sx, 20.0f), 494.0f, 1.1f, "PROFILLER", 0.65f, 0.65f, 0.70f)
+  val () = gl_draw_string(f_add(sx, 20.0f), 496.0f, 1.1f, "FIRCALAR", 0.65f, 0.65f, 0.70f)
 
-  val preset_y = 510.0f
-  val preset_w = 48.0f
-  val preset_h = 26.0f
-  val preset_gap = 6.0f
+  val rx = f_add(sx, 168.0f)
+  val ry = 492.0f
+  val () = gl_draw_rect(rx, ry, 66.0f, 22.0f, 0.18f, 0.18f, 0.20f, 1.0f)
+  val () = gl_draw_rect_outline(rx, ry, 66.0f, 22.0f, 0.30f, 0.30f, 0.35f, 1.0f)
+  val () = gl_draw_string(f_add(rx, 14.0f), f_add(ry, 5.0f), 1.0f, "RESET", 0.90f, 0.90f, 0.95f)
 
-  fun draw_preset_btn(idx: int, label: string): void = let
-    val bx = f_add(f_add(sx, 20.0f), f_mul(g0int2float(idx), f_add(preset_w, preset_gap)))
-    val is_active = u->active_preset = idx
-    val () = if is_active then
-      gl_draw_rect(bx, preset_y, preset_w, preset_h, 0.0f, 0.48f, 0.80f, 1.0f)
-    else
-      gl_draw_rect(bx, preset_y, preset_w, preset_h, 0.18f, 0.18f, 0.20f, 1.0f)
-    val () = if is_active then
-      gl_draw_rect_outline(bx, preset_y, preset_w, preset_h, 0.3f, 0.7f, 1.0f, 1.0f)
-    else
-      gl_draw_rect_outline(bx, preset_y, preset_w, preset_h, 0.30f, 0.30f, 0.35f, 1.0f)
-    val () = glPointSize(1.5f)
-    val () = if is_active then
-      gl_draw_string(f_add(bx, 11.0f), f_add(preset_y, 7.0f), 1.2f, label, 1.0f, 1.0f, 1.0f)
-    else
-      gl_draw_string(f_add(bx, 11.0f), f_add(preset_y, 7.0f), 1.2f, label, 0.70f, 0.70f, 0.75f)
-  in () end
+  fun str_len(s: string): int = let
+    fun loop(p: ptr, n: int): int = let
+      val ch = $UN.ptr0_get<char>(p)
+      val code = char2int0(ch)
+    in
+      if code != 0 then loop(ptr_add<char>(p, 1), n + 1) else n
+    end
+  in
+    loop($UN.cast{ptr}(s), 0)
+  end
 
-  val () = draw_preset_btn(0, "PEN")
-  val () = draw_preset_btn(1, "INK")
-  val () = draw_preset_btn(2, "AIR")
-  val () = draw_preset_btn(3, "MRK")
+  fun draw_tab(t: int): void =
+    if t < 8 then let
+      val col = t % 4
+      val row = t / 4
+      val bx = f_add(sx, f_add(16.0f, f_mul(g0int2float(col), 54.0f)))
+      val by = f_add(516.0f, f_mul(g0int2float(row), 26.0f))
+      val on = u->active_group = t
+      val label = tab_label(t)
+      val txt_w = f_mul(g0int2float(str_len(label)), 7.0f)
+      val tx = f_add(bx, f_div(f_sub(50.0f, txt_w), 2.0f))
+      val () = if on then
+        gl_draw_rect(bx, by, 50.0f, 22.0f, 0.0f, 0.48f, 0.80f, 1.0f)
+      else
+        gl_draw_rect(bx, by, 50.0f, 22.0f, 0.18f, 0.18f, 0.20f, 1.0f)
+      val () = if on then
+        gl_draw_rect_outline(bx, by, 50.0f, 22.0f, 0.3f, 0.7f, 1.0f, 1.0f)
+      else
+        gl_draw_rect_outline(bx, by, 50.0f, 22.0f, 0.30f, 0.30f, 0.35f, 1.0f)
+      val () = glPointSize(1.3f)
+      val () = if on then
+        gl_draw_string(tx, f_add(by, 6.0f), 1.0f, label, 1.0f, 1.0f, 1.0f)
+      else
+        gl_draw_string(tx, f_add(by, 6.0f), 1.0f, label, 0.70f, 0.70f, 0.75f)
+    in draw_tab(t + 1) end else ()
+  val () = draw_tab(0)
+
+  val nbrush = brush_count(u->active_group)
+  val vis = list_visible(sh)
+  fun draw_rows(row: int): void =
+    if row < vis then let
+      val i = u->brush_scroll + row
+    in
+      if i < nbrush then let
+        val y = f_add(568.0f, f_mul(g0int2float(row), 18.0f))
+        val bx = f_add(sx, 16.0f)
+        val on = u->active_brush = i
+        val () = if on then
+          gl_draw_rect(bx, y, 218.0f, 16.0f, 0.0f, 0.48f, 0.80f, 1.0f)
+        else ()
+        val () = glPointSize(1.2f)
+        val () = if on then
+          gl_draw_string(f_add(bx, 4.0f), f_add(y, 3.0f), 1.0f, brush_name(u->active_group, i), 1.0f, 1.0f, 1.0f)
+        else
+          gl_draw_string(f_add(bx, 4.0f), f_add(y, 3.0f), 1.0f, brush_name(u->active_group, i), 0.82f, 0.82f, 0.86f)
+      in draw_rows(row + 1) end else ()
+    end else ()
+  val () = draw_rows(0)
 in () end
 
 // --- Kenar ve Gizleme Fonksiyonları (Exported) ---
@@ -768,7 +879,7 @@ in
   in
     if is_active then let
       val alpha_d = if d_gt(dt, 0.7) then d_div(d_sub(1.0, dt), 0.3) else 1.0
-      val fa = double_to_float(alpha_d)
+      val fa = g0float2float_double_float(alpha_d)
       val bx = f_sub(win_w, 42.0f)
       val by = 10.0f
       val bw = 34.0f

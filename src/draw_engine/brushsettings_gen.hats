@@ -1,12 +1,12 @@
 // src/draw_engine/brushsettings_gen.hats
-// Pure ATS2 definitions for MyPaint Brush Settings and Inputs metadata
+// Pure ATS2 definitions for MinePaint Brush Settings and Inputs metadata
 #ifndef BRUSHSETTINGS_GEN_HATS
 #define BRUSHSETTINGS_GEN_HATS
 
-#define MYPAINT_BRUSH_SETTINGS_COUNT 65
-#define MYPAINT_BRUSH_INPUTS_COUNT 18
+#define MINEPAINT_BRUSH_SETTINGS_COUNT 65
+#define MINEPAINT_BRUSH_INPUTS_COUNT 18
 
-typedef MyPaintBrushSettingInfo = @{
+typedef MinePaintBrushSettingInfo = @{
   cname= string,
   name= string,
   constant= int,
@@ -16,7 +16,7 @@ typedef MyPaintBrushSettingInfo = @{
   tooltip= string
 }
 
-typedef MyPaintBrushInputInfo = @{
+typedef MinePaintBrushInputInfo = @{
   cname= string,
   hard_min= float,
   soft_min= float,
@@ -32,7 +32,7 @@ fun init_setting_entry(
   cname: string, name: string, constant: int,
   min_v: float, def_v: float, max_v: float, tooltip: string
 ): void = let
-  val entry = $UN.cast{ref(MyPaintBrushSettingInfo)}(ptr_add<MyPaintBrushSettingInfo>(p, idx))
+  val entry = $UN.cast{ref(MinePaintBrushSettingInfo)}(ptr_add<MinePaintBrushSettingInfo>(p, idx))
   val () = entry->cname := cname
   val () = entry->name := name
   val () = entry->constant := constant
@@ -48,7 +48,7 @@ fun init_input_entry(
   hard_min: float, soft_min: float, normal: float, soft_max: float, hard_max: float,
   name: string, tooltip: string
 ): void = let
-  val entry = $UN.cast{ref(MyPaintBrushInputInfo)}(ptr_add<MyPaintBrushInputInfo>(p, idx))
+  val entry = $UN.cast{ref(MinePaintBrushInputInfo)}(ptr_add<MinePaintBrushInputInfo>(p, idx))
   val () = entry->cname := cname
   val () = entry->hard_min := hard_min
   val () = entry->soft_min := soft_min
@@ -111,7 +111,7 @@ fun populate_settings_info_array(p: ptr): void = let
   val () = init_setting_entry(p, 48, "smudge_bucket", "Smudge bucket", 0, 0.0f, 0.0f, 255.0f, "There are 256 buckets that each can hold a color picked up from the canvas.\nYou can control which bucket to use to improve variability and realism of the brush.\nEspecially useful with the \"Custom input\" setting to correlate buckets with other settings such as offsets.")
   val () = init_setting_entry(p, 49, "smudge_radius_log", "Smudge radius", 0, ~1.6f, 0.0f, 1.6f, "This modifies the radius of the circle where color is picked up for smudging.\n 0.0 use the brush radius\n-0.7 half the brush radius (fast, but not always intuitive)\n+0.7 twice the brush radius\n+1.6 five times the brush radius (slow performance)")
   val () = init_setting_entry(p, 50, "eraser", "Eraser", 0, 0.0f, 0.0f, 1.0f, "how much this tool behaves like an eraser\n 0.0 normal painting\n 1.0 standard eraser\n 0.5 pixels go towards 50% transparency")
-  val () = init_setting_entry(p, 51, "stroke_threshold", "Stroke threshold", 1, 0.0f, 0.0f, 0.5f, "How much pressure is needed to start a stroke. This affects the stroke input only. MyPaint does not need a minimum pressure to start drawing.")
+  val () = init_setting_entry(p, 51, "stroke_threshold", "Stroke threshold", 1, 0.0f, 0.0f, 0.5f, "How much pressure is needed to start a stroke. This affects the stroke input only. MinePaint does not need a minimum pressure to start drawing.")
   val () = init_setting_entry(p, 52, "stroke_duration_logarithmic", "Stroke duration", 0, ~1.0f, 4.0f, 14.0f, "How far you have to move until the stroke input reaches 1.0. This value is logarithmic (negative values will not invert the process).")
   val () = init_setting_entry(p, 53, "stroke_holdtime", "Stroke hold time", 0, 0.0f, 0.0f, 10.0f, "This defines how long the stroke input stays at 1.0. After that it will reset to 0.0 and start growing again, even if the stroke is not yet finished.\n2.0 means twice as long as it takes to go from 0.0 to 1.0\n9.9 or higher stands for infinite")
   val () = init_setting_entry(p, 54, "custom_input", "Custom input", 0, ~5.0f, 0.0f, 5.0f, "Set the custom input to this value. If it is slowed down, move it towards this value (see below). The idea is that you make this input depend on a mixture of pressure/speed/whatever, and then make other settings depend on this 'custom input' instead of repeating this combination everywhere you need it.\nIf you make it change 'by random' you can generate a slow (smooth) random input.")

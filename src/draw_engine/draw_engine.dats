@@ -15,6 +15,7 @@ extern fun draw_engine_brush_reset(b: ptr): void = "ext#draw_engine_brush_reset"
 extern fun draw_engine_brush_new_stroke(b: ptr): void = "ext#draw_engine_brush_new_stroke"
 extern fun draw_engine_brush_set_base_value(b: ptr, id: int, v: float): void = "ext#draw_engine_brush_set_base_value"
 extern fun draw_engine_brush_get_base_value(b: ptr, id: int): float = "ext#draw_engine_brush_get_base_value"
+extern fun draw_engine_brush_apply_startup(b: ptr): void = "ext#draw_engine_brush_apply_startup"
 extern fun draw_engine_brush_stroke_to(
     b: ptr, surf: ptr,
     x: float, y: float, pressure: float,
@@ -26,52 +27,55 @@ extern fun draw_engine_brush_stroke_to(
 extern fun draw_engine_init(): void = "ext#draw_engine_init"
 implement draw_engine_init() = ()
 
-extern fun mypaint_brush_new(): ptr = "ext#mypaint_brush_new"
-implement mypaint_brush_new() = draw_engine_brush_new()
+extern fun minepaint_brush_new(): ptr = "ext#minepaint_brush_new"
+implement minepaint_brush_new() = draw_engine_brush_new()
 
-extern fun mypaint_brush_unref(b: ptr): void = "ext#mypaint_brush_unref"
-implement mypaint_brush_unref(b) = draw_engine_brush_free(b)
+extern fun minepaint_brush_unref(b: ptr): void = "ext#minepaint_brush_unref"
+implement minepaint_brush_unref(b) = draw_engine_brush_free(b)
 
-extern fun mypaint_brush_reset(b: ptr): void = "ext#mypaint_brush_reset"
-implement mypaint_brush_reset(b) = draw_engine_brush_reset(b)
+extern fun minepaint_brush_reset(b: ptr): void = "ext#minepaint_brush_reset"
+implement minepaint_brush_reset(b) = draw_engine_brush_reset(b)
 
-extern fun mypaint_brush_new_stroke(b: ptr): void = "ext#mypaint_brush_new_stroke"
-implement mypaint_brush_new_stroke(b) = draw_engine_brush_new_stroke(b)
+extern fun minepaint_brush_new_stroke(b: ptr): void = "ext#minepaint_brush_new_stroke"
+implement minepaint_brush_new_stroke(b) = draw_engine_brush_new_stroke(b)
 
-extern fun mypaint_brush_set_base_value(b: ptr, id: int, v: float): void = "ext#mypaint_brush_set_base_value"
-implement mypaint_brush_set_base_value(b, id, v) = draw_engine_brush_set_base_value(b, id, v)
+extern fun minepaint_brush_set_base_value(b: ptr, id: int, v: float): void = "ext#minepaint_brush_set_base_value"
+implement minepaint_brush_set_base_value(b, id, v) = draw_engine_brush_set_base_value(b, id, v)
 
-extern fun mypaint_brush_get_base_value(b: ptr, id: int): float = "ext#mypaint_brush_get_base_value"
-implement mypaint_brush_get_base_value(b, id) = draw_engine_brush_get_base_value(b, id)
+extern fun minepaint_brush_get_base_value(b: ptr, id: int): float = "ext#minepaint_brush_get_base_value"
+implement minepaint_brush_get_base_value(b, id) = draw_engine_brush_get_base_value(b, id)
 
-extern fun mypaint_brush_stroke_to(
+extern fun minepaint_brush_apply_startup(b: ptr): void = "ext#minepaint_brush_apply_startup"
+implement minepaint_brush_apply_startup(b) = draw_engine_brush_apply_startup(b)
+
+extern fun minepaint_brush_stroke_to(
     b: ptr, surf: ptr,
     x: float, y: float, pressure: float,
     xtilt: float, ytilt: float, dtime: double,
     viewzoom: float, viewrotation: float, barrel_rotation: float, linear: int
-): int = "ext#mypaint_brush_stroke_to"
-implement mypaint_brush_stroke_to(b, surf, x, y, pressure, xtilt, ytilt, dtime, viewzoom, viewrotation, barrel_rotation, linear) =
+): int = "ext#minepaint_brush_stroke_to"
+implement minepaint_brush_stroke_to(b, surf, x, y, pressure, xtilt, ytilt, dtime, viewzoom, viewrotation, barrel_rotation, linear) =
     draw_engine_brush_stroke_to(b, surf, x, y, pressure, xtilt, ytilt, dtime, viewzoom, viewrotation, barrel_rotation, linear)
 
-extern fun mypaint_init(): void = "ext#mypaint_init"
-implement mypaint_init() = ()
+extern fun minepaint_init(): void = "ext#minepaint_init"
+implement minepaint_init() = ()
 
-extern fun mypaint_brush_ref(b: ptr): void = "ext#mypaint_brush_ref"
-implement mypaint_brush_ref(b) = ()
+extern fun minepaint_brush_ref(b: ptr): void = "ext#minepaint_brush_ref"
+implement minepaint_brush_ref(b) = ()
 
-extern fun mypaint_brush_get_state(b: ptr, i: int): float = "ext#mypaint_brush_get_state"
-implement mypaint_brush_get_state(b, i) = draw_engine_brush_get_state(b, i)
+extern fun minepaint_brush_get_state(b: ptr, i: int): float = "ext#minepaint_brush_get_state"
+implement minepaint_brush_get_state(b, i) = draw_engine_brush_get_state(b, i)
 
-extern fun mypaint_brush_set_state(b: ptr, i: int, v: float): void = "ext#mypaint_brush_set_state"
-implement mypaint_brush_set_state(b, i, v) = draw_engine_brush_set_state(b, i, v)
+extern fun minepaint_brush_set_state(b: ptr, i: int, v: float): void = "ext#minepaint_brush_set_state"
+implement minepaint_brush_set_state(b, i, v) = draw_engine_brush_set_state(b, i, v)
 
-extern fun mypaint_brush_is_constant(b: ptr, id: int): int = "ext#mypaint_brush_is_constant"
-implement mypaint_brush_is_constant(b, id) = 1
+extern fun minepaint_brush_is_constant(b: ptr, id: int): int = "ext#minepaint_brush_is_constant"
+implement minepaint_brush_is_constant(b, id) = 1
 
-extern fun mypaint_brush_get_inputs_used_n(b: ptr, id: int): int = "ext#mypaint_brush_get_inputs_used_n"
-implement mypaint_brush_get_inputs_used_n(b, id) = 0
+extern fun minepaint_brush_get_inputs_used_n(b: ptr, id: int): int = "ext#minepaint_brush_get_inputs_used_n"
+implement minepaint_brush_get_inputs_used_n(b, id) = 0
 
-extern fun mypaint_brush_get_total_stroke_painting_time(b: ptr): double = "ext#mypaint_brush_get_total_stroke_painting_time"
-implement mypaint_brush_get_total_stroke_painting_time(b) = 0.0
+extern fun minepaint_brush_get_total_stroke_painting_time(b: ptr): double = "ext#minepaint_brush_get_total_stroke_painting_time"
+implement minepaint_brush_get_total_stroke_painting_time(b) = 0.0
 
 

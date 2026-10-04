@@ -4,22 +4,10 @@
 #include "share/atspre_staload.hats"
 
 staload UN = "prelude/SATS/unsafe.sats"
-staload "./MyGLSurface.dats"
-staload "./Layer.dats"
-staload "./draw_engine/settings.dats"
-staload "./draw_engine/draw_engine.dats"
-
-// --- Harici C Kütüphaneleri (Sadece OpenGL ve Zaman) ---
-%{^
-#include <GL/gl.h>
-#include <sys/time.h>
-
-static double get_time_seconds(void) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (double)tv.tv_sec + ((double)tv.tv_usec / 1000000.0);
-}
-%}
+staload "canvas/gl_surface.dats"
+staload "canvas/layer.dats"
+staload "draw_engine/settings.dats"
+staload "draw_engine/draw_engine.dats"
 
 typedef canvas_state_record = @{
   brush= ptr,
@@ -39,13 +27,13 @@ macdef GL_PROJECTION = $extval(int, "GL_PROJECTION")
 macdef GL_MODELVIEW = $extval(int, "GL_MODELVIEW")
 macdef GL_COLOR_BUFFER_BIT = $extval(int, "GL_COLOR_BUFFER_BIT")
 
-#define MYPAINT_BRUSH_SETTING_OPAQUE 0
-#define MYPAINT_BRUSH_SETTING_RADIUS_LOGARITHMIC 3
-#define MYPAINT_BRUSH_SETTING_HARDNESS 4
-#define MYPAINT_BRUSH_SETTING_SLOW_TRACKING 31
-#define MYPAINT_BRUSH_SETTING_COLOR_H 34
-#define MYPAINT_BRUSH_SETTING_COLOR_S 35
-#define MYPAINT_BRUSH_SETTING_COLOR_V 36
+#define MINEPAINT_BRUSH_SETTING_OPAQUE 0
+#define MINEPAINT_BRUSH_SETTING_RADIUS_LOGARITHMIC 3
+#define MINEPAINT_BRUSH_SETTING_HARDNESS 4
+#define MINEPAINT_BRUSH_SETTING_SLOW_TRACKING 31
+#define MINEPAINT_BRUSH_SETTING_COLOR_H 34
+#define MINEPAINT_BRUSH_SETTING_COLOR_S 35
+#define MINEPAINT_BRUSH_SETTING_COLOR_V 36
 
 // C Fonksiyon İmzaları
 extern fun malloc(n: size_t): ptr = "mac#"
@@ -61,18 +49,18 @@ extern fun glClear(mask: int): void = "mac#"
 extern fun glTranslatef(x: float, y: float, z: float): void = "mac#"
 extern fun glScalef(x: float, y: float, z: float): void = "mac#"
 
-extern fun mypaint_brush_stroke_to(
+extern fun minepaint_brush_stroke_to(
   brush: ptr, surf: ptr, 
   x: float, y: float, pressure: float, 
   xtilt: float, ytilt: float, dtime: double, 
   viewzoom: float, viewrotation: float, barrel_rotation: float, dir: int
-): int = "ext#mypaint_brush_stroke_to"
-extern fun mypaint_brush_reset(brush: ptr): void = "ext#mypaint_brush_reset"
-extern fun mypaint_brush_new_stroke(brush: ptr): void = "ext#mypaint_brush_new_stroke"
-extern fun mypaint_brush_set_base_value(brush: ptr, setting: int, value: float): void = "ext#mypaint_brush_set_base_value"
-extern fun mypaint_brush_get_base_value(brush: ptr, setting: int): float = "ext#mypaint_brush_get_base_value"
+): int = "ext#minepaint_brush_stroke_to"
+extern fun minepaint_brush_reset(brush: ptr): void = "ext#minepaint_brush_reset"
+extern fun minepaint_brush_new_stroke(brush: ptr): void = "ext#minepaint_brush_new_stroke"
+extern fun minepaint_brush_set_base_value(brush: ptr, setting: int, value: float): void = "ext#minepaint_brush_set_base_value"
+extern fun minepaint_brush_get_base_value(brush: ptr, setting: int): float = "ext#minepaint_brush_get_base_value"
 
-extern fun get_time_seconds(): double = "mac#get_time_seconds"
+extern fun get_time_seconds(): double = "ext#get_time_seconds"
 extern fun sqrtf(x: float): float = "mac#"
 extern fun powf(x: float, y: float): float = "mac#"
 
@@ -157,12 +145,12 @@ fun push_queue(q: point_queue, pt: input_point): point_queue =
 
 // --- Fırçayı Çizgisiz Işınlama ---
 fun teleport_brush(brush: ptr, surf: ptr, x: float, y: float): void = let
-  val saved_tracking = mypaint_brush_get_base_value(brush, MYPAINT_BRUSH_SETTING_SLOW_TRACKING)
-  val () = mypaint_brush_set_base_value(brush, MYPAINT_BRUSH_SETTING_SLOW_TRACKING, 0.0f)
-  val () = mypaint_brush_reset(brush)
-  val _ = mypaint_brush_stroke_to(brush, surf, x, y, 0.0f, 0.0f, 0.0f, 0.0, 1.0f, 0.0f, 0.0f, 0)
-  val () = mypaint_brush_new_stroke(brush)
-  val () = mypaint_brush_set_base_value(brush, MYPAINT_BRUSH_SETTING_SLOW_TRACKING, saved_tracking)
+  val saved_tracking = minepaint_brush_get_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING)
+  val () = minepaint_brush_set_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING, 0.0f)
+  val () = minepaint_brush_reset(brush)
+  val _ = minepaint_brush_stroke_to(brush, surf, x, y, 0.0f, 0.0f, 0.0f, 0.0, 1.0f, 0.0f, 0.0f, 0)
+  val () = minepaint_brush_new_stroke(brush)
+  val () = minepaint_brush_set_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING, saved_tracking)
 in () end
 
 // --- Motora Çizim Gönderme ---
@@ -172,7 +160,7 @@ fun send_stroke_to_engine(
 ): void = let
   val () = if layer != the_null_ptr then let
     val () = mygl_surface_set_layer(surf, layer)
-    val _ = mypaint_brush_stroke_to(brush, surf, x, y, pressure, 0.0f, 0.0f, dtime, zoom, 0.0f, 0.0f, 0)
+    val _ = minepaint_brush_stroke_to(brush, surf, x, y, pressure, 0.0f, 0.0f, dtime, zoom, 0.0f, 0.0f, 0)
   in () end
 in () end
 
@@ -226,6 +214,12 @@ extern fun canvas_on_mouse_up(p: ptr, mx: int, my: int, btn: int, is_pan: int): 
 extern fun canvas_set_brush_color(p: ptr, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
 extern fun canvas_set_brush_setting(p: ptr, id: int, v: float): void = "ext#canvas_set_brush_setting"
 extern fun canvas_state_create(brush: ptr): ptr = "ext#canvas_state_create"
+extern fun canvas_apply_startup(p: ptr): void = "ext#canvas_apply_startup"
+extern fun canvas_apply_catalog_brush(p: ptr, g: int, i: int): void = "ext#canvas_apply_catalog_brush"
+extern fun canvas_get_brush_setting(p: ptr, id: int): float = "ext#canvas_get_brush_setting"
+
+extern fun minepaint_brush_apply_startup(b: ptr): void = "ext#minepaint_brush_apply_startup"
+extern fun catalog_apply_brush(b: ptr, g: int, i: int): void = "ext#catalog_apply_brush"
 
 // --- Çizim Render Fonksiyonu ---
 implement canvas_render(state_ptr, canvas_w, canvas_h) = let
@@ -253,7 +247,7 @@ implement canvas_render(state_ptr, canvas_w, canvas_h) = let
     val vt = f_div(f_sub(0.0f, s->cam_y), cur_zoom)
     val vr = f_div(f_sub(i2f(canvas_w), s->cam_x), cur_zoom)
     val vb = f_div(f_sub(i2f(canvas_h), s->cam_y), cur_zoom)
-    val () = layer_draw_tiles(s->layer, vl, vt, vr, vb)
+    val () = layer_draw_tiles(s->layer, vl, vt, vr, vb, cur_zoom)
   in () end
 
   val () = glPopMatrix()
@@ -355,7 +349,7 @@ in
     val q1 = process_queue(s->layer, s->brush, s->surf, s->zoom, q, true)
     val () = free_queue(q1)
     val () = s->q := $UN.castvwtp0{ptr}(QueueNil())
-    val () = mypaint_brush_reset(s->brush)
+    val () = minepaint_brush_reset(s->brush)
     val () = glsurface_set_erasing(s->surf, 0)
   in () end
 end
@@ -365,9 +359,9 @@ implement canvas_set_brush_color(p, r, g, b) = let
   val @(h, s, v) = rgb_to_hsv(r, g, b)
   val st = $UN.cast{ref(canvas_state_record)}(p)
   val () = if st->brush != the_null_ptr then let
-    val () = mypaint_brush_set_base_value(st->brush, MYPAINT_BRUSH_SETTING_COLOR_H, h)
-    val () = mypaint_brush_set_base_value(st->brush, MYPAINT_BRUSH_SETTING_COLOR_S, s)
-    val () = mypaint_brush_set_base_value(st->brush, MYPAINT_BRUSH_SETTING_COLOR_V, v)
+    val () = minepaint_brush_set_base_value(st->brush, MINEPAINT_BRUSH_SETTING_COLOR_H, h)
+    val () = minepaint_brush_set_base_value(st->brush, MINEPAINT_BRUSH_SETTING_COLOR_S, s)
+    val () = minepaint_brush_set_base_value(st->brush, MINEPAINT_BRUSH_SETTING_COLOR_V, v)
   in () end
 in () end
 
@@ -375,9 +369,25 @@ in () end
 implement canvas_set_brush_setting(p, id, v) = let
   val st = $UN.cast{ref(canvas_state_record)}(p)
   val () = if st->brush != the_null_ptr then
-    mypaint_brush_set_base_value(st->brush, id, v)
+    minepaint_brush_set_base_value(st->brush, id, v)
   else ()
 in () end
+
+implement canvas_apply_startup(p) = let
+  val st = $UN.cast{ref(canvas_state_record)}(p)
+  val () = if st->brush != the_null_ptr then minepaint_brush_apply_startup(st->brush) else ()
+in () end
+
+implement canvas_apply_catalog_brush(p, g, i) = let
+  val st = $UN.cast{ref(canvas_state_record)}(p)
+  val () = if st->brush != the_null_ptr then catalog_apply_brush(st->brush, g, i) else ()
+in () end
+
+implement canvas_get_brush_setting(p, id) = let
+  val st = $UN.cast{ref(canvas_state_record)}(p)
+in
+  if st->brush != the_null_ptr then minepaint_brush_get_base_value(st->brush, id) else 0.0f
+end
 
 // --- Canvas Durum Oluşturucu ---
 implement canvas_state_create(brush) = let

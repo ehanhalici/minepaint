@@ -9,15 +9,11 @@ staload "./helpers.dats"
 staload "./surface.dats"
 #include "./brushsettings_gen.hats"
 
-extern fun mypaint_brush_setting_info(id: int): ptr = "ext#mypaint_brush_setting_info"
+extern fun minepaint_brush_setting_info(id: int): ptr = "ext#minepaint_brush_setting_info"
 
-%{^
-#include <math.h>
-#include <stdlib.h>
-#include <string.h>
-%}
-
-#define BRUSH_STRUCT_SIZE 704
+#define BRUSH_MAP_BYTE 704
+#define BRUSH_RNG_BYTE 1224
+#define BRUSH_STRUCT_SIZE 1232
 
 fn f_add(a: float, b: float): float = g0float_add(a, b)
 fn f_sub(a: float, b: float): float = g0float_sub(a, b)
@@ -58,8 +54,91 @@ in () end
 extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
 extern fun expf(x: float): float = "mac#expf"
+extern fun logf(x: float): float = "mac#logf"
+extern fun fabsf(x: float): float = "mac#fabsf"
+extern fun fmodf(x: float, y: float): float = "mac#fmodf"
 extern fun powf(x: float, y: float): float = "mac#powf"
 extern fun hypotf(x: float, y: float): float = "mac#hypotf"
+extern fun rng_double_new(seed: lint): ptr = "ext#rng_double_new"
+extern fun rng_double_next(rng: ptr): double = "ext#rng_double_next"
+extern fun rng_double_free(rng: ptr): void = "ext#rng_double_free"
+
+fn get_rng(b: ptr): ptr =
+  $UN.ptr0_get<ptr>(add_ptr_bsz(b, g0int2uint_int_size(BRUSH_RNG_BYTE)))
+
+fn set_rng(b: ptr, p: ptr): void =
+  $UN.ptr0_set<ptr>(add_ptr_bsz(b, g0int2uint_int_size(BRUSH_RNG_BYTE)), p)
+extern fun rand_gauss(rng: ptr): float = "ext#rand_gauss"
+
+extern fun minepaint_mapping_new(inputs: int): ptr = "ext#minepaint_mapping_new"
+extern fun minepaint_mapping_free(self_p: ptr): void = "ext#minepaint_mapping_free"
+extern fun minepaint_mapping_set_base_value(self_p: ptr, value: float): void = "ext#minepaint_mapping_set_base_value"
+extern fun minepaint_mapping_set_n(self_p: ptr, input: int, n: int): void = "ext#minepaint_mapping_set_n"
+extern fun minepaint_mapping_get_n(self_p: ptr, input: int): int = "ext#minepaint_mapping_get_n"
+extern fun minepaint_mapping_set_point(self_p: ptr, input: int, index: int, x: float, y: float): void = "ext#minepaint_mapping_set_point"
+extern fun minepaint_mapping_calculate(self_p: ptr, data: ptr): float = "ext#minepaint_mapping_calculate"
+
+fn map_slot(b: ptr, i: int): ptr =
+  ptr_add<ptr>(ptr_add<byte>(b, BRUSH_MAP_BYTE), i)
+
+fn get_mapping(b: ptr, i: int): ptr =
+  $UN.ptr0_get<ptr>(map_slot(b, i))
+
+fn set_mapping_ptr(b: ptr, i: int, m: ptr): void =
+  $UN.ptr0_set<ptr>(map_slot(b, i), m)
+
+fn clear_mapping_curves(m: ptr): void = let
+  fun loop(j: int): void =
+    if j < 18 then let
+      val () = minepaint_mapping_set_n(m, j, 0)
+    in loop(j + 1) end else ()
+in
+  loop(0)
+end
+
+fn is_color_setting(i: int): bool =
+  (i = 34) || (i = 35) || (i = 36)
+
+fn reset_setting_default(b: ptr, i: int): void = let
+  val info_p = minepaint_brush_setting_info(i)
+  val s = $UN.cast{ref(MinePaintBrushSettingInfo)}(info_p)
+  val m = get_mapping(b, i)
+  val () = set_base(b, i, s->def)
+  val () = set_val(b, i, s->def)
+  val () = minepaint_mapping_set_base_value(m, s->def)
+  val () = clear_mapping_curves(m)
+in () end
+
+fn reset_settings(b: ptr, keep_color: int): void = let
+  fun loop(i: int): void =
+    if i < MINEPAINT_BRUSH_SETTINGS_COUNT then let
+      val skip = (keep_color > 0) && is_color_setting(i)
+      val () = if skip then () else reset_setting_default(b, i)
+    in loop(i + 1) end else ()
+in
+  loop(0)
+end
+
+fn alloc_mappings(b: ptr): void = let
+  fun loop(i: int): void =
+    if i < MINEPAINT_BRUSH_SETTINGS_COUNT then let
+      val m = minepaint_mapping_new(18)
+      val () = set_mapping_ptr(b, i, m)
+    in loop(i + 1) end else ()
+in
+  loop(0)
+end
+
+fn free_mappings(b: ptr): void = let
+  fun loop(i: int): void =
+    if i < MINEPAINT_BRUSH_SETTINGS_COUNT then let
+      val m = get_mapping(b, i)
+      val () = if m != the_null_ptr then minepaint_mapping_free(m)
+      val () = set_mapping_ptr(b, i, the_null_ptr)
+    in loop(i + 1) end else ()
+in
+  loop(0)
+end
 
 // Fırça Oluşturma
 extern fun draw_engine_brush_new(): ptr = "ext#draw_engine_brush_new"
@@ -70,18 +149,8 @@ implement draw_engine_brush_new() = let
   val _ = memset(p, 0, sz)
   val () = clear_states(p)
   val () = set_reset(p, 1)
-
-  fun init_defaults(b: ptr, i: int): void =
-    if i < MYPAINT_BRUSH_SETTINGS_COUNT then let
-      val info_p = mypaint_brush_setting_info(i)
-      val () = if info_p != the_null_ptr then let
-        val s = $UN.cast{ref(MyPaintBrushSettingInfo)}(info_p)
-        val () = set_base(b, i, s->def)
-        val () = set_val(b, i, s->def)
-      in () end
-    in init_defaults(b, i + 1) end else ()
-
-  val () = init_defaults(p, 0)
+  val () = alloc_mappings(p)
+  val () = reset_settings(p, 0)
 in
   p
 end
@@ -89,7 +158,11 @@ end
 // Fırça Serbest Bırakma
 extern fun draw_engine_brush_free(b: ptr): void = "ext#draw_engine_brush_free"
 implement draw_engine_brush_free(b) =
-  if b != the_null_ptr then free(b) else ()
+  if b != the_null_ptr then let
+    val rng = get_rng(b)
+    val () = if rng != the_null_ptr then rng_double_free(rng) else ()
+    val () = free_mappings(b)
+  in free(b) end else ()
 
 // Fırça Sıfırlama İsteği
 extern fun draw_engine_brush_reset(b: ptr): void = "ext#draw_engine_brush_reset"
@@ -105,10 +178,58 @@ extern fun draw_engine_brush_set_base_value(b: ptr, id: int, v: float): void = "
 implement draw_engine_brush_set_base_value(b, id, v) =
   if b != the_null_ptr then
     if (id >= 0) * (id < 65) then let
+      val m = get_mapping(b, id)
       val () = set_base(b, id, v)
       val () = set_val(b, id, v)
+      val () = if m != the_null_ptr then minepaint_mapping_set_base_value(m, v)
     in () end else ()
   else ()
+
+extern fun draw_engine_brush_set_mapping_n(b: ptr, setting: int, input: int, n: int): void = "ext#draw_engine_brush_set_mapping_n"
+implement draw_engine_brush_set_mapping_n(b, setting, input, n) =
+  if b != the_null_ptr then
+    if (setting >= 0) * (setting < 65) * (input >= 0) * (input < 18) * (n >= 0) * (n <= 64) * (n != 1) then
+      minepaint_mapping_set_n(get_mapping(b, setting), input, n)
+    else ()
+  else ()
+
+extern fun draw_engine_brush_set_mapping_point(
+  b: ptr, setting: int, input: int, index: int, x: float, y: float
+): void = "ext#draw_engine_brush_set_mapping_point"
+implement draw_engine_brush_set_mapping_point(b, setting, input, index, x, y) =
+  if b != the_null_ptr then
+    if (setting >= 0) * (setting < 65) * (input >= 0) * (input < 18) then
+      minepaint_mapping_set_point(get_mapping(b, setting), input, index, x, y)
+    else ()
+  else ()
+
+extern fun draw_engine_brush_prepare_load(b: ptr): void = "ext#draw_engine_brush_prepare_load"
+implement draw_engine_brush_prepare_load(b) =
+  if b != the_null_ptr then let
+    val () = reset_settings(b, 1)
+    val () = set_reset(b, 1)
+  in () end else ()
+
+extern fun draw_engine_brush_apply_startup(b: ptr): void = "ext#draw_engine_brush_apply_startup"
+implement draw_engine_brush_apply_startup(b) =
+  if b != the_null_ptr then let
+    val () = reset_settings(b, 0)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_OPAQUE, 1.0f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_OPAQUE_LINEARIZE, 1.0f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 1.0f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 1.2f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_HARDNESS, 0.1f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS, 5.0f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_DABS_PER_SECOND, 40.0f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_SLOW_TRACKING, 3.0f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_TRACKING_NOISE, 0.0f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_ANTI_ALIASING, 1.0f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_COLOR_H, 1.0f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_COLOR_S, 0.0f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_COLOR_V, 0.729f)
+    val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_PAINT_MODE, 0.0f)
+    val () = set_reset(b, 1)
+  in () end else ()
 
 // Fırça Temel Ayar Okuma
 extern fun draw_engine_brush_get_base_value(b: ptr, id: int): float = "ext#draw_engine_brush_get_base_value"
@@ -168,6 +289,47 @@ in
   if total < 0.0f then 0.0f else total
 end
 
+fn jitter_rng(b: ptr): ptr = let
+  val p = get_rng(b)
+in
+  if p = the_null_ptr then let
+    val n = rng_double_new($UN.cast{lint}(1))
+    val () = set_rng(b, n)
+  in n end else p
+end
+
+// libminepaint: y = log(gamma + speed) * m + q, gamma = exp(speed*_gamma)
+fn speed_input(gamma_log: float, speed: float): float = let
+  val gamma = expf(gamma_log)
+  val c1 = logf(f_add(45.0f, gamma))
+  val m = f_mul(0.015f, f_add(45.0f, gamma))
+  val q = f_sub(0.5f, f_mul(m, c1))
+  val x = if speed < 0.0f then 0.0f else speed
+  val arg0 = f_add(gamma, x)
+  val arg = if arg0 < 0.000001f then 0.000001f else arg0
+in
+  f_add(f_mul(logf(arg), m), q)
+end
+
+// 100% zoom -> 0. Linear zoom passed straight into curves collapses radius.
+fn viewzoom_input(base_log: float, zoom: float): float = let
+  val z = if zoom < 0.01f then 0.01f else zoom
+  val base_r0 = expf(base_log)
+  val base_r = if base_r0 < 0.000001f then 0.000001f else base_r0
+in
+  f_sub(base_log, logf(f_div(base_r, z)))
+end
+
+fn grid_coord(pos: float, scale: float, axis_scale: float): float = let
+  val scaled0 = f_mul(scale, 256.0f)
+  val scaled = if scaled0 < 0.0001f then 0.0001f else scaled0
+  val mag = fabsf(f_mul(pos, axis_scale))
+  val wrapped = fmodf(mag, scaled)
+  val v = f_mul(f_div(wrapped, scaled), 256.0f)
+in
+  if pos < 0.0f then f_sub(256.0f, v) else v
+end
+
 // Durumları ve Dinamik Değerleri Güncelleme - Saf ATS2
 fun update_states(
   b: ptr,
@@ -197,12 +359,33 @@ fun update_states(
   val norm_dy = f_mul(f_div(step_dy, dt), viewzoom)
   val norm_speed = hypotf(norm_dx, norm_dy)
 
-  // Temel ayarları değerlere kopyala
-  fun copy_settings(i: int): void =
+  // Eğrileri değerlendir: val = base + input ofsetleri
+  var inbuf = @[float][18]()
+  val in_p = addr@inbuf
+  fun zero_in(i: int): void =
+    if i < 18 then let
+      val () = $UN.ptr0_set<float>(ptr_add<float>(in_p, i), 0.0f)
+    in zero_in(i + 1) end else ()
+  val () = zero_in(0)
+  val gain = expf(get_base(b, BRUSH_SETTING_PRESSURE_GAIN_LOG))
+  val zoom_lin = if viewzoom < 0.01f then 0.01f else viewzoom
+  val gscale = expf(get_val(b, BRUSH_SETTING_GRIDMAP_SCALE))
+  val () = $UN.ptr0_set<float>(ptr_add<float>(in_p, 0), f_mul(cur_p, gain))
+  val () = $UN.ptr0_set<float>(ptr_add<float>(in_p, 1), g0float2float_double_float(rng_double_next(jitter_rng(b))))
+  val () = $UN.ptr0_set<float>(ptr_add<float>(in_p, 2), get_state(b, BRUSH_STATE_STROKE))
+  val () = $UN.ptr0_set<float>(ptr_add<float>(in_p, 6), speed_input(get_base(b, BRUSH_SETTING_SPEED1_GAMMA), get_state(b, BRUSH_STATE_NORM_SPEED1_SLOW)))
+  val () = $UN.ptr0_set<float>(ptr_add<float>(in_p, 7), speed_input(get_base(b, BRUSH_SETTING_SPEED2_GAMMA), get_state(b, BRUSH_STATE_NORM_SPEED2_SLOW)))
+  val () = $UN.ptr0_set<float>(ptr_add<float>(in_p, 13), grid_coord(get_state(b, BRUSH_STATE_ACTUAL_X), gscale, get_val(b, BRUSH_SETTING_GRIDMAP_SCALE_X)))
+  val () = $UN.ptr0_set<float>(ptr_add<float>(in_p, 14), grid_coord(get_state(b, BRUSH_STATE_ACTUAL_Y), gscale, get_val(b, BRUSH_SETTING_GRIDMAP_SCALE_Y)))
+  val () = $UN.ptr0_set<float>(ptr_add<float>(in_p, 15), viewzoom_input(base_radius_log, zoom_lin))
+  val () = $UN.ptr0_set<float>(ptr_add<float>(in_p, 16), base_radius_log)
+  fun eval_mappings(i: int): void =
     if i < 65 then let
-      val () = set_val(b, i, get_base(b, i))
-    in copy_settings(i + 1) end else ()
-  val () = copy_settings(0)
+      val m = get_mapping(b, i)
+      val v = if m != the_null_ptr then minepaint_mapping_calculate(m, in_p) else get_base(b, i)
+      val () = set_val(b, i, v)
+    in eval_mappings(i + 1) end else ()
+  val () = eval_mappings(0)
 
   val () = set_state(b, BRUSH_STATE_DABS_PER_BASIC_RADIUS, get_val(b, BRUSH_SETTING_DABS_PER_BASIC_RADIUS))
   val () = set_state(b, BRUSH_STATE_DABS_PER_ACTUAL_RADIUS, get_val(b, BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS))
@@ -262,8 +445,15 @@ fun prepare_and_draw_dab(b: ptr, surf: ptr): int = let
     end
     else opaque_clamped
 
-  val x = get_state(b, BRUSH_STATE_ACTUAL_X)
-  val y = get_state(b, BRUSH_STATE_ACTUAL_Y)
+  val jitter = get_val(b, BRUSH_SETTING_OFFSET_BY_RANDOM)
+  val amp = if g0float_gt(jitter, 0.0f) then jitter else 0.0f
+  val base_r = expf(get_base(b, BRUSH_SETTING_RADIUS_LOGARITHMIC))
+  val spread = f_mul(amp, base_r)
+  val use_jitter = g0float_gt(amp, 0.0f)
+  val jx = if use_jitter then f_mul(rand_gauss(jitter_rng(b)), spread) else 0.0f
+  val jy = if use_jitter then f_mul(rand_gauss(jitter_rng(b)), spread) else 0.0f
+  val x = f_add(get_state(b, BRUSH_STATE_ACTUAL_X), jx)
+  val y = f_add(get_state(b, BRUSH_STATE_ACTUAL_Y), jy)
   val radius_raw = get_state(b, BRUSH_STATE_ACTUAL_RADIUS)
 
   val color_h = get_base(b, BRUSH_SETTING_COLOR_H)
@@ -303,7 +493,8 @@ fun prepare_and_draw_dab(b: ptr, surf: ptr): int = let
   val colorize = get_val(b, BRUSH_SETTING_COLORIZE)
   val posterize = get_val(b, BRUSH_SETTING_POSTERIZE)
   val posterize_num = get_val(b, BRUSH_SETTING_POSTERIZE_NUM)
-  val paint_mode = 0.0f
+  val paint_raw = get_val(b, BRUSH_SETTING_PAINT_MODE)
+  val paint_mode = if paint_raw < 0.0f then 0.0f else if paint_raw > 1.0f then 1.0f else paint_raw
 in
   draw_engine_surface_draw_dab(
     surf, x, y, final_radius, color_r, color_g, color_b,
@@ -349,7 +540,7 @@ implement draw_engine_brush_stroke_to(b, surf, x, y, pressure, xtilt, ytilt, dti
     in 1 end
     else let
       // Yavaş takip filtresi (Slow tracking filter)
-      val tracking = get_base(b, BRUSH_SETTING_SLOW_TRACKING)
+      val tracking = get_val(b, BRUSH_SETTING_SLOW_TRACKING)
       val fac = f_sub(1.0f, engine_exp_decay(tracking, f_mul(100.0f, dt_float)))
       val old_x = get_state(b, BRUSH_STATE_X)
       val old_y = get_state(b, BRUSH_STATE_Y)

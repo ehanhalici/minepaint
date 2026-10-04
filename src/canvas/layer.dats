@@ -5,13 +5,6 @@
 
 staload UN = "prelude/SATS/unsafe.sats"
 
-// --- Harici C Kütüphaneleri (Sadece OpenGL) ---
-%{^
-#include <GL/gl.h>
-#include <GL/glext.h>
-#include <stdlib.h>
-%}
-
 typedef GLuint = uint
 
 #define TILE_HASH_SIZE 1024
@@ -41,7 +34,10 @@ macdef GL_COLOR_ATTACHMENT0 = $extval(int, "GL_COLOR_ATTACHMENT0")
 macdef GL_COLOR_BUFFER_BIT = $extval(int, "GL_COLOR_BUFFER_BIT")
 macdef GL_TEXTURE_MIN_FILTER = $extval(int, "GL_TEXTURE_MIN_FILTER")
 macdef GL_TEXTURE_MAG_FILTER = $extval(int, "GL_TEXTURE_MAG_FILTER")
+macdef GL_TEXTURE_WRAP_S = $extval(int, "GL_TEXTURE_WRAP_S")
+macdef GL_TEXTURE_WRAP_T = $extval(int, "GL_TEXTURE_WRAP_T")
 macdef GL_LINEAR = $extval(int, "GL_LINEAR")
+macdef GL_CLAMP_TO_EDGE = $extval(int, "GL_CLAMP_TO_EDGE")
 macdef GL_BLEND = $extval(int, "GL_BLEND")
 macdef GL_SRC_ALPHA = $extval(int, "GL_SRC_ALPHA")
 macdef GL_ONE_MINUS_SRC_ALPHA = $extval(int, "GL_ONE_MINUS_SRC_ALPHA")
@@ -86,7 +82,7 @@ extern fun layer_find_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_find_
 extern fun layer_get_or_create_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_get_or_create_tile"
 extern fun layer_bind_tile(tile: ptr): void = "ext#layer_bind_tile"
 extern fun layer_unbind_tile(): void = "ext#layer_unbind_tile"
-extern fun layer_draw_tiles(layer: ptr, view_l: float, view_t: float, view_r: float, view_b: float): void = "ext#layer_draw_tiles"
+extern fun layer_draw_tiles(layer: ptr, view_l: float, view_t: float, view_r: float, view_b: float, zoom: float): void = "ext#layer_draw_tiles"
 extern fun layer_clear(layer: ptr): void = "ext#layer_clear"
 extern fun layer_destroy(layer: ptr): void = "ext#layer_destroy"
 
@@ -165,6 +161,8 @@ fun alloc_tile(tx: int, ty: int, next_bucket: ptr, next_layer: ptr): ptr = let
   val () = glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1024, 1024, 0, GL_RGBA, GL_UNSIGNED_BYTE, the_null_ptr)
   val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
   val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+  val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+  val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
 
   val () = glGenFramebuffers(1, fbo_id)
   val () = glBindFramebuffer(GL_FRAMEBUFFER, fbo_id)
@@ -238,7 +236,7 @@ implement layer_unbind_tile() = let
 in () end
 
 // --- Görünür Tile'ları Ekrana Çizme (Frustum Culling ile) ---
-fun draw_tiles_rec(cur: ptr, vl: float, vt: float, vr: float, vb: float): void =
+fun draw_tiles_rec(cur: ptr, vl: float, vt: float, vr: float, vb: float, zoom: float): void =
   if cur = the_null_ptr then ()
   else let
     val t = $UN.cast{ref(CanvasTile)}(cur)
@@ -246,27 +244,39 @@ fun draw_tiles_rec(cur: ptr, vl: float, vt: float, vr: float, vb: float): void =
     val y0 = g0int2float(t->ty) * 1024.0f
     val x1 = x0 + 1024.0f
     val y1 = y0 + 1024.0f
+    // Yarım ekran pikseli: birleşim çizgisi rasterda düşmesin, yakınlaşınca da şerit olmasın.
+    val bleed = g0float_div_float(0.5f, zoom)
+    val du = g0float_div_float(bleed, 1024.0f)
+    val x0e = g0float_sub_float(x0, bleed)
+    val y0e = g0float_sub_float(y0, bleed)
+    val x1e = g0float_add_float(x1, bleed)
+    val y1e = g0float_add_float(y1, bleed)
+    val u0 = g0float_sub_float(0.0f, du)
+    val u1 = g0float_add_float(1.0f, du)
+    val v0 = g0float_sub_float(0.0f, du)
+    val v1 = g0float_add_float(1.0f, du)
 
-    // Ekran görüş alanı (AABB) ile kesişim kontrolü
-    val visible = (x1 >= vl) && (x0 <= vr) && (y1 >= vt) && (y0 <= vb)
+    val visible = (x1e >= vl) && (x0e <= vr) && (y1e >= vt) && (y0e <= vb)
     val () = if visible then let
       val () = glBindTexture(GL_TEXTURE_2D, t->texture)
+      val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+      val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
       val () = glBegin(GL_QUADS)
-      val () = glTexCoord2f(0.0f, 1.0f)
-      val () = glVertex2f(x0, y0)
-      val () = glTexCoord2f(1.0f, 1.0f)
-      val () = glVertex2f(x1, y0)
-      val () = glTexCoord2f(1.0f, 0.0f)
-      val () = glVertex2f(x1, y1)
-      val () = glTexCoord2f(0.0f, 0.0f)
-      val () = glVertex2f(x0, y1)
+      val () = glTexCoord2f(u0, v1)
+      val () = glVertex2f(x0e, y0e)
+      val () = glTexCoord2f(u1, v1)
+      val () = glVertex2f(x1e, y0e)
+      val () = glTexCoord2f(u1, v0)
+      val () = glVertex2f(x1e, y1e)
+      val () = glTexCoord2f(u0, v0)
+      val () = glVertex2f(x0e, y1e)
       val () = glEnd()
     in () end else ()
   in
-    draw_tiles_rec(t->next_in_layer, vl, vt, vr, vb)
+    draw_tiles_rec(t->next_in_layer, vl, vt, vr, vb, zoom)
   end
 
-implement layer_draw_tiles(layer, vl, vt, vr, vb) = let
+implement layer_draw_tiles(layer, vl, vt, vr, vb, zoom) = let
   val lr = $UN.cast{ref(Layer_Record)}(layer)
 in
   if lr->tiles != the_null_ptr then let
@@ -274,7 +284,7 @@ in
     val () = glEnable(GL_BLEND)
     val () = glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     val () = glColor4f(1.0f, 1.0f, 1.0f, 1.0f)
-    val () = draw_tiles_rec(lr->tiles, vl, vt, vr, vb)
+    val () = draw_tiles_rec(lr->tiles, vl, vt, vr, vb, zoom)
     val () = glDisable(GL_TEXTURE_2D)
   in () end else ()
 end
@@ -317,7 +327,7 @@ in () end
 
 // Geriye dönük uyumluluk fonksiyonları
 implement layer_drawOnScreen(layer, w, h) =
-  layer_draw_tiles(layer, 0.0f, 0.0f, g0int2float(w), g0int2float(h))
+  layer_draw_tiles(layer, 0.0f, 0.0f, g0int2float(w), g0int2float(h), 1.0f)
 
 implement layer_bind(l) = ()
 implement layer_unbind(l) = ()

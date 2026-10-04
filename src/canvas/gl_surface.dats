@@ -1,18 +1,10 @@
 // src/MyGLSurface.dats
-// Native ATS2 OpenGL Surface for MyPaint Engine (Tiled FBOs & Dab Rendering)
+// Native ATS2 OpenGL Surface for MinePaint Engine (Tiled FBOs & Dab Rendering)
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
 staload UN = "prelude/SATS/unsafe.sats"
-
-// --- Harici Kütüphane Başlıkları (OpenGL ve C Standart Kütüphanesi) ---
-%{^
-#include <GL/gl.h>
-#include <math.h>
-#include <stdlib.h>
-#include <string.h>
-%}
 
 // OpenGL Sabitleri
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
@@ -61,15 +53,15 @@ extern fun layer_get_or_create_tile(layer: ptr, tx: int, ty: int): ptr = "ext#la
 extern fun layer_bind_tile(tile: ptr): void = "ext#layer_bind_tile"
 extern fun layer_unbind_tile(): void = "ext#layer_unbind_tile"
 
-// LibMyPaint Tipleri
-typedef MyPaintDrawDabFunc = (
+// LibMinePaint Tipleri
+typedef MinePaintDrawDabFunc = (
   ptr, float, float, float, float, float, float, 
   float, float, float, float, float, float, 
   float, float, float, float, float
 ) -> int
 
-typedef MyPaintSurface_Record = @{
-  draw_dab= MyPaintDrawDabFunc,
+typedef MinePaintSurface_Record = @{
+  draw_dab= MinePaintDrawDabFunc,
   get_color= ptr,
   begin_atomic= ptr,
   end_atomic= ptr,
@@ -79,7 +71,7 @@ typedef MyPaintSurface_Record = @{
 }
 
 typedef MyGLSurface_Record = @{
-  parent= MyPaintSurface_Record,
+  parent= MinePaintSurface_Record,
   is_erasing= int,
   layer= ptr
 }
@@ -87,7 +79,7 @@ typedef MyGLSurface_Record = @{
 // Surface API İmzaları
 typedef glsurface_vtype = ptr
 
-extern fun draw_dab_callback : MyPaintDrawDabFunc = "ext#draw_dab_callback"
+extern fun draw_dab_callback : MinePaintDrawDabFunc = "ext#draw_dab_callback"
 extern fun glsurface_create(): glsurface_vtype = "ext#glsurface_create"
 extern fun glsurface_destroy(s: glsurface_vtype): void = "ext#glsurface_destroy"
 extern fun glsurface_set_erasing(s: glsurface_vtype, v: int): void = "ext#glsurface_set_erasing"

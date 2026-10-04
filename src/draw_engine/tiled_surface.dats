@@ -1,5 +1,5 @@
 // src/draw_engine/tiled_surface.dats
-// Native ATS2 implementation of MyPaint Tiled Surface
+// Native ATS2 implementation of MinePaint Tiled Surface
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
@@ -13,29 +13,29 @@ staload "./brushmodes.dats"
 staload "./surface.dats"
 staload "./helpers.dats"
 
-#include "./mypaint_types.hats"
+#include "./minepaint_types.hats"
 #define M_PI 3.14159265358979323846f
 
-typedef MyPaintTileRequest_struct = MyPaintTileRequest
-typedef MyPaintTiledSurface_struct = MyPaintTiledSurface
+typedef MinePaintTileRequest_struct = MinePaintTileRequest
+typedef MinePaintTiledSurface_struct = MinePaintTiledSurface
 typedef OperationDataDrawDab_struct = OperationDataDrawDab
 
-typedef MyPaintTileRequestFunc = (ptr, ptr) -> void
+typedef MinePaintTileRequestFunc = (ptr, ptr) -> void
 
 fn call_tile_request_start(f: ptr, self: ptr, req: ptr): void =
-  if f != the_null_ptr then $UN.cast{MyPaintTileRequestFunc}(f)(self, req)
+  if f != the_null_ptr then $UN.cast{MinePaintTileRequestFunc}(f)(self, req)
 
 fn call_tile_request_end(f: ptr, self: ptr, req: ptr): void =
-  if f != the_null_ptr then $UN.cast{MyPaintTileRequestFunc}(f)(self, req)
+  if f != the_null_ptr then $UN.cast{MinePaintTileRequestFunc}(f)(self, req)
 
 fn get_tiled_surface_default_bboxes(self: ptr): ptr = let
-  val r = $UN.cast{ref(MyPaintTiledSurface_struct)}(self)
+  val r = $UN.cast{ref(MinePaintTiledSurface_struct)}(self)
 in
   r->default_bboxes
 end
 
 fn get_tiled_surface_symmetry_data(self: ptr): ptr = let
-  val r = $UN.cast{ref(MyPaintTiledSurface_struct)}(self)
+  val r = $UN.cast{ref(MinePaintTiledSurface_struct)}(self)
 in
   r->symmetry_data
 end
@@ -79,13 +79,13 @@ in
   @(x, y)
 end
 
-// mypaint_tile_request_init
-extern fun mypaint_tile_request_init(
+// minepaint_tile_request_init
+extern fun minepaint_tile_request_init(
   data_p: ptr, level: int, tx: int, ty: int, readonly: bool
-): void = "ext#mypaint_tile_request_init"
-implement mypaint_tile_request_init(data_p, level, tx, ty, readonly) =
+): void = "ext#minepaint_tile_request_init"
+implement minepaint_tile_request_init(data_p, level, tx, ty, readonly) =
   if data_p != the_null_ptr then let
-    val r = $UN.cast{ref(MyPaintTileRequest_struct)}(data_p)
+    val r = $UN.cast{ref(MinePaintTileRequest_struct)}(data_p)
     val () = r->tx := tx
     val () = r->ty := ty
     val () = r->readonly := (if readonly then 1 else 0)
@@ -95,21 +95,21 @@ implement mypaint_tile_request_init(data_p, level, tx, ty, readonly) =
     val () = r->mipmap_level := level
   in () end
 
-// mypaint_tiled_surface_tile_request_start
-extern fun mypaint_tiled_surface_tile_request_start(self_p: ptr, req_p: ptr): void = "ext#mypaint_tiled_surface_tile_request_start"
-implement mypaint_tiled_surface_tile_request_start(self_p, req_p) =
+// minepaint_tiled_surface_tile_request_start
+extern fun minepaint_tiled_surface_tile_request_start(self_p: ptr, req_p: ptr): void = "ext#minepaint_tiled_surface_tile_request_start"
+implement minepaint_tiled_surface_tile_request_start(self_p, req_p) =
   if (self_p != the_null_ptr) * (req_p != the_null_ptr) then let
-    val self = $UN.cast{ref(MyPaintTiledSurface_struct)}(self_p)
+    val self = $UN.cast{ref(MinePaintTiledSurface_struct)}(self_p)
     val f = self->tile_request_start
   in
     if f != the_null_ptr then call_tile_request_start(f, self_p, req_p)
   end
 
-// mypaint_tiled_surface_tile_request_end
-extern fun mypaint_tiled_surface_tile_request_end(self_p: ptr, req_p: ptr): void = "ext#mypaint_tiled_surface_tile_request_end"
-implement mypaint_tiled_surface_tile_request_end(self_p, req_p) =
+// minepaint_tiled_surface_tile_request_end
+extern fun minepaint_tiled_surface_tile_request_end(self_p: ptr, req_p: ptr): void = "ext#minepaint_tiled_surface_tile_request_end"
+implement minepaint_tiled_surface_tile_request_end(self_p, req_p) =
   if (self_p != the_null_ptr) * (req_p != the_null_ptr) then let
-    val self = $UN.cast{ref(MyPaintTiledSurface_struct)}(self_p)
+    val self = $UN.cast{ref(MinePaintTiledSurface_struct)}(self_p)
     val f = self->tile_request_end
   in
     if f != the_null_ptr then call_tile_request_end(f, self_p, req_p)
@@ -239,11 +239,11 @@ implement render_dab_mask(mask, x, y, radius, hardness, softness, aspect_ratio, 
 
   val x0 = i_max(0, g0float2int_float_int(x0_f))
   val y0 = i_max(0, g0float2int_float_int(y0_f))
-  val x1 = i_min(MYPAINT_TILE_SIZE - 1, g0float2int_float_int(x1_f))
-  val y1 = i_min(MYPAINT_TILE_SIZE - 1, g0float2int_float_int(y1_f))
+  val x1 = i_min(MINEPAINT_TILE_SIZE - 1, g0float2int_float_int(x1_f))
+  val y1 = i_min(MINEPAINT_TILE_SIZE - 1, g0float2int_float_int(y1_f))
 
   val one_over_radius2 = f_div(1.0f, f_mul(radius, radius))
-  val sz_rr_mask = (MYPAINT_TILE_SIZE * MYPAINT_TILE_SIZE + 2 * MYPAINT_TILE_SIZE) * 4
+  val sz_rr_mask = (MINEPAINT_TILE_SIZE * MINEPAINT_TILE_SIZE + 2 * MINEPAINT_TILE_SIZE) * 4
   val rr_mask = malloc(int2size(sz_rr_mask))
   val () = assertloc(rr_mask > the_null_ptr)
 
@@ -258,7 +258,7 @@ implement render_dab_mask(mask, x, y, radius, hardness, softness, aspect_ratio, 
           fun loop_x(xp: int): void =
             if xp <= x1 then let
               val rr = calculate_rr_antialiased(xp, yp, x, y, ar, sn, cs, one_over_radius2, r_aa_start)
-              val idx = yp * MYPAINT_TILE_SIZE + xp
+              val idx = yp * MINEPAINT_TILE_SIZE + xp
               val () = $UN.ptr0_set<float>(ptr_add<float>(rr_mask, int2size(idx)), rr)
             in loop_x(xp + 1) end
             else ()
@@ -272,7 +272,7 @@ implement render_dab_mask(mask, x, y, radius, hardness, softness, aspect_ratio, 
           fun loop_x(xp: int): void =
             if xp <= x1 then let
               val rr = calculate_rr(xp, yp, x, y, ar, sn, cs, one_over_radius2)
-              val idx = yp * MYPAINT_TILE_SIZE + xp
+              val idx = yp * MINEPAINT_TILE_SIZE + xp
               val () = $UN.ptr0_set<float>(ptr_add<float>(rr_mask, int2size(idx)), rr)
             in loop_x(xp + 1) end
             else ()
@@ -282,14 +282,14 @@ implement render_dab_mask(mask, x, y, radius, hardness, softness, aspect_ratio, 
     in loop_y(y0) end
 
   // RLE encode into mask
-  val skip0 = y0 * MYPAINT_TILE_SIZE
+  val skip0 = y0 * MINEPAINT_TILE_SIZE
 
   fun loop_rle_y(yp: int, cur_skip: int, out_idx: int): @(int, int) =
     if yp <= y1 then let
       val s_with_x0 = cur_skip + x0
       fun loop_rle_x(xp: int, s_acc: int, o_idx: int): @(int, int) =
         if xp <= x1 then let
-          val idx = yp * MYPAINT_TILE_SIZE + xp
+          val idx = yp * MINEPAINT_TILE_SIZE + xp
           val rr = $UN.ptr0_get<float>(ptr_add<float>(rr_mask, int2size(idx)))
           val opa = calculate_opa(rr, h, seg1_off, seg1_slope, seg2_off, seg2_slope)
           val opa_i = g0float2int_float_int(f_mul(opa, 32768.0f))
@@ -314,7 +314,7 @@ implement render_dab_mask(mask, x, y, radius, hardness, softness, aspect_ratio, 
       val res_x = loop_rle_x(x0, s_with_x0, out_idx)
       val s_after_row = res_x.0
       val out_idx_after = res_x.1
-      val s_next = s_after_row + (MYPAINT_TILE_SIZE - (x1 + 1))
+      val s_next = s_after_row + (MINEPAINT_TILE_SIZE - (x1 + 1))
     in
       loop_rle_y(yp + 1, s_next, out_idx_after)
     end
@@ -332,8 +332,8 @@ extern fun process_op(rgba_p: ptr, mask: ptr, tx: int, ty: int, op_ptr: ptr): vo
 implement process_op(rgba_p, mask, tx, ty, op_ptr) =
   if (rgba_p != the_null_ptr) * (op_ptr != the_null_ptr) then let
     val op_rec = $UN.cast{ref(OperationDataDrawDab_struct)}(op_ptr)
-    val ox = f_sub(op_rec->x, g0int2float_int_float(tx * MYPAINT_TILE_SIZE))
-    val oy = f_sub(op_rec->y, g0int2float_int_float(ty * MYPAINT_TILE_SIZE))
+    val ox = f_sub(op_rec->x, g0int2float_int_float(tx * MINEPAINT_TILE_SIZE))
+    val oy = f_sub(op_rec->y, g0int2float_int_float(ty * MINEPAINT_TILE_SIZE))
 
     val () = render_dab_mask(
       mask, ox, oy, op_rec->radius,
@@ -427,16 +427,16 @@ implement process_op(rgba_p, mask, tx, ty, op_ptr) =
 extern fun process_tile(self_p: ptr, tx: int, ty: int): void = "ext#process_tile"
 implement process_tile(self_p, tx, ty) =
   if self_p != the_null_ptr then let
-    val self = $UN.cast{ref(MyPaintTiledSurface_struct)}(self_p)
+    val self = $UN.cast{ref(MinePaintTiledSurface_struct)}(self_p)
     val op_first = operation_queue_pop(self->operation_queue, tx, ty)
   in
     if op_first != the_null_ptr then let
-      val req_sz = sizeof<MyPaintTileRequest_struct>
+      val req_sz = sizeof<MinePaintTileRequest_struct>
       val req_mem = malloc(req_sz)
       val () = assertloc(req_mem > the_null_ptr)
-      val () = mypaint_tile_request_init(req_mem, 0, tx, ty, false)
-      val () = mypaint_tiled_surface_tile_request_start(self_p, req_mem)
-      val req_rec = $UN.cast{ref(MyPaintTileRequest_struct)}(req_mem)
+      val () = minepaint_tile_request_init(req_mem, 0, tx, ty, false)
+      val () = minepaint_tiled_surface_tile_request_start(self_p, req_mem)
+      val req_rec = $UN.cast{ref(MinePaintTileRequest_struct)}(req_mem)
       val rgba_p = req_rec->buffer
     in
       if rgba_p = the_null_ptr then let
@@ -444,7 +444,7 @@ implement process_tile(self_p, tx, ty) =
         val () = free(req_mem)
       in () end
       else let
-        val mask_sz = (MYPAINT_TILE_SIZE * MYPAINT_TILE_SIZE + 2 * MYPAINT_TILE_SIZE) * 2
+        val mask_sz = (MINEPAINT_TILE_SIZE * MINEPAINT_TILE_SIZE + 2 * MINEPAINT_TILE_SIZE) * 2
         val mask = malloc(int2size(mask_sz))
         val () = assertloc(mask > the_null_ptr)
 
@@ -460,7 +460,7 @@ implement process_tile(self_p, tx, ty) =
 
         val () = loop_ops(op_first)
         val () = free(mask)
-        val () = mypaint_tiled_surface_tile_request_end(self_p, req_mem)
+        val () = minepaint_tiled_surface_tile_request_end(self_p, req_mem)
         val () = free(req_mem)
       in () end
     end
@@ -470,8 +470,8 @@ implement process_tile(self_p, tx, ty) =
 // prepare_bounding_boxes
 fn prepare_bounding_boxes(self_p: ptr): void =
   if self_p != the_null_ptr then let
-    val self = $UN.cast{ref(MyPaintTiledSurface_struct)}(self_p)
-    val symm = $UN.cast{ref(MyPaintSymmetryData_struct)}(self->symmetry_data)
+    val self = $UN.cast{ref(MinePaintTiledSurface_struct)}(self_p)
+    val symm = $UN.cast{ref(MinePaintSymmetryData_struct)}(self->symmetry_data)
     val cur_state = symm->state_current
     val snowflake = (cur_state.type = 4)
     val lines_i = g0float2int_float_int(cur_state.num_lines)
@@ -482,7 +482,7 @@ fn prepare_bounding_boxes(self_p: ptr): void =
       if g0int_gt(num_desired, self->num_bboxes) then let
         val margin = 10
         val num_to_alloc = g0int_add(num_desired, margin)
-        val sz = sizeof<MyPaintRectangle_struct>
+        val sz = sizeof<MinePaintRectangle_struct>
         val bytes = mul_size_size(int2size(num_to_alloc), sz)
         val new_boxes = malloc(bytes)
       in
@@ -500,7 +500,7 @@ fn prepare_bounding_boxes(self_p: ptr): void =
     fun loop_clean(i: int): void =
       if i < n_clean then let
         val r_p = ptr_add<byte>(self->bboxes, int2size(g0int_mul(i, 16)))
-        val r = $UN.cast{ref(MyPaintRectangle_struct)}(r_p)
+        val r = $UN.cast{ref(MinePaintRectangle_struct)}(r_p)
         val () = r->x := 0
         val () = r->y := 0
         val () = r->width := 0
@@ -511,20 +511,20 @@ fn prepare_bounding_boxes(self_p: ptr): void =
     val () = self->num_bboxes_dirtied := 0
   in () end
 
-// mypaint_tiled_surface_begin_atomic
-extern fun mypaint_tiled_surface_begin_atomic(self_p: ptr): void = "ext#mypaint_tiled_surface_begin_atomic"
-implement mypaint_tiled_surface_begin_atomic(self_p) =
+// minepaint_tiled_surface_begin_atomic
+extern fun minepaint_tiled_surface_begin_atomic(self_p: ptr): void = "ext#minepaint_tiled_surface_begin_atomic"
+implement minepaint_tiled_surface_begin_atomic(self_p) =
   if self_p != the_null_ptr then let
     val symm_ptr = get_tiled_surface_symmetry_data(self_p)
-    val () = mypaint_update_symmetry_state(symm_ptr)
+    val () = minepaint_update_symmetry_state(symm_ptr)
     val () = prepare_bounding_boxes(self_p)
   in () end
 
-// mypaint_tiled_surface_end_atomic
-extern fun mypaint_tiled_surface_end_atomic(self_p: ptr, roi_p: ptr): void = "ext#mypaint_tiled_surface_end_atomic"
-implement mypaint_tiled_surface_end_atomic(self_p, roi_p) =
+// minepaint_tiled_surface_end_atomic
+extern fun minepaint_tiled_surface_end_atomic(self_p: ptr, roi_p: ptr): void = "ext#minepaint_tiled_surface_end_atomic"
+implement minepaint_tiled_surface_end_atomic(self_p, roi_p) =
   if self_p != the_null_ptr then let
-    val self = $UN.cast{ref(MyPaintTiledSurface_struct)}(self_p)
+    val self = $UN.cast{ref(MinePaintTiledSurface_struct)}(self_p)
     var tiles_ptr: ptr
     val tiles_n = operation_queue_get_dirty_tiles(self->operation_queue, tiles_ptr)
     val t_ptr = tiles_ptr
@@ -540,7 +540,7 @@ implement mypaint_tiled_surface_end_atomic(self_p, roi_p) =
 
     val () =
       if roi_p != the_null_ptr then let
-        val roi = $UN.cast{ref(MyPaintRectangles_struct)}(roi_p)
+        val roi = $UN.cast{ref(MinePaintRectangles_struct)}(roi_p)
         val roi_rects = roi->num_rectangles
         val num_dirty = self->num_bboxes_dirtied
         val n_clean = i_min(roi_rects, num_dirty)
@@ -548,7 +548,7 @@ implement mypaint_tiled_surface_end_atomic(self_p, roi_p) =
         fun loop_clean(i: int): void =
           if i < n_clean then let
             val rp = ptr_add<byte>(roi->rectangles, int2size(g0int_mul(i, 16)))
-            val r = $UN.cast{ref(MyPaintRectangle_struct)}(rp)
+            val r = $UN.cast{ref(MinePaintRectangle_struct)}(rp)
             val () = r->x := 0
             val () = r->y := 0
             val () = r->width := 0
@@ -568,7 +568,7 @@ implement mypaint_tiled_surface_end_atomic(self_p, roi_p) =
               else i
             val dest_p = ptr_add<byte>(roi->rectangles, int2size(g0int_mul(out_idx, 16)))
             val src_p = ptr_add<byte>(self->bboxes, int2size(g0int_mul(i, 16)))
-            val () = mypaint_rectangle_expand_to_include_rect(dest_p, src_p)
+            val () = minepaint_rectangle_expand_to_include_rect(dest_p, src_p)
           in loop_out(i + 1) end
           else ()
         val () = loop_out(0)
@@ -587,7 +587,7 @@ fn draw_dab_internal(
 ): bool =
   if f_lt(radius, 0.1f) || f_lte(hardness, 0.0f) || f_gte(softness, 1.0f) || f_lte(opaque, 0.0f) then false
   else let
-    val self = $UN.cast{ref(MyPaintTiledSurface_struct)}(self_p)
+    val self = $UN.cast{ref(MinePaintTiledSurface_struct)}(self_p)
     val op_sz = sizeof<OperationDataDrawDab_struct>
     val op_p = malloc(op_sz)
     val () = assertloc(op_p > the_null_ptr)
@@ -623,10 +623,10 @@ fn draw_dab_internal(
     val () = op_data->normal := norm
 
     val r_fringe = f_add(radius, 1.0f)
-    val tx1 = g0float2int_float_int(floorf(f_div(floorf(f_sub(x, r_fringe)), g0int2float_int_float(MYPAINT_TILE_SIZE))))
-    val tx2 = g0float2int_float_int(floorf(f_div(floorf(f_add(x, r_fringe)), g0int2float_int_float(MYPAINT_TILE_SIZE))))
-    val ty1 = g0float2int_float_int(floorf(f_div(floorf(f_sub(y, r_fringe)), g0int2float_int_float(MYPAINT_TILE_SIZE))))
-    val ty2 = g0float2int_float_int(floorf(f_div(floorf(f_add(y, r_fringe)), g0int2float_int_float(MYPAINT_TILE_SIZE))))
+    val tx1 = g0float2int_float_int(floorf(f_div(floorf(f_sub(x, r_fringe)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
+    val tx2 = g0float2int_float_int(floorf(f_div(floorf(f_add(x, r_fringe)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
+    val ty1 = g0float2int_float_int(floorf(f_div(floorf(f_sub(y, r_fringe)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
+    val ty2 = g0float2int_float_int(floorf(f_div(floorf(f_add(y, r_fringe)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
 
     fun loop_ty(ty: int): void =
       if ty <= ty2 then let
@@ -650,8 +650,8 @@ fn draw_dab_internal(
     val bb_h = g0float2int_float_int(floorf(f_add(y, r_fringe))) - bb_y + 1
 
     val bbox_p = ptr_add<byte>(self->bboxes, int2size(g0int_mul(bbox_index, 16)))
-    val () = mypaint_rectangle_expand_to_include_point(bbox_p, bb_x, bb_y)
-    val () = mypaint_rectangle_expand_to_include_point(bbox_p, bb_x + bb_w - 1, bb_y + bb_h - 1)
+    val () = minepaint_rectangle_expand_to_include_point(bbox_p, bb_x, bb_y)
+    val () = minepaint_rectangle_expand_to_include_point(bbox_p, bb_x + bb_w - 1, bb_y + bb_h - 1)
     val () = free(op_p)
   in true end
 
@@ -665,7 +665,7 @@ fn transform_and_draw(
 ): void = let
   var tx: float
   var ty: float
-  val () = mypaint_transform_point(m, x, y, tx, ty)
+  val () = minepaint_transform_point(m, x, y, tx, ty)
   val _ = draw_dab_internal(
     surface, tx, ty, radius, color_r, color_g, color_b,
     opaque, hardness, softness, color_a, aspect_ratio, dab_angle,
@@ -692,10 +692,10 @@ implement tiled_surface_draw_dab(
     opaque, hardness, softness, color_a, aspect_ratio, angle,
     lock_alpha, colorize, posterize, posterize_num, paint, 0
   )
-  val self = $UN.cast{ref(MyPaintTiledSurface_struct)}(surface)
+  val self = $UN.cast{ref(MinePaintTiledSurface_struct)}(surface)
   val () =
     if modified then let
-      val symm = $UN.cast{ref(MyPaintSymmetryData_struct)}(self->symmetry_data)
+      val symm = $UN.cast{ref(MinePaintSymmetryData_struct)}(self->symmetry_data)
       val symm_active = symm->active
       val symm_num = symm->num_symmetry_matrices
     in
@@ -812,7 +812,7 @@ extern fun tiled_surface_get_color(
 ): void = "ext#tiled_surface_get_color"
 implement tiled_surface_get_color(surface, x, y, radius, color_r, color_g, color_b, color_a, paint) = let
   val rad = if f_lt(radius, 1.0f) then 1.0f else radius
-  val self = $UN.cast{ref(MyPaintTiledSurface_struct)}(surface)
+  val self = $UN.cast{ref(MinePaintTiledSurface_struct)}(surface)
 
   val acc_mem = malloc(int2size(20))
   val () = assertloc(acc_mem > the_null_ptr)
@@ -828,13 +828,13 @@ implement tiled_surface_get_color(surface, x, y, radius, color_r, color_g, color
   val random_sample_rate = f_div(1.0f, f_mul(7.0f, rad))
 
   val r_fringe = f_add(rad, 1.0f)
-  val tx1 = g0float2int_float_int(floorf(f_div(floorf(f_sub(x, r_fringe)), g0int2float_int_float(MYPAINT_TILE_SIZE))))
-  val tx2 = g0float2int_float_int(floorf(f_div(floorf(f_add(x, r_fringe)), g0int2float_int_float(MYPAINT_TILE_SIZE))))
-  val ty1 = g0float2int_float_int(floorf(f_div(floorf(f_sub(y, r_fringe)), g0int2float_int_float(MYPAINT_TILE_SIZE))))
-  val ty2 = g0float2int_float_int(floorf(f_div(floorf(f_add(y, r_fringe)), g0int2float_int_float(MYPAINT_TILE_SIZE))))
+  val tx1 = g0float2int_float_int(floorf(f_div(floorf(f_sub(x, r_fringe)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
+  val tx2 = g0float2int_float_int(floorf(f_div(floorf(f_add(x, r_fringe)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
+  val ty1 = g0float2int_float_int(floorf(f_div(floorf(f_sub(y, r_fringe)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
+  val ty2 = g0float2int_float_int(floorf(f_div(floorf(f_add(y, r_fringe)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
 
-  val req_sz = sizeof<MyPaintTileRequest_struct>
-  val mask_sz = (MYPAINT_TILE_SIZE * MYPAINT_TILE_SIZE + 2 * MYPAINT_TILE_SIZE) * 2
+  val req_sz = sizeof<MinePaintTileRequest_struct>
+  val mask_sz = (MINEPAINT_TILE_SIZE * MINEPAINT_TILE_SIZE + 2 * MINEPAINT_TILE_SIZE) * 2
   val mask = malloc(int2size(mask_sz))
   val () = assertloc(mask > the_null_ptr)
 
@@ -845,20 +845,20 @@ implement tiled_surface_get_color(surface, x, y, radius, color_r, color_g, color
           val () = process_tile(surface, tx, ty)
           val req_mem = malloc(req_sz)
           val () = assertloc(req_mem > the_null_ptr)
-          val () = mypaint_tile_request_init(req_mem, 0, tx, ty, true)
-          val () = mypaint_tiled_surface_tile_request_start(surface, req_mem)
-          val req_rec = $UN.cast{ref(MyPaintTileRequest_struct)}(req_mem)
+          val () = minepaint_tile_request_init(req_mem, 0, tx, ty, true)
+          val () = minepaint_tiled_surface_tile_request_start(surface, req_mem)
+          val req_rec = $UN.cast{ref(MinePaintTileRequest_struct)}(req_mem)
           val rgba_p = req_rec->buffer
         in
           if rgba_p != the_null_ptr then let
-            val ox = f_sub(x, g0int2float_int_float(tx * MYPAINT_TILE_SIZE))
-            val oy = f_sub(y, g0int2float_int_float(ty * MYPAINT_TILE_SIZE))
+            val ox = f_sub(x, g0int2float_int_float(tx * MINEPAINT_TILE_SIZE))
+            val oy = f_sub(y, g0int2float_int_float(ty * MINEPAINT_TILE_SIZE))
             val () = render_dab_mask(mask, ox, oy, rad, 0.5f, 0.5f, 1.0f, 0.0f)
             val () = get_color_pixels_accumulate(
               mask, rgba_p, p_weight, p_r, p_g, p_b, p_a, paint,
               sample_interval_u16, random_sample_rate
             )
-            val () = mypaint_tiled_surface_tile_request_end(surface, req_mem)
+            val () = minepaint_tiled_surface_tile_request_end(surface, req_mem)
             val () = free(req_mem)
           in loop_tx(tx + 1) end
           else let
@@ -908,69 +908,69 @@ implement tiled_surface_get_color(surface, x, y, radius, color_r, color_g, color
   val () = color_a := ca_res
 in () end
 
-// mypaint_tiled_surface_init
-extern fun mypaint_tiled_surface_init(
+// minepaint_tiled_surface_init
+extern fun minepaint_tiled_surface_init(
   self_p: ptr, tile_request_start: ptr, tile_request_end: ptr
-): void = "ext#mypaint_tiled_surface_init"
-implement mypaint_tiled_surface_init(self_p, tile_request_start, tile_request_end) =
+): void = "ext#minepaint_tiled_surface_init"
+implement minepaint_tiled_surface_init(self_p, tile_request_start, tile_request_end) =
   if self_p != the_null_ptr then let
-    val self = $UN.cast{ref(MyPaintTiledSurface_struct)}(self_p)
-    val () = mypaint_surface_init(self_p)
+    val self = $UN.cast{ref(MinePaintTiledSurface_struct)}(self_p)
+    val () = minepaint_surface_init(self_p)
     val () = self->parent.draw_dab := $UN.cast{ptr}(tiled_surface_draw_dab)
     val () = self->parent.get_color := $UN.cast{ptr}(tiled_surface_get_color)
-    val () = self->parent.begin_atomic := $UN.cast{ptr}(mypaint_tiled_surface_begin_atomic)
-    val () = self->parent.end_atomic := $UN.cast{ptr}(mypaint_tiled_surface_end_atomic)
+    val () = self->parent.begin_atomic := $UN.cast{ptr}(minepaint_tiled_surface_begin_atomic)
+    val () = self->parent.end_atomic := $UN.cast{ptr}(minepaint_tiled_surface_end_atomic)
     val () = self->tile_request_start := tile_request_start
     val () = self->tile_request_end := tile_request_end
-    val () = self->tile_size := MYPAINT_TILE_SIZE
+    val () = self->tile_size := MINEPAINT_TILE_SIZE
     val () = self->threadsafe_tile_requests := 0
     val () = self->num_bboxes := NUM_BBOXES_DEFAULT
     val () = self->num_bboxes_dirtied := 0
-    val sz_boxes = mul_size_size(int2size(NUM_BBOXES_DEFAULT), sizeof<MyPaintRectangle_struct>)
+    val sz_boxes = mul_size_size(int2size(NUM_BBOXES_DEFAULT), sizeof<MinePaintRectangle_struct>)
     val def_boxes = malloc(sz_boxes)
     val _ = memset(def_boxes, 0, sz_boxes)
     val () = self->default_bboxes := def_boxes
     val () = self->bboxes := def_boxes
-    val () = self->symmetry_data := mypaint_symmetry_data_new()
+    val () = self->symmetry_data := minepaint_symmetry_data_new()
     val () = self->operation_queue := operation_queue_new()
   in () end
 
-// mypaint_tiled_surface_destroy
-extern fun mypaint_tiled_surface_destroy(self_p: ptr): void = "ext#mypaint_tiled_surface_destroy"
-implement mypaint_tiled_surface_destroy(self_p) =
+// minepaint_tiled_surface_destroy
+extern fun minepaint_tiled_surface_destroy(self_p: ptr): void = "ext#minepaint_tiled_surface_destroy"
+implement minepaint_tiled_surface_destroy(self_p) =
   if self_p != the_null_ptr then let
-    val self = $UN.cast{ref(MyPaintTiledSurface_struct)}(self_p)
+    val self = $UN.cast{ref(MinePaintTiledSurface_struct)}(self_p)
     val () = operation_queue_free(self->operation_queue)
     val def_boxes = get_tiled_surface_default_bboxes(self_p)
     val () = if self->bboxes != def_boxes then free(self->bboxes)
     val () = if def_boxes != the_null_ptr then free(def_boxes)
     val symm_ptr = self->symmetry_data
     val () = if symm_ptr != the_null_ptr then let
-      val () = mypaint_symmetry_data_destroy(symm_ptr)
+      val () = minepaint_symmetry_data_destroy(symm_ptr)
       val () = free(symm_ptr)
     in () end
   in () end
 
-// mypaint_tiled_surface_set_symmetry_state
-extern fun mypaint_tiled_surface_set_symmetry_state(
+// minepaint_tiled_surface_set_symmetry_state
+extern fun minepaint_tiled_surface_set_symmetry_state(
   self_p: ptr, active: bool, center_x: float, center_y: float,
   symmetry_angle: float, symmetry_type: int, rot_symmetry_lines: int
-): void = "ext#mypaint_tiled_surface_set_symmetry_state"
-implement mypaint_tiled_surface_set_symmetry_state(
+): void = "ext#minepaint_tiled_surface_set_symmetry_state"
+implement minepaint_tiled_surface_set_symmetry_state(
   self_p, active, center_x, center_y, symmetry_angle, symmetry_type, rot_symmetry_lines
 ) =
   if self_p != the_null_ptr then let
     val symm_ptr = get_tiled_surface_symmetry_data(self_p)
   in
-    mypaint_symmetry_set_pending(
+    minepaint_symmetry_set_pending(
       symm_ptr, active, center_x, center_y,
       symmetry_angle, symmetry_type, rot_symmetry_lines
     )
   end
 
-// mypaint_tiled_surface_get_alpha
-extern fun mypaint_tiled_surface_get_alpha(self_p: ptr, x: float, y: float, radius: float): float = "ext#mypaint_tiled_surface_get_alpha"
-implement mypaint_tiled_surface_get_alpha(self_p, x, y, radius) = let
+// minepaint_tiled_surface_get_alpha
+extern fun minepaint_tiled_surface_get_alpha(self_p: ptr, x: float, y: float, radius: float): float = "ext#minepaint_tiled_surface_get_alpha"
+implement minepaint_tiled_surface_get_alpha(self_p, x, y, radius) = let
   var r: float
   var g: float
   var b: float

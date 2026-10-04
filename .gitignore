@@ -1,6 +1,5 @@
 .cache
 build
-dependencies/libmypaint/
 GTAGS
 GRTAGS
 GPATH

@@ -5,14 +5,14 @@
 
 staload UN = "prelude/SATS/unsafe.sats"
 
-typedef MyPaintRectangle_struct = @{
+typedef MinePaintRectangle_struct = @{
   x= int,
   y= int,
   width= int,
   height= int
 }
 
-typedef MyPaintRectangles_struct = @{
+typedef MinePaintRectangles_struct = @{
   num_rectangles= int,
   rectangles= ptr
 }
@@ -21,12 +21,12 @@ extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
 extern fun memcpy(dest: ptr, src: ptr, n: size_t): ptr = "mac#memcpy"
 
-extern fun mypaint_rectangle_new(x: int, y: int, w: int, h: int): ptr = "ext#mypaint_rectangle_new"
-implement mypaint_rectangle_new(x, y, w, h) = let
-  val sz = sizeof<MyPaintRectangle_struct>
+extern fun minepaint_rectangle_new(x: int, y: int, w: int, h: int): ptr = "ext#minepaint_rectangle_new"
+implement minepaint_rectangle_new(x, y, w, h) = let
+  val sz = sizeof<MinePaintRectangle_struct>
   val p = malloc(sz)
   val () = assertloc(p > the_null_ptr)
-  val r = $UN.cast{ref(MyPaintRectangle_struct)}(p)
+  val r = $UN.cast{ref(MinePaintRectangle_struct)}(p)
   val () = r->x := x
   val () = r->y := y
   val () = r->width := w
@@ -35,11 +35,11 @@ in
   p
 end
 
-extern fun mypaint_rectangle_copy(self: ptr): ptr = "ext#mypaint_rectangle_copy"
-implement mypaint_rectangle_copy(self) =
+extern fun minepaint_rectangle_copy(self: ptr): ptr = "ext#minepaint_rectangle_copy"
+implement minepaint_rectangle_copy(self) =
   if self = the_null_ptr then the_null_ptr
   else let
-    val sz = sizeof<MyPaintRectangle_struct>
+    val sz = sizeof<MinePaintRectangle_struct>
     val p = malloc(sz)
     val () = assertloc(p > the_null_ptr)
     val _ = memcpy(p, self, sz)
@@ -47,14 +47,14 @@ implement mypaint_rectangle_copy(self) =
     p
   end
 
-extern fun mypaint_rectangle_free(self: ptr): void = "ext#mypaint_rectangle_free"
-implement mypaint_rectangle_free(self) =
+extern fun minepaint_rectangle_free(self: ptr): void = "ext#minepaint_rectangle_free"
+implement minepaint_rectangle_free(self) =
   if self != the_null_ptr then free(self) else ()
 
-extern fun mypaint_rectangle_expand_to_include_point(r_ptr: ptr, x: int, y: int): void = "ext#mypaint_rectangle_expand_to_include_point"
-implement mypaint_rectangle_expand_to_include_point(r_ptr, x, y) =
+extern fun minepaint_rectangle_expand_to_include_point(r_ptr: ptr, x: int, y: int): void = "ext#minepaint_rectangle_expand_to_include_point"
+implement minepaint_rectangle_expand_to_include_point(r_ptr, x, y) =
   if r_ptr != the_null_ptr then let
-    val r = $UN.cast{ref(MyPaintRectangle_struct)}(r_ptr)
+    val r = $UN.cast{ref(MinePaintRectangle_struct)}(r_ptr)
     val w = r->width
   in
     if w = 0 then let
@@ -86,10 +86,10 @@ implement mypaint_rectangle_expand_to_include_point(r_ptr, x, y) =
     in () end
   end
 
-extern fun mypaint_rectangle_expand_to_include_rect(r_ptr: ptr, other_ptr: ptr): void = "ext#mypaint_rectangle_expand_to_include_rect"
-implement mypaint_rectangle_expand_to_include_rect(r_ptr, other_ptr) =
+extern fun minepaint_rectangle_expand_to_include_rect(r_ptr: ptr, other_ptr: ptr): void = "ext#minepaint_rectangle_expand_to_include_rect"
+implement minepaint_rectangle_expand_to_include_rect(r_ptr, other_ptr) =
   if (r_ptr != the_null_ptr) * (other_ptr != the_null_ptr) then let
-    val other = $UN.cast{ref(MyPaintRectangle_struct)}(other_ptr)
-    val () = mypaint_rectangle_expand_to_include_point(r_ptr, other->x, other->y)
-    val () = mypaint_rectangle_expand_to_include_point(r_ptr, other->x + other->width - 1, other->y + other->height - 1)
+    val other = $UN.cast{ref(MinePaintRectangle_struct)}(other_ptr)
+    val () = minepaint_rectangle_expand_to_include_point(r_ptr, other->x, other->y)
+    val () = minepaint_rectangle_expand_to_include_point(r_ptr, other->x + other->width - 1, other->y + other->height - 1)
   in () end
