@@ -4,6 +4,8 @@
 #include "share/atspre_staload.hats"
 
 staload UN = "prelude/SATS/unsafe.sats"
+staload "ui/color.dats"
+staload "canvas/stroke_queue.dats"
 staload "canvas/gl_surface.dats"
 staload "canvas/layer.dats"
 staload "draw_engine/settings.dats"
@@ -16,8 +18,8 @@ typedef canvas_state_record = @{
   cam_x= float,
   cam_y= float,
   zoom= float,
-  last_mouse_x= int,
-  last_mouse_y= int,
+  last_mouse_x= float,
+  last_mouse_y= float,
   last_time= double,
   q= ptr
 }
@@ -27,10 +29,6 @@ macdef GL_PROJECTION = $extval(int, "GL_PROJECTION")
 macdef GL_MODELVIEW = $extval(int, "GL_MODELVIEW")
 macdef GL_COLOR_BUFFER_BIT = $extval(int, "GL_COLOR_BUFFER_BIT")
 
-#define MINEPAINT_BRUSH_SETTING_OPAQUE 0
-#define MINEPAINT_BRUSH_SETTING_RADIUS_LOGARITHMIC 3
-#define MINEPAINT_BRUSH_SETTING_HARDNESS 4
-#define MINEPAINT_BRUSH_SETTING_SLOW_TRACKING 31
 #define MINEPAINT_BRUSH_SETTING_COLOR_H 34
 #define MINEPAINT_BRUSH_SETTING_COLOR_S 35
 #define MINEPAINT_BRUSH_SETTING_COLOR_V 36
@@ -49,22 +47,11 @@ extern fun glClear(mask: int): void = "mac#"
 extern fun glTranslatef(x: float, y: float, z: float): void = "mac#"
 extern fun glScalef(x: float, y: float, z: float): void = "mac#"
 
-extern fun minepaint_brush_stroke_to(
-  brush: ptr, surf: ptr, 
-  x: float, y: float, pressure: float, 
-  xtilt: float, ytilt: float, dtime: double, 
-  viewzoom: float, viewrotation: float, barrel_rotation: float, dir: int
-): int = "ext#minepaint_brush_stroke_to"
 extern fun minepaint_brush_reset(brush: ptr): void = "ext#minepaint_brush_reset"
-extern fun minepaint_brush_new_stroke(brush: ptr): void = "ext#minepaint_brush_new_stroke"
 extern fun minepaint_brush_set_base_value(brush: ptr, setting: int, value: float): void = "ext#minepaint_brush_set_base_value"
 extern fun minepaint_brush_get_base_value(brush: ptr, setting: int): float = "ext#minepaint_brush_get_base_value"
 
 extern fun get_time_seconds(): double = "ext#get_time_seconds"
-extern fun sqrtf(x: float): float = "mac#"
-extern fun powf(x: float, y: float): float = "mac#"
-
-fn f2i(f: float): int = g0float2int_float_int(f)
 fn i2f(i: int): float = g0int2float_int_float(i)
 fn f_lt(a: float, b: float): bool = a < b
 fn f_gt(a: float, b: float): bool = a > b
@@ -74,143 +61,12 @@ fn f_sub(a: float, b: float): float = g0float_sub_float(a, b)
 fn f_mul(a: float, b: float): float = g0float_mul_float(a, b)
 fn f_div(a: float, b: float): float = g0float_div_float(a, b)
 
-// --- Nokta ve Kuyruk Veri Yapıları ---
-vtypedef input_point = @{ x= float, y= float, pressure= float, time= double }
-
-datavtype point_queue =
-  | QueueNil of ()
-  | QueueCons of (input_point, point_queue)
-
-// --- Pür ATS2 ile RGB -> HSV Dönüşümü ---
-fun rgb_to_hsv(r: float, g: float, b: float): @(float, float, float) = let
-  val max_rg = if f_gt(r, g) then r else g
-  val max_val = if f_gt(max_rg, b) then max_rg else b
-  val min_rg = if f_lt(r, g) then r else g
-  val min_val = if f_lt(min_rg, b) then min_rg else b
-  val delta = f_sub(max_val, min_val)
-  val v = max_val
-in
-  if f_lt(delta, 0.00001f) then
-    @(0.0f, 0.0f, v)
-  else let
-    val s = if f_gt(max_val, 0.0f) then f_div(delta, max_val) else 0.0f
-    val h_val =
-      if f_gte(r, max_val) then f_div(f_sub(g, b), delta)
-      else if f_gte(g, max_val) then f_add(2.0f, f_div(f_sub(b, r), delta))
-      else f_add(4.0f, f_div(f_sub(r, g), delta))
-    val h_deg = f_mul(h_val, 60.0f)
-    val h_norm = if f_lt(h_deg, 0.0f) then f_add(h_deg, 360.0f) else h_deg
-    val h = f_div(h_norm, 360.0f)
-  in
-    @(h, s, v)
-  end
-end
-
-// --- Pür ATS2 ile Kübik Enterpolasyon ---
-fun interpolate_cubic(t: float, p0: input_point, p1: input_point, p2: input_point, p3: input_point): input_point = let
-  val t2 = f_mul(t, t)
-  val t3 = f_mul(t2, t)
-  fun solve(v0: float, v1: float, v2: float, v3: float): float =
-    f_mul(
-      0.5f,
-      f_add(
-        f_mul(2.0f, v1),
-        f_add(
-          f_mul(f_add(f_sub(0.0f, v0), v2), t),
-          f_add(
-            f_mul(f_add(f_sub(f_mul(2.0f, v0), f_mul(5.0f, v1)), f_sub(f_mul(4.0f, v2), v3)), t2),
-            f_mul(f_add(f_sub(0.0f, v0), f_sub(f_mul(3.0f, v1), f_sub(f_mul(3.0f, v2), v3))), t3)
-          )
-        )
-      )
-    )
-  val res_x = solve(p0.x, p1.x, p2.x, p3.x)
-  val res_y = solve(p0.y, p1.y, p2.y, p3.y)
-  val res_p = f_add(p1.pressure, f_mul(f_sub(p2.pressure, p1.pressure), t))
-  val res_t = p1.time + (p2.time - p1.time) * g0float2float_float_double(t)
-in
-  @{ x= res_x, y= res_y, pressure= res_p, time= res_t }
-end
-
-// Kuyruk Bellek Yönetimi
-fun free_queue(q: point_queue): void =
-  case+ q of
-  | ~QueueNil() => ()
-  | ~QueueCons(_, tail) => free_queue(tail)
-
-fun push_queue(q: point_queue, pt: input_point): point_queue =
-  case+ q of
-  | ~QueueNil() => QueueCons(pt, QueueNil())
-  | ~QueueCons(p, tail) => QueueCons(p, push_queue(tail, pt))
-
-// --- Fırçayı Çizgisiz Işınlama ---
-fun teleport_brush(brush: ptr, surf: ptr, x: float, y: float): void = let
-  val saved_tracking = minepaint_brush_get_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING)
-  val () = minepaint_brush_set_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING, 0.0f)
-  val () = minepaint_brush_reset(brush)
-  val _ = minepaint_brush_stroke_to(brush, surf, x, y, 0.0f, 0.0f, 0.0f, 0.0, 1.0f, 0.0f, 0.0f, 0)
-  val () = minepaint_brush_new_stroke(brush)
-  val () = minepaint_brush_set_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING, saved_tracking)
-in () end
-
-// --- Motora Çizim Gönderme ---
-fun send_stroke_to_engine(
-  layer: ptr, brush: ptr, surf: ptr, zoom: float,
-  x: float, y: float, pressure: float, dtime: double
-): void = let
-  val () = if layer != the_null_ptr then let
-    val () = mygl_surface_set_layer(surf, layer)
-    val _ = minepaint_brush_stroke_to(brush, surf, x, y, pressure, 0.0f, 0.0f, dtime, zoom, 0.0f, 0.0f, 0)
-  in () end
-in () end
-
-// --- Spline Kuyruğunu İşleme ---
-fun process_queue(
-  layer: ptr, brush: ptr, surf: ptr, zoom: float,
-  queue: point_queue, force_finish: bool
-): point_queue =
-  case+ queue of
-  | ~QueueCons(p0, ~QueueCons(p1, ~QueueCons(p2, ~QueueCons(p3, tail)))) => let
-      val total_dtime_raw = p2.time - p1.time
-      val total_dtime: double = if total_dtime_raw <= 0.0001 then 0.0001 else total_dtime_raw
-      val dx = f_sub(p2.x, p1.x)
-      val dy = f_sub(p2.y, p1.y)
-      val dist = sqrtf(f_add(powf(dx, 2.0f), powf(dy, 2.0f)))
-
-      val dt_f = g0float2float_double_float(total_dtime)
-      val steps_t: int = f2i(f_div(dt_f, 0.01f))
-      val steps_d: int = f2i(f_div(dist, 1.0f))
-
-      val steps_candidate = max(steps_t, steps_d)
-      val steps_clamped = max(1, min(100, steps_candidate))
-
-      val sub_dtime_f = f_div(dt_f, i2f(steps_clamped))
-      val sub_dtime = g0float2float_float_double(sub_dtime_f)
-
-      fun stroke_loop(i: int): void =
-        if i <= steps_clamped then let
-          val t = f_div(i2f(i), i2f(steps_clamped))
-          val p = interpolate_cubic(t, p0, p1, p2, p3)
-          val () = send_stroke_to_engine(layer, brush, surf, zoom, p.x, p.y, p.pressure, sub_dtime)
-        in stroke_loop(i + 1) end else ()
-
-      val () = stroke_loop(1)
-      val nq = QueueCons(p1, QueueCons(p2, QueueCons(p3, tail)))
-    in
-      process_queue(layer, brush, surf, zoom, nq, force_finish)
-    end
-  | _ =>
-    if force_finish then let
-      val () = free_queue(queue)
-    in QueueNil() end
-    else queue
-
 // --- Canvas API İmzaları (Pencere ve UI Tarafından Çağrılır) ---
 extern fun canvas_render(p: ptr, canvas_w: int, canvas_h: int): void = "ext#canvas_render"
 extern fun canvas_on_wheel(p: ptr, mx: int, my: int, dy: int): void = "ext#canvas_on_wheel"
-extern fun canvas_on_mouse_down(p: ptr, mx: int, my: int, btn: int, is_pan: int): void = "ext#canvas_on_mouse_down"
-extern fun canvas_on_mouse_move(p: ptr, mx: int, my: int, btn: int, is_pan: int): void = "ext#canvas_on_mouse_move"
-extern fun canvas_on_mouse_up(p: ptr, mx: int, my: int, btn: int, is_pan: int): void = "ext#canvas_on_mouse_up"
+extern fun canvas_on_mouse_down(p: ptr, mx: float, my: float, btn: int, is_pan: int, pressure: float): void = "ext#canvas_on_mouse_down"
+extern fun canvas_on_mouse_move(p: ptr, mx: float, my: float, btn: int, is_pan: int, pressure: float): void = "ext#canvas_on_mouse_move"
+extern fun canvas_on_mouse_up(p: ptr, mx: float, my: float, btn: int, is_pan: int): void = "ext#canvas_on_mouse_up"
 extern fun canvas_set_brush_color(p: ptr, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
 extern fun canvas_set_brush_setting(p: ptr, id: int, v: float): void = "ext#canvas_set_brush_setting"
 extern fun canvas_state_create(brush: ptr): ptr = "ext#canvas_state_create"
@@ -274,81 +130,80 @@ implement canvas_on_wheel(p, mx, my, dy) = let
   val () = s->zoom := new_zoom
 in () end
 
-// --- Fare Basma ---
-implement canvas_on_mouse_down(p, mx, my, btn, is_pan) = let
+// --- Stroke Queue API İmzaları ---
+extern fun stroke_queue_teleport(brush: ptr, surf: ptr, x: float, y: float): void = "ext#stroke_queue_teleport"
+extern fun stroke_queue_start(wx: float, wy: float, pressure: float): ptr = "ext#stroke_queue_start"
+extern fun stroke_queue_step(
+  layer: ptr, brush: ptr, surf: ptr, zoom: float,
+  q_ptr: ptr, wx: float, wy: float, pressure: float, elapsed: double
+): ptr = "ext#stroke_queue_step"
+extern fun stroke_queue_finish(
+  layer: ptr, brush: ptr, surf: ptr, zoom: float, q_ptr: ptr
+): void = "ext#stroke_queue_finish"
+extern fun stroke_queue_free(q_ptr: ptr): void = "ext#stroke_queue_free"
+
+// --- Fare / Kalem Basma ---
+implement canvas_on_mouse_down(p, mx, my, btn, is_pan, pressure) = let
   val s = $UN.cast{ref(canvas_state_record)}(p)
-  val q = $UN.castvwtp0{point_queue}(s->q)
 in
   if (is_pan > 0) || (btn = 2) then let
     val () = s->last_mouse_x := mx
     val () = s->last_mouse_y := my
-    val () = s->q := $UN.castvwtp0{ptr}(q)
   in () end
   else let
-    val start_x = i2f(mx)
-    val start_y = i2f(my)
+    val start_x = mx
+    val start_y = my
     val cur_zoom = s->zoom
     val wx = f_div(f_sub(start_x, s->cam_x), cur_zoom)
     val wy = f_div(f_sub(start_y, s->cam_y), cur_zoom)
 
-    val () = teleport_brush(s->brush, s->surf, wx, wy)
-    val () = free_queue(q)
+    val () = stroke_queue_teleport(s->brush, s->surf, wx, wy)
+    val () = stroke_queue_free(s->q)
     val () = s->last_time := get_time_seconds()
 
-    val is_erasing = if btn = 3 then 1 else 0 // Sağ tık silgi
+    val is_erasing = if btn = 3 then 1 else 0 // Sağ tık / silgi ucu
     val () = glsurface_set_erasing(s->surf, is_erasing)
 
-    val p0 = @{ x= wx, y= wy, pressure= 0.8f, time= 0.0 }
-    val nq = QueueCons(p0, QueueNil())
-    val () = s->q := $UN.castvwtp0{ptr}(nq)
+    val eff_pressure = if pressure > 0.0f then pressure else 0.8f
+    val () = s->q := stroke_queue_start(wx, wy, eff_pressure)
   in () end
 end
 
-// --- Fare Sürükleme ---
-implement canvas_on_mouse_move(p, mx, my, btn, is_pan) = let
+// --- Fare / Kalem Sürükleme ---
+implement canvas_on_mouse_move(p, mx, my, btn, is_pan, pressure) = let
   val s = $UN.cast{ref(canvas_state_record)}(p)
-  val q = $UN.castvwtp0{point_queue}(s->q)
 in
   if (is_pan > 0) || (btn = 2) then let
-    val dx = mx - s->last_mouse_x
-    val dy = my - s->last_mouse_y
-    val () = s->cam_x := f_add(s->cam_x, i2f(dx))
-    val () = s->cam_y := f_add(s->cam_y, i2f(dy))
+    val dx = f_sub(mx, s->last_mouse_x)
+    val dy = f_sub(my, s->last_mouse_y)
+    val () = s->cam_x := f_add(s->cam_x, dx)
+    val () = s->cam_y := f_add(s->cam_y, dy)
     val () = s->last_mouse_x := mx
     val () = s->last_mouse_y := my
-    val () = s->q := $UN.castvwtp0{ptr}(q)
   in () end
   else if (btn = 1) || (btn = 3) then let
-    val start_x = i2f(mx)
-    val start_y = i2f(my)
+    val start_x = mx
+    val start_y = my
     val cur_zoom = s->zoom
     val wx = f_div(f_sub(start_x, s->cam_x), cur_zoom)
     val wy = f_div(f_sub(start_y, s->cam_y), cur_zoom)
     val cur_time = get_time_seconds()
     val elapsed = cur_time - s->last_time
 
-    val pt = @{ x= wx, y= wy, pressure= 0.8f, time= elapsed }
-    val q1 = push_queue(q, pt)
-    val q2 = process_queue(s->layer, s->brush, s->surf, s->zoom, q1, false)
-    val () = s->q := $UN.castvwtp0{ptr}(q2)
+    val eff_pressure = if pressure > 0.0f then pressure else 0.8f
+    val () = s->q := stroke_queue_step(s->layer, s->brush, s->surf, s->zoom, s->q, wx, wy, eff_pressure, elapsed)
   in () end
-  else let
-    val () = s->q := $UN.castvwtp0{ptr}(q)
-  in () end
+  else ()
 end
 
-// --- Fare Bırakma ---
+// --- Fare / Kalem Bırakma ---
 implement canvas_on_mouse_up(p, mx, my, btn, is_pan) = let
   val s = $UN.cast{ref(canvas_state_record)}(p)
-  val q = $UN.castvwtp0{point_queue}(s->q)
 in
-  if (is_pan > 0) || (btn = 2) then let
-    val () = s->q := $UN.castvwtp0{ptr}(q)
-  in () end
+  if (is_pan > 0) || (btn = 2) then ()
   else let
-    val q1 = process_queue(s->layer, s->brush, s->surf, s->zoom, q, true)
-    val () = free_queue(q1)
-    val () = s->q := $UN.castvwtp0{ptr}(QueueNil())
+    val () = stroke_queue_finish(s->layer, s->brush, s->surf, s->zoom, s->q)
+    val () = s->q := the_null_ptr
     val () = minepaint_brush_reset(s->brush)
     val () = glsurface_set_erasing(s->surf, 0)
   in () end
@@ -401,10 +256,10 @@ implement canvas_state_create(brush) = let
   val () = state->cam_x := 0.0f
   val () = state->cam_y := 0.0f
   val () = state->zoom := 1.0f
-  val () = state->last_mouse_x := 0
-  val () = state->last_mouse_y := 0
+  val () = state->last_mouse_x := 0.0f
+  val () = state->last_mouse_y := 0.0f
   val () = state->last_time := 0.0
-  val () = state->q := $UN.castvwtp0{ptr}(QueueNil())
+  val () = state->q := the_null_ptr
 in
   $UN.cast{ptr}(state)
 end

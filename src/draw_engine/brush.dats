@@ -228,6 +228,22 @@ implement draw_engine_brush_apply_startup(b) =
     val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_COLOR_S, 0.0f)
     val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_COLOR_V, 0.729f)
     val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_PAINT_MODE, 0.0f)
+
+    // Basınç dinamikleri eşlemesi (Pressure dynamics)
+    // 1) RADIUS_LOGARITHMIC (0) için BASINÇ (0) eğrisi:
+    val () = draw_engine_brush_set_mapping_n(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 4)
+    val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 0, 0.0f, ~1.4f)
+    val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 1, 0.8f, 0.0f)
+    val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 2, 1.0f, 0.35f)
+    val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 3, 2.0f, 0.7f)
+
+    // 2) OPAQUE_MULTIPLY (1) için BASINÇ (0) eğrisi:
+    val () = draw_engine_brush_set_mapping_n(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 0, 4)
+    val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 0, 0, 0.0f, ~1.0f)
+    val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 0, 1, 0.8f, 0.0f)
+    val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 0, 2, 1.0f, 0.0f)
+    val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 0, 3, 2.0f, 0.0f)
+
     val () = set_reset(b, 1)
   in () end else ()
 

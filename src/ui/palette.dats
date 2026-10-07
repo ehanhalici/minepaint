@@ -19,6 +19,10 @@ implement pal_get(i, c) =
     $UN.ptr0_get<float>(ptr_add<float>(base, i * 3 + c))
   end
 
+extern fun pal_get_color(i: int): @(float, float, float) = "ext#pal_get_color"
+implement pal_get_color(i) =
+  @(pal_get(i, 0), pal_get(i, 1), pal_get(i, 2))
+
 extern fun pal_set(i: int, c: int, v: float): void = "ext#pal_set"
 implement pal_set(i, c, v) =
   if (i < 0) || (i >= 12) || (c < 0) || (c > 2) then ()

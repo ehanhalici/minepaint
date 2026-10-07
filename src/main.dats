@@ -6,6 +6,8 @@ staload "app/ui.dats"
 val g_slot_settings = ref<ptr>(the_null_ptr)
 val g_slot_inputs = ref<ptr>(the_null_ptr)
 val g_slot_ui = ref<ptr>(the_null_ptr)
+val g_slot_input = ref<ptr>(the_null_ptr)
+val g_slot_xi2 = ref<ptr>(the_null_ptr)
 
 extern fun slot_settings_get(): ptr = "ext#slot_settings_get"
 implement slot_settings_get() = !g_slot_settings
@@ -21,6 +23,16 @@ extern fun slot_ui_get(): ptr = "ext#slot_ui_get"
 implement slot_ui_get() = !g_slot_ui
 extern fun slot_ui_set(p: ptr): void = "ext#slot_ui_set"
 implement slot_ui_set(p) = !g_slot_ui := p
+
+extern fun slot_input_get(): ptr = "ext#slot_input_get"
+implement slot_input_get() = !g_slot_input
+extern fun slot_input_set(p: ptr): void = "ext#slot_input_set"
+implement slot_input_set(p) = !g_slot_input := p
+
+extern fun slot_xi2_get(): ptr = "ext#slot_xi2_get"
+implement slot_xi2_get() = !g_slot_xi2
+extern fun slot_xi2_set(p: ptr): void = "ext#slot_xi2_set"
+implement slot_xi2_set(p) = !g_slot_xi2 := p
 
 implement main0(argc, argv) = let
   val _ = ui_init(argc, argv)

@@ -5,6 +5,7 @@
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
 #include <X11/cursorfont.h>
+#include <X11/extensions/XInput2.h>
 
 #define mp_xevent_sizeof() ((int)sizeof(XEvent))
 #define mp_xevent_type(e) (((XEvent*)(e))->type)

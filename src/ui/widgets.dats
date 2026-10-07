@@ -11,6 +11,10 @@ staload "sys/libc.dats"
 staload "ui/state.dats"
 staload "ui/palette.dats"
 staload "ui/session.dats"
+staload "ui/color.dats"
+staload "ui/draw2d.dats"
+staload "ui/font.dats"
+staload "ui/sidebar_state.dats"
 
 extern fun canvas_set_brush_setting(p: ptr, id: int, v: float): void = "ext#canvas_set_brush_setting"
 extern fun canvas_set_brush_color(p: ptr, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
@@ -20,6 +24,18 @@ extern fun canvas_get_brush_setting(p: ptr, id: int): float = "ext#canvas_get_br
 extern fun brush_group_count(): int = "ext#brush_group_count"
 extern fun brush_count(g: int): int = "ext#brush_count"
 extern fun brush_name(g: int, i: int): string = "ext#brush_name"
+
+// --- Sidebar State API İmzaları ---
+extern fun tab_label(i: int): string = "ext#tab_label"
+extern fun list_visible(sh: float): int = "ext#list_visible"
+extern fun clamp_scroll(scroll: int, count: int, vis: int): int = "ext#clamp_scroll"
+extern fun sync_sliders(canvas_ptr: ptr): void = "ext#sync_sliders"
+extern fun do_reset(canvas_ptr: ptr): void = "ext#do_reset"
+extern fun commit_swatch(): void = "ext#commit_swatch"
+extern fun slider_update_from_pct(canvas_ptr: ptr, i: int, pct: float): void = "ext#slider_update_from_pct"
+extern fun slider_get_label(i: int): string = "ext#slider_get_label"
+extern fun slider_get_val(i: int): float = "ext#slider_get_val"
+extern fun slider_get_pct(i: int): float = "ext#slider_get_pct"
 
 fn format_slider_val(buf: ptr, sz: int, v: float): void = let
   val _ = mp_snprintf_f(buf, g0int2uint_int_size(sz), "%.2f", g0float2float_float_double(v))
@@ -35,7 +51,6 @@ fn f_max(a: float, b: float): float = if g0float_gt(a, b) then a else b
 fn f_clamp(x: float, lo: float, hi: float): float = f_max(lo, f_min(hi, x))
 fn f_lt(a: float, b: float): bool = g0float_lt(a, b)
 fn f_gt(a: float, b: float): bool = g0float_gt(a, b)
-fn f_lte(a: float, b: float): bool = g0float_lte(a, b)
 fn f_gte(a: float, b: float): bool = g0float_gte(a, b)
 
 fn d_sub(a: double, b: double): double = g0float_sub_double(a, b)
@@ -44,348 +59,7 @@ fn d_gte(a: double, b: double): bool = g0float_gte_double(a, b)
 fn d_lte(a: double, b: double): bool = g0float_lte_double(a, b)
 fn d_gt(a: double, b: double): bool = g0float_gt_double(a, b)
 
-// --- 2D Çizim Yardımcıları (Pür ATS2) ---
-fun gl_draw_rect(x: float, y: float, w: float, h: float, r: float, g: float, b: float, a: float): void = let
-  val () = glColor4f(r, g, b, a)
-  val () = glBegin(GL_QUADS)
-  val () = glVertex2f(x, y)
-  val () = glVertex2f(f_add(x, w), y)
-  val () = glVertex2f(f_add(x, w), f_add(y, h))
-  val () = glVertex2f(x, f_add(y, h))
-  val () = glEnd()
-in () end
-
-fun gl_draw_rect_outline(x: float, y: float, w: float, h: float, r: float, g: float, b: float, a: float): void = let
-  val () = glColor4f(r, g, b, a)
-  val () = glBegin(GL_LINE_LOOP)
-  val () = glVertex2f(x, y)
-  val () = glVertex2f(f_add(x, w), y)
-  val () = glVertex2f(f_add(x, w), f_add(y, h))
-  val () = glVertex2f(x, f_add(y, h))
-  val () = glEnd()
-in () end
-
-fun gl_draw_circle(cx: float, cy: float, radius: float, r: float, g: float, b: float, a: float): void = let
-  val () = glColor4f(r, g, b, a)
-  val () = glBegin(GL_TRIANGLE_FAN)
-  val () = glVertex2f(cx, cy)
-  val segs = 20
-  val PI = 3.14159265f
-  fun loop(i: int): void =
-    if i <= segs then let
-      val theta = f_div(f_mul(f_mul(2.0f, PI), g0int2float(i)), g0int2float(segs))
-      val vx = f_add(cx, f_mul(radius, cosf(theta)))
-      val vy = f_add(cy, f_mul(radius, sinf(theta)))
-      val () = glVertex2f(vx, vy)
-    in loop(i + 1) end else ()
-  val () = loop(0)
-  val () = glEnd()
-in () end
-
-// --- 5x7 Vektör Font Tablosu (Pür ATS2) ---
-fun font_get_col(c: int, col: int): int =
-  case+ c of
-  | 32 => 0 // ' '
-  | 46 => if col = 1 || col = 2 then 0x60 else 0 // '.'
-  | 58 => if col = 1 || col = 2 then 0x36 else 0 // ':'
-  | 45 => 0x08 // '-'
-  | 60 => // '<' (Sola Ok / Chevron)
-    if col = 0 then 0x08 else if col = 1 then 0x14 else if col = 2 then 0x22 else if col = 3 then 0x41 else 0x00
-  | 62 => // '>' (Sağa Ok / Chevron)
-    if col = 0 then 0x41 else if col = 1 then 0x22 else if col = 2 then 0x14 else if col = 3 then 0x08 else 0x00
-  | 37 => // '%'
-    if col = 0 then 0x63 else if col = 1 then 0x33 else if col = 2 then 0x18 else if col = 3 then 0x0c else 0x66
-  | 48 => // '0'
-    if col = 0 then 0x3e else if col = 1 then 0x51 else if col = 2 then 0x49 else if col = 3 then 0x45 else 0x3e
-  | 49 => // '1'
-    if col = 1 then 0x42 else if col = 2 then 0x7f else if col = 3 then 0x40 else 0x00
-  | 50 => // '2'
-    if col = 0 then 0x42 else if col = 1 then 0x61 else if col = 2 then 0x51 else if col = 3 then 0x49 else 0x46
-  | 51 => // '3'
-    if col = 0 then 0x21 else if col = 1 then 0x41 else if col = 2 then 0x45 else if col = 3 then 0x4b else 0x31
-  | 52 => // '4'
-    if col = 0 then 0x18 else if col = 1 then 0x14 else if col = 2 then 0x12 else if col = 3 then 0x7f else 0x10
-  | 53 => // '5'
-    if col = 0 then 0x27 else if col = 1 then 0x45 else if col = 2 then 0x45 else if col = 3 then 0x45 else 0x39
-  | 54 => // '6'
-    if col = 0 then 0x3c else if col = 1 then 0x4a else if col = 2 then 0x49 else if col = 3 then 0x49 else 0x30
-  | 55 => // '7'
-    if col = 0 then 0x01 else if col = 1 then 0x71 else if col = 2 then 0x09 else if col = 3 then 0x05 else 0x03
-  | 56 => // '8'
-    if col = 0 then 0x36 else if col = 1 then 0x49 else if col = 2 then 0x49 else if col = 3 then 0x49 else 0x36
-  | 57 => // '9'
-    if col = 0 then 0x06 else if col = 1 then 0x49 else if col = 2 then 0x49 else if col = 3 then 0x29 else 0x1e
-  | 65 => // 'A'
-    if col = 0 then 0x7c else if col = 1 then 0x12 else if col = 2 then 0x11 else if col = 3 then 0x12 else 0x7c
-  | 66 => // 'B'
-    if col = 0 then 0x7f else if col = 1 then 0x49 else if col = 2 then 0x49 else if col = 3 then 0x49 else 0x36
-  | 67 => // 'C'
-    if col = 0 then 0x3e else if col = 1 then 0x41 else if col = 2 then 0x41 else if col = 3 then 0x41 else 0x22
-  | 68 => // 'D'
-    if col = 0 then 0x7f else if col = 1 then 0x41 else if col = 2 then 0x41 else if col = 3 then 0x22 else 0x1c
-  | 69 => // 'E'
-    if col = 0 then 0x7f else if col = 1 then 0x49 else if col = 2 then 0x49 else if col = 3 then 0x49 else 0x41
-  | 70 => // 'F'
-    if col = 0 then 0x7f else if col = 1 then 0x09 else if col = 2 then 0x09 else if col = 3 then 0x09 else 0x01
-  | 71 => // 'G'
-    if col = 0 then 0x3e else if col = 1 then 0x41 else if col = 2 then 0x49 else if col = 3 then 0x49 else 0x7a
-  | 72 => // 'H'
-    if col = 0 then 0x7f else if col = 1 then 0x08 else if col = 2 then 0x08 else if col = 3 then 0x08 else 0x7f
-  | 73 => // 'I'
-    if col = 1 then 0x41 else if col = 2 then 0x7f else if col = 3 then 0x41 else 0x00
-  | 74 => // 'J'
-    if col = 0 then 0x20 else if col = 1 then 0x40 else if col = 2 then 0x41 else if col = 3 then 0x3f else 0x01
-  | 75 => // 'K'
-    if col = 0 then 0x7f else if col = 1 then 0x08 else if col = 2 then 0x14 else if col = 3 then 0x22 else 0x41
-  | 76 => // 'L'
-    if col = 0 then 0x7f else 0x40
-  | 77 => // 'M'
-    if col = 0 then 0x7f else if col = 1 then 0x02 else if col = 2 then 0x0c else if col = 3 then 0x02 else 0x7f
-  | 78 => // 'N'
-    if col = 0 then 0x7f else if col = 1 then 0x04 else if col = 2 then 0x08 else if col = 3 then 0x10 else 0x7f
-  | 79 => // 'O'
-    if col = 0 then 0x3e else if col = 1 then 0x41 else if col = 2 then 0x41 else if col = 3 then 0x41 else 0x3e
-  | 80 => // 'P'
-    if col = 0 then 0x7f else if col = 1 then 0x09 else if col = 2 then 0x09 else if col = 3 then 0x09 else 0x06
-  | 82 => // 'R'
-    if col = 0 then 0x7f else if col = 1 then 0x09 else if col = 2 then 0x19 else if col = 3 then 0x29 else 0x46
-  | 83 => // 'S'
-    if col = 0 then 0x46 else if col = 1 then 0x49 else if col = 2 then 0x49 else if col = 3 then 0x49 else 0x31
-  | 84 => // 'T'
-    if col = 2 then 0x7f else 0x01
-  | 85 => // 'U'
-    if col = 0 || col = 4 then 0x3f else 0x40
-  | 86 => // 'V'
-    if col = 0 || col = 4 then 0x1f else if col = 1 || col = 3 then 0x20 else 0x40
-  | 89 => // 'Y'
-    if col = 0 || col = 4 then 0x07 else if col = 1 || col = 3 then 0x08 else 0x70
-  | _ => 0
-
-fun gl_draw_string(x: float, y: float, scale: float, str: string, r: float, g: float, b: float): void = let
-  val () = glColor3f(r, g, b)
-  val () = glBegin(GL_POINTS)
-  val p_str = $UN.cast{ptr}(str)
-  fun loop(p: ptr, cur_x: float): void = let
-    val ch = $UN.ptr0_get<char>(p)
-    val code = char2int0(ch)
-  in
-    if code != 0 then let
-      val upper = if code >= 97 && code <= 122 then code - 32 else code
-      fun col_loop(col: int): void =
-        if col < 5 then let
-          val bits = font_get_col(upper, col)
-          fun row_loop(row: int, p2: int): void =
-            if row < 7 then let
-              val bit_set = (bits / p2) mod 2 != 0
-              val () = if bit_set then
-                glVertex2f(f_add(cur_x, f_mul(g0int2float(col), scale)), f_add(y, f_mul(g0int2float(row), scale)))
-            in row_loop(row + 1, p2 * 2) end else ()
-          val () = row_loop(0, 1)
-        in col_loop(col + 1) end else ()
-      val () = col_loop(0)
-    in
-      loop(ptr_add<char>(p, 1), f_add(cur_x, f_mul(7.0f, scale)))
-    end else ()
-  end
-  val () = loop(p_str, x)
-  val () = glEnd()
-in () end
-
-// --- Renk Dönüşümü: HSV -> RGB (Pür ATS2) ---
-fun hsv_to_rgb(h: float, s: float, v: float): @(float, float, float) =
-  if s <= 0.0f then @(v, v, v)
-  else let
-    val hh_raw = f_mul(h, 6.0f)
-    val hh = if hh_raw >= 6.0f then 0.0f else hh_raw
-    val i = g0float2int_float_int(hh)
-    val ff = f_sub(hh, g0int2float(i))
-    val p = f_mul(v, f_sub(1.0f, s))
-    val q = f_mul(v, f_sub(1.0f, f_mul(s, ff)))
-    val t = f_mul(v, f_sub(1.0f, f_mul(s, f_sub(1.0f, ff))))
-  in
-    case+ i of
-    | 0 => @(v, t, p)
-    | 1 => @(q, v, p)
-    | 2 => @(p, v, t)
-    | 3 => @(p, q, v)
-    | 4 => @(t, p, v)
-    | _ => @(v, p, q)
-  end
-
-// --- Renk Dönüşümü: RGB -> HSV (Pür ATS2) ---
-fun rgb_to_hsv(r: float, g: float, b: float): @(float, float, float) = let
-  val max_rg = if f_gt(r, g) then r else g
-  val max_val = if f_gt(max_rg, b) then max_rg else b
-  val min_rg = if f_lt(r, g) then r else g
-  val min_val = if f_lt(min_rg, b) then min_rg else b
-  val delta = f_sub(max_val, min_val)
-  val v = max_val
-in
-  if f_lt(delta, 0.00001f) then
-    @(0.0f, 0.0f, v)
-  else let
-    val s = if f_gt(max_val, 0.0f) then f_div(delta, max_val) else 0.0f
-    val h_val =
-      if f_gte(r, max_val) then f_div(f_sub(g, b), delta)
-      else if f_gte(g, max_val) then f_add(2.0f, f_div(f_sub(b, r), delta))
-      else f_add(4.0f, f_div(f_sub(r, g), delta))
-    val h_deg = f_mul(h_val, 60.0f)
-    val h_norm = if f_lt(h_deg, 0.0f) then f_add(h_deg, 360.0f) else h_deg
-    val h = f_div(h_norm, 360.0f)
-  in
-    @(h, s, v)
-  end
-end
-
-// --- Renk Paleti (Pür ATS2) ---
-fun get_palette_color(i: int): @(float, float, float) =
-  @(pal_get(i, 0), pal_get(i, 1), pal_get(i, 2))
-
-fn get_slider_info(i: int): @(string, int, float, float, float) = let
-  val u = ui_get()
-in
-  case+ i of
-  | 0 => @("SIZE", 3, ~2.0f, 6.0f, u->val0)
-  | 1 => @("OPAQUE", 0, 0.0f, 2.0f, u->val1)
-  | 2 => @("SHARP", 4, 0.0f, 1.0f, u->val2)
-  | 3 => @("GRAIN", 18, 0.0f, 25.0f, u->val3)
-  | 4 => @("PIGMENT", 44, 0.0f, 1.0f, u->val4)
-  | 5 => @("SMOOTH", 31, 0.0f, 10.0f, u->val5)
-  | 6 => @("PRESSURE", 64, ~1.8f, 1.8f, u->val6)
-  | 7 => @("TWIST", 56, 1.0f, 10.0f, u->val7)
-  | _ => @("SIZE", 3, ~2.0f, 6.0f, u->val0)
-end
-
-fn set_slider_val(i: int, v: float): void = let
-  val u = ui_get()
-in
-  case+ i of
-  | 0 => u->val0 := v
-  | 1 => u->val1 := v
-  | 2 => u->val2 := v
-  | 3 => u->val3 := v
-  | 4 => u->val4 := v
-  | 5 => u->val5 := v
-  | 6 => u->val6 := v
-  | _ => u->val7 := v
-end
-
-fn sync_sliders(canvas_ptr: ptr): void = let
-  val u = ui_get()
-  val () = u->val0 := canvas_get_brush_setting(canvas_ptr, 3)
-  val () = u->val1 := canvas_get_brush_setting(canvas_ptr, 0)
-  val () = u->val2 := canvas_get_brush_setting(canvas_ptr, 4)
-  val () = u->val3 := canvas_get_brush_setting(canvas_ptr, 18)
-  val () = u->val4 := canvas_get_brush_setting(canvas_ptr, 44)
-  val () = u->val5 := canvas_get_brush_setting(canvas_ptr, 31)
-  val () = u->val6 := canvas_get_brush_setting(canvas_ptr, 64)
-  val () = u->val7 := canvas_get_brush_setting(canvas_ptr, 56)
-in () end
-
-fn list_visible(sh: float): int = let
-  val space = f_sub(sh, 578.0f)
-  val n = g0float2int_float_int(f_div(space, 18.0f))
-in
-  if n < 1 then 1 else n
-end
-
-fn clamp_scroll(scroll: int, count: int, vis: int): int = let
-  val maxs = if count > vis then count - vis else 0
-in
-  if scroll < 0 then 0 else if scroll > maxs then maxs else scroll
-end
-
-fn tab_label(i: int): string =
-  case+ i of
-  | 0 => "DIET"
-  | 1 => "CLAS"
-  | 2 => "DEEV"
-  | 3 => "FAV"
-  | 4 => "RAMO"
-  | 5 => "EXPR"
-  | 6 => "TAND"
-  | _ => "KAER"
-
-fn commit_swatch(): void = let
-  val u = ui_get()
-  val i = u->active_swatch
-in
-  if (i >= 0) * (i < 12) then let
-    val () = pal_set(i, 0, u->cur_r)
-    val () = pal_set(i, 1, u->cur_g)
-    val () = pal_set(i, 2, u->cur_b)
-  in () end else ()
-end
-
-fn push_sliders(canvas_ptr: ptr): void = let
-  fun loop(i: int): void =
-    if i < 8 then let
-      val @(_, set_id, lo, hi, v) = get_slider_info(i)
-      val c = f_clamp(v, lo, hi)
-      val () = set_slider_val(i, c)
-      val () = canvas_set_brush_setting(canvas_ptr, set_id, c)
-    in loop(i + 1) end else ()
-in
-  loop(0)
-end
-
-fn do_reset(canvas_ptr: ptr): void = let
-  val u = ui_get()
-  val () = canvas_apply_startup(canvas_ptr)
-  val () = sync_sliders(canvas_ptr)
-  val () = u->active_brush := ~1
-  val () = u->cur_h := 1.0f
-  val () = u->cur_s := 0.0f
-  val () = u->cur_v := 0.729f
-  val @(nr, ng, nb) = hsv_to_rgb(1.0f, 0.0f, 0.729f)
-  val () = u->cur_r := nr
-  val () = u->cur_g := ng
-  val () = u->cur_b := nb
-  val () = canvas_set_brush_color(canvas_ptr, nr, ng, nb)
-  val () = commit_swatch()
-in () end
-
-extern fun widgets_save_session(): void = "ext#widgets_save_session"
-implement widgets_save_session() = session_save()
-
-fn apply_saved_brush(canvas_ptr: ptr): void = let
-  val u = ui_get()
-  val g0 = u->active_group
-  val g = if (g0 >= 0) * (g0 < 8) then g0 else 1
-  val () = u->active_group := g
-  val n = brush_count(g)
-  val b = u->active_brush
-in
-  if (b >= 0) * (b < n) then
-    canvas_apply_catalog_brush(canvas_ptr, g, b)
-  else let
-    val () = u->active_brush := ~1
-  in
-    canvas_apply_startup(canvas_ptr)
-  end
-end
-
-extern fun widgets_restore_session(canvas_ptr: ptr): void = "ext#widgets_restore_session"
-implement widgets_restore_session(canvas_ptr) = let
-  val loaded = session_load()
-in
-  if loaded <= 0 then ()
-  else let
-    val u = ui_get()
-    val () = apply_saved_brush(canvas_ptr)
-    val () = push_sliders(canvas_ptr)
-    val scroll0 = u->brush_scroll
-    val () = if scroll0 < 0 then u->brush_scroll := 0 else ()
-    val sw = u->active_swatch
-    val sw2 = if sw < ~1 then ~1 else if sw > 11 then ~1 else sw
-    val () = u->active_swatch := sw2
-    val @(h, s, v) = rgb_to_hsv(u->cur_r, u->cur_g, u->cur_b)
-    val () = u->cur_h := h
-    val () = u->cur_s := s
-    val () = u->cur_v := v
-    val () = canvas_set_brush_color(canvas_ptr, u->cur_r, u->cur_g, u->cur_b)
-  in () end
-end
+fn get_palette_color(i: int): @(float, float, float) = pal_get_color(i)
 
 // --- Widget Olay ve Render Fonksiyonları (Pür ATS2) ---
 extern fun widgets_is_dragging(): int = "ext#widgets_is_dragging"
@@ -489,11 +163,7 @@ implement widgets_on_mouse_down(mx, my, btn, canvas_ptr) =
                 if in_sl then let
                   val () = u->active_drag := i
                   val raw_pct = f_div(f_sub(mx, 20.0f), bar_w)
-                  val pct = f_clamp(raw_pct, 0.0f, 1.0f)
-                  val @(_, set_id, min_v, max_v, _) = get_slider_info(i)
-                  val new_v = f_add(min_v, f_mul(pct, f_sub(max_v, min_v)))
-                  val () = set_slider_val(i, new_v)
-                  val () = canvas_set_brush_setting(canvas_ptr, set_id, new_v)
+                  val () = slider_update_from_pct(canvas_ptr, i, raw_pct)
                 in 1 end
                 else check_slider(i + 1)
               end else 0
@@ -586,11 +256,7 @@ in
     else if (u->active_drag >= 0) * (u->active_drag < 8) then let
       val i = u->active_drag
       val raw_pct = f_div(f_sub(mx, 20.0f), bar_w)
-      val pct = f_clamp(raw_pct, 0.0f, 1.0f)
-      val @(_, set_id, min_v, max_v, _) = get_slider_info(i)
-      val new_v = f_add(min_v, f_mul(pct, f_sub(max_v, min_v)))
-      val () = set_slider_val(i, new_v)
-      val () = canvas_set_brush_setting(canvas_ptr, set_id, new_v)
+      val () = slider_update_from_pct(canvas_ptr, i, raw_pct)
     in 1 end
     else 0
   end
@@ -718,7 +384,10 @@ implement widgets_render(sx, sy, sw, sh) = let
   fun draw_sliders(i: int): void =
     if i < 8 then let
       val sy_pos = f_add(slider_base_y, f_mul(g0int2float(i), slider_spacing))
-      val @(lbl, _, min_v, max_v, v) = get_slider_info(i)
+      val lbl = slider_get_label(i)
+      val v = slider_get_val(i)
+      val pct = slider_get_pct(i)
+
       val () = glPointSize(1.2f)
       val () = gl_draw_string(f_add(sx, 20.0f), sy_pos, 1.0f, lbl, 0.85f, 0.85f, 0.85f)
 
@@ -729,9 +398,6 @@ implement widgets_render(sx, sy, sw, sh) = let
       val track_y = f_add(sy_pos, 12.0f)
       val track_h = 4.0f
       val () = gl_draw_rect(f_add(sx, 20.0f), track_y, bar_w, track_h, 0.18f, 0.18f, 0.20f, 1.0f)
-
-      val raw_pct = f_div(f_sub(v, min_v), f_sub(max_v, min_v))
-      val pct = f_clamp(raw_pct, 0.0f, 1.0f)
       val () = gl_draw_rect(f_add(sx, 20.0f), track_y, f_mul(pct, bar_w), track_h, 0.0f, 0.48f, 0.80f, 1.0f)
 
       val thumb_x = f_add(f_add(sx, 20.0f), f_mul(pct, bar_w))

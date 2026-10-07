@@ -5,6 +5,7 @@
 staload UN = "prelude/SATS/unsafe.sats"
 #include "x11/staloadall.hats"
 staload "x11/event.sats"
+staload "x11/xi2.sats"
 staload "gl/glx.dats"
 staload "sys/libc.dats"
 
@@ -111,6 +112,7 @@ in
         val _ = XFree(vi)
         val cursor = XCreateFontCursor(dpy, $extval(uint, "XC_crosshair"))
         val () = x_define_cursor(dpy, win, cursor)
+        val _ = xi2_init(dpy)
         val app = malloc(sizeof<X11App>)
         val a = $UN.cast{ref(X11App)}(app)
         val () = a->dpy := dpy

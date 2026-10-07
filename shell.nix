@@ -14,6 +14,8 @@ pkgs.mkShell {
     libGL
     libx11
     libxext
+    libxfixes
+    libxi
   ];
 
   shellHook = ''
