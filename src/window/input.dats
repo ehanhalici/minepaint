@@ -1,8 +1,8 @@
+// src/window/input.dats
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
 staload "sys/libc.dats"
 
 // --- Araç Türleri (Platform-Bağımsız) ---
@@ -13,11 +13,18 @@ staload "sys/libc.dats"
 #define INPUT_DEFAULT_PRESSURE 0.8f
 #define INPUT_TOOL_TIMEOUT 0.5
 
+#define BTN_NONE 0
+#define BTN_LEFT 1
+#define BTN_MIDDLE 2
+#define BTN_RIGHT 3
+
 typedef InputState = @{
   tool= int,
   pressure= float,
   last_time= double
 }
+
+extern castfn ptr2input_state(p: ptr): ref(InputState) = "mac#"
 
 extern fun slot_input_get(): ptr = "ext#slot_input_get"
 extern fun slot_input_set(p: ptr): void = "ext#slot_input_set"
@@ -26,11 +33,10 @@ extern fun slot_input_set(p: ptr): void = "ext#slot_input_set"
 fn input_state_ref(): ref(InputState) = let
   val p = slot_input_get()
 in
-  if p != the_null_ptr then
-    $UN.cast{ref(InputState)}(p)
+  if p != the_null_ptr then ptr2input_state(p)
   else let
     val np = malloc(sizeof<InputState>)
-    val st = $UN.cast{ref(InputState)}(np)
+    val st = ptr2input_state(np)
     val () = st->tool := INPUT_TOOL_MOUSE
     val () = st->pressure := INPUT_DEFAULT_PRESSURE
     val () = st->last_time := 0.0
@@ -87,10 +93,8 @@ extern fun input_get_pressure(now: double): float = "ext#input_get_pressure"
 implement input_get_pressure(now) = let
   val st = input_state_ref()
 in
-  if input_is_stylus_active(now) then
-    st->pressure
-  else
-    INPUT_DEFAULT_PRESSURE
+  if input_is_stylus_active(now) then st->pressure
+  else INPUT_DEFAULT_PRESSURE
 end
 
 // --- Buton Eşleme ve Ayrıştırma (Pan / Silgi Önceliği) ---
@@ -98,37 +102,29 @@ end
 // Fiziksel silgi ucu veya basılı tuşlara göre buton remapping
 extern fun input_remap_button(raw_btn: int, active_btn: int, is_eraser: bool): int = "ext#input_remap_button"
 implement input_remap_button(raw_btn, active_btn, is_eraser) =
-  if is_eraser && (raw_btn = 1) then
-    3 // Fiziksel silgi ucu teması sağ tık (silgi) olarak eşlenir
-  else if (active_btn = 2 || active_btn = 3) && (raw_btn = 1) then
-    active_btn // Kaydırma (2) veya Silme (3) basılıyken uç teması modu korur
-  else
-    raw_btn
+  if is_eraser && (raw_btn = BTN_LEFT) then BTN_RIGHT
+  else if (active_btn = BTN_MIDDLE || active_btn = BTN_RIGHT) && (raw_btn = BTN_LEFT) then active_btn
+  else raw_btn
 
 // Hareket esnasında geçerli fare / kalem butonu seçimi
 extern fun input_motion_button(has_b1: bool, has_b2: bool, has_b3: bool, active_btn: int): int = "ext#input_motion_button"
 implement input_motion_button(has_b1, has_b2, has_b3, active_btn) =
-  if has_b2 then 2
-  else if has_b3 then 3
-  else if (active_btn = 2 || active_btn = 3) then active_btn
-  else if active_btn != 0 then active_btn
-  else if has_b1 then 1
-  else 0
+  if has_b2 then BTN_MIDDLE
+  else if has_b3 then BTN_RIGHT
+  else if (active_btn = BTN_MIDDLE || active_btn = BTN_RIGHT) then active_btn
+  else if active_btn != BTN_NONE then active_btn
+  else if has_b1 then BTN_LEFT
+  else BTN_NONE
 
 // Tuş bırakıldığında sonraki aktif buton durumu
 extern fun input_release_next_button(released_raw_btn: int, active_btn: int): int = "ext#input_release_next_button"
 implement input_release_next_button(released_raw_btn, active_btn) =
-  if active_btn = 2 then
-    (if released_raw_btn = 2 then 0 else 2)
-  else if active_btn = 3 then
-    (if released_raw_btn = 3 then 0 else 3)
-  else
-    0
+  if active_btn = BTN_MIDDLE then (if released_raw_btn = BTN_MIDDLE then BTN_NONE else BTN_MIDDLE)
+  else if active_btn = BTN_RIGHT then (if released_raw_btn = BTN_RIGHT then BTN_NONE else BTN_RIGHT)
+  else BTN_NONE
 
 // Çizginin sonlandırılıp sonlandırılmayacağı kararı
 extern fun input_should_release_stroke(released_raw_btn: int, active_btn: int): bool = "ext#input_should_release_stroke"
 implement input_should_release_stroke(released_raw_btn, active_btn) =
-  if active_btn = 2 then
-    (released_raw_btn = 2)
-  else
-    true
+  if active_btn = BTN_MIDDLE then (released_raw_btn = BTN_MIDDLE)
+  else true

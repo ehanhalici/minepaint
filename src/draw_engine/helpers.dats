@@ -3,8 +3,6 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
-
 // Standart Matematik FFI
 extern fun expf(x: float): float = "mac#expf"
 extern fun floorf(x: float): float = "mac#floorf"
@@ -24,7 +22,7 @@ extern fun engine_mod_arith(a: float, N: float): float = "ext#engine_mod_arith"
 extern fun engine_smallest_angular_difference(angleA: float, angleB: float): float = "ext#engine_smallest_angular_difference"
 extern fun engine_hsv_to_rgb(h: float, s: float, v: float): @(float, float, float) = "ext#engine_hsv_to_rgb"
 
-// Üstel Sönümleme (Exponential Decay) - Saf ATS2
+// Üstel Sönümleme (Exponential Decay) - Saf ATS2, Guard Clause
 implement engine_exp_decay(T_const, t) =
   if f_lte(T_const, 0.001f) then 0.0f
   else expf(f_div(0.0f - t, T_const))
@@ -43,6 +41,16 @@ in
   else a1
 end
 
+// HSV Sektör Renk Eşlemesi (Atomik Helper, SRP)
+fn hsv_sector_rgb(i: int, v: float, t: float, w: float, q: float): @(float, float, float) =
+  case+ i of
+  | 0 => @(v, t, w)
+  | 1 => @(q, v, w)
+  | 2 => @(w, v, t)
+  | 3 => @(w, q, v)
+  | 4 => @(t, w, v)
+  | _ => @(v, w, q)
+
 // HSV -> RGB Dönüşümü - Saf ATS2
 implement engine_hsv_to_rgb(h_in, s_in, v_in) = let
   val h0 = f_sub(h_in, floorf(h_in))
@@ -59,12 +67,7 @@ in
     val q = f_mul(v, f_sub(1.0f, f_mul(s, f)))
     val t = f_mul(v, f_sub(1.0f, f_mul(s, f_sub(1.0f, f))))
   in
-    if i = 0 then @(v, t, w)
-    else if i = 1 then @(q, v, w)
-    else if i = 2 then @(w, v, t)
-    else if i = 3 then @(w, q, v)
-    else if i = 4 then @(t, w, v)
-    else @(v, w, q)
+    hsv_sector_rgb(i, v, t, w, q)
   end
 end
 
@@ -98,79 +101,93 @@ in
   g0float2float_double_float(gauss)
 end
 
+// Spektral Katsayı Tabloları (Pattern Matching, < 15 satır)
 fn get_spectral_r(i: int): float =
-  if i = 0 then 0.009281362787953f
-  else if i = 1 then 0.009732627042016f
-  else if i = 2 then 0.011254252737167f
-  else if i = 3 then 0.015105578649573f
-  else if i = 4 then 0.024797924177217f
-  else if i = 5 then 0.083622585502406f
-  else if i = 6 then 0.977865045723212f
-  else if i = 7 then 1.000000000000000f
-  else if i = 8 then 0.999961046144372f
-  else 0.999999992756822f
+  case+ i of
+  | 0 => 0.009281362787953f
+  | 1 => 0.009732627042016f
+  | 2 => 0.011254252737167f
+  | 3 => 0.015105578649573f
+  | 4 => 0.024797924177217f
+  | 5 => 0.083622585502406f
+  | 6 => 0.977865045723212f
+  | 7 => 1.000000000000000f
+  | 8 => 0.999961046144372f
+  | _ => 0.999999992756822f
 
 fn get_spectral_g(i: int): float =
-  if i = 0 then 0.002854127435775f
-  else if i = 1 then 0.003917589679914f
-  else if i = 2 then 0.012132151699187f
-  else if i = 3 then 0.748259205918013f
-  else if i = 4 then 1.000000000000000f
-  else if i = 5 then 0.865695937531795f
-  else if i = 6 then 0.037477469241101f
-  else if i = 7 then 0.022816789725717f
-  else if i = 8 then 0.021747419446456f
-  else 0.021384940572308f
+  case+ i of
+  | 0 => 0.002854127435775f
+  | 1 => 0.003917589679914f
+  | 2 => 0.012132151699187f
+  | 3 => 0.748259205918013f
+  | 4 => 1.000000000000000f
+  | 5 => 0.865695937531795f
+  | 6 => 0.037477469241101f
+  | 7 => 0.022816789725717f
+  | 8 => 0.021747419446456f
+  | _ => 0.021384940572308f
 
 fn get_spectral_b(i: int): float =
-  if i = 0 then 0.537052150373386f
-  else if i = 1 then 0.546646402401469f
-  else if i = 2 then 0.575501819073983f
-  else if i = 3 then 0.258778829633924f
-  else if i = 4 then 0.041709923751716f
-  else if i = 5 then 0.012662638828324f
-  else if i = 6 then 0.007485593127390f
-  else if i = 7 then 0.006766900622462f
-  else if i = 8 then 0.006699764779016f
-  else 0.006676219883241f
+  case+ i of
+  | 0 => 0.537052150373386f
+  | 1 => 0.546646402401469f
+  | 2 => 0.575501819073983f
+  | 3 => 0.258778829633924f
+  | 4 => 0.041709923751716f
+  | 5 => 0.012662638828324f
+  | 6 => 0.007485593127390f
+  | 7 => 0.006766900622462f
+  | 8 => 0.006699764779016f
+  | _ => 0.006676219883241f
+
+// Dönüşüm Matrisi Satır Fonksiyonları (SLAP, SRP, < 15 satır)
+fn get_t_row0(c: int): float =
+  case+ c of
+  | 0 => 0.026595621243689f
+  | 1 => 0.049779426257903f
+  | 2 => 0.022449850859496f
+  | 3 => ~0.218453689278271f
+  | 4 => ~0.256894883201278f
+  | 5 => 0.445881722194840f
+  | 6 => 0.772365886289756f
+  | 7 => 0.194498761382537f
+  | 8 => 0.014038157587820f
+  | _ => 0.007687264480513f
+
+fn get_t_row1(c: int): float =
+  case+ c of
+  | 0 => ~0.032601672674412f
+  | 1 => ~0.061021043498478f
+  | 2 => ~0.052490001018404f
+  | 3 => 0.206659098273522f
+  | 4 => 0.572496335158169f
+  | 5 => 0.317837248815438f
+  | 6 => ~0.021216624031211f
+  | 7 => ~0.019387668756117f
+  | 8 => ~0.001521339050858f
+  | _ => ~0.000835181622534f
+
+fn get_t_row2(c: int): float =
+  case+ c of
+  | 0 => 0.339475473216284f
+  | 1 => 0.635401374177222f
+  | 2 => 0.771520797089589f
+  | 3 => 0.113222640692379f
+  | 4 => ~0.055251113343776f
+  | 5 => ~0.048222578468680f
+  | 6 => ~0.012966666339586f
+  | 7 => ~0.001523814504223f
+  | 8 => ~0.000094718948810f
+  | _ => ~0.000051604594741f
 
 fn get_t_matrix(r: int, c: int): float =
-  if r = 0 then (
-    if c = 0 then 0.026595621243689f
-    else if c = 1 then 0.049779426257903f
-    else if c = 2 then 0.022449850859496f
-    else if c = 3 then ~0.218453689278271f
-    else if c = 4 then ~0.256894883201278f
-    else if c = 5 then 0.445881722194840f
-    else if c = 6 then 0.772365886289756f
-    else if c = 7 then 0.194498761382537f
-    else if c = 8 then 0.014038157587820f
-    else 0.007687264480513f
-  ) else if r = 1 then (
-    if c = 0 then ~0.032601672674412f
-    else if c = 1 then ~0.061021043498478f
-    else if c = 2 then ~0.052490001018404f
-    else if c = 3 then 0.206659098273522f
-    else if c = 4 then 0.572496335158169f
-    else if c = 5 then 0.317837248815438f
-    else if c = 6 then ~0.021216624031211f
-    else if c = 7 then ~0.019387668756117f
-    else if c = 8 then ~0.001521339050858f
-    else ~0.000835181622534f
-  ) else (
-    if c = 0 then 0.339475473216284f
-    else if c = 1 then 0.635401374177222f
-    else if c = 2 then 0.771520797089589f
-    else if c = 3 then 0.113222640692379f
-    else if c = 4 then ~0.055251113343776f
-    else if c = 5 then ~0.048222578468680f
-    else if c = 6 then ~0.012966666339586f
-    else if c = 7 then ~0.001523814504223f
-    else if c = 8 then ~0.000094718948810f
-    else ~0.000051604594741f
-  )
+  if r = 0 then get_t_row0(c)
+  else if r = 1 then get_t_row1(c)
+  else get_t_row2(c)
 
-extern fun rgb_to_spectral(r: float, g: float, b: float, spectral: ptr): void = "ext#rgb_to_spectral"
+// RGB -> Spektral Dönüşüm (Sıfır Unsafe, Bağımlı Tipli Dizi)
+extern fun rgb_to_spectral(r: float, g: float, b: float, spectral: &(@[float][10])): void = "ext#rgb_to_spectral"
 implement rgb_to_spectral(r, g, b, spectral) = let
   val eps = 0.0000001f
   val offset = f_sub(1.0f, eps)
@@ -178,48 +195,48 @@ implement rgb_to_spectral(r, g, b, spectral) = let
   val g_adj = f_add(f_mul(g, offset), eps)
   val b_adj = f_add(f_mul(b, offset), eps)
 
-  fun loop(i: int): void =
+  fun loop{i:nat | i <= 10}(spectral: &(@[float][10]), i: int(i)): void =
     if i < 10 then let
       val sr = get_spectral_r(i)
       val sg = get_spectral_g(i)
       val sb = get_spectral_b(i)
-      val cur = $UN.ptr0_get<float>(ptr_add<float>(spectral, i))
+      val cur = spectral.[i]
       val added = f_add(f_add(f_mul(sr, r_adj), f_mul(sg, g_adj)), f_mul(sb, b_adj))
-      val () = $UN.ptr0_set<float>(ptr_add<float>(spectral, i), f_add(cur, added))
+      val () = spectral.[i] := f_add(cur, added)
     in
-      loop(i + 1)
+      loop(spectral, i + 1)
     end else ()
 in
-  loop(0)
+  loop(spectral, 0)
 end
 
-extern fun spectral_to_rgb(spectral: ptr, rgb: ptr): void = "ext#spectral_to_rgb"
+// Spektral -> RGB Dönüşüm (Sıfır Unsafe, Bağımlı Tipli Dizi)
+extern fun spectral_to_rgb(spectral: &(@[float][10]), rgb: &(@[float][3])): void = "ext#spectral_to_rgb"
 implement spectral_to_rgb(spectral, rgb) = let
   val eps = 0.0000001f
   val offset = f_sub(1.0f, eps)
 
-  fun loop_row(r: int): float = let
-    fun loop_col(c: int, acc: float): float =
+  fun loop_row(spectral: &(@[float][10]), r: int): float = let
+    fun loop_col{c:nat | c <= 10}(spectral: &(@[float][10]), c: int(c), acc: float): float =
       if c < 10 then let
         val coeff = get_t_matrix(r, c)
-        val spec_v = $UN.ptr0_get<float>(ptr_add<float>(spectral, c))
-        val term = f_mul(coeff, spec_v)
+        val term = f_mul(coeff, spectral.[c])
       in
-        loop_col(c + 1, f_add(acc, term))
+        loop_col(spectral, c + 1, f_add(acc, term))
       end else acc
   in
-    loop_col(0, 0.0f)
+    loop_col(spectral, 0, 0.0f)
   end
 
-  fun loop_out(i: int): void =
+  fun loop_out{i:nat | i <= 3}(spectral: &(@[float][10]), rgb: &(@[float][3]), i: int(i)): void =
     if i < 3 then let
-      val tmp = loop_row(i)
+      val tmp = loop_row(spectral, i)
       val v = f_div(f_sub(tmp, eps), offset)
       val clamped = if f_lt(v, 0.0f) then 0.0f else if f_gt(v, 1.0f) then 1.0f else v
-      val () = $UN.ptr0_set<float>(ptr_add<float>(rgb, i), clamped)
+      val () = rgb.[i] := clamped
     in
-      loop_out(i + 1)
+      loop_out(spectral, rgb, i + 1)
     end else ()
 in
-  loop_out(0)
+  loop_out(spectral, rgb, 0)
 end

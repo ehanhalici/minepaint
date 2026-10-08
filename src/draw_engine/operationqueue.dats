@@ -4,7 +4,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
+#include "./engine_safe.hats"
 
 typedef TileIndex = @{
   x= int,
@@ -23,6 +23,10 @@ typedef TileMap_struct = @{
   item_size= size_t,
   item_free_func= ptr
 }
+
+extern castfn ptr2oq(p: ptr): ref(OperationQueue_struct) = "mac#"
+extern castfn ptr2tile_idx(p: ptr): ref(TileIndex) = "mac#"
+extern castfn ptr2tilemap(p: ptr): ref(TileMap_struct) = "mac#"
 
 extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
@@ -50,52 +54,40 @@ fn free_fifo_wrapper(fifo_ptr: ptr): void =
 
 // Accessors for OperationQueue:
 fn get_oq_tile_map(oq: ptr): ptr = let
-  val r = $UN.cast{ref(OperationQueue_struct)}(oq)
-in
-  r->tile_map
-end
+  val r = ptr2oq(oq)
+in r->tile_map end
 
 fn set_oq_tile_map(oq: ptr, v: ptr): void = let
-  val r = $UN.cast{ref(OperationQueue_struct)}(oq)
-in
-  r->tile_map := v
-end
+  val r = ptr2oq(oq)
+in r->tile_map := v end
 
 fn get_oq_dirty_tiles(oq: ptr): ptr = let
-  val r = $UN.cast{ref(OperationQueue_struct)}(oq)
-in
-  r->dirty_tiles
-end
+  val r = ptr2oq(oq)
+in r->dirty_tiles end
 
 fn set_oq_dirty_tiles(oq: ptr, v: ptr): void = let
-  val r = $UN.cast{ref(OperationQueue_struct)}(oq)
-in
-  r->dirty_tiles := v
-end
+  val r = ptr2oq(oq)
+in r->dirty_tiles := v end
 
 fn get_oq_dirty_tiles_n(oq: ptr): int = let
-  val r = $UN.cast{ref(OperationQueue_struct)}(oq)
-in
-  r->dirty_tiles_n
-end
+  val r = ptr2oq(oq)
+in r->dirty_tiles_n end
 
 fn set_oq_dirty_tiles_n(oq: ptr, v: int): void = let
-  val r = $UN.cast{ref(OperationQueue_struct)}(oq)
-in
-  r->dirty_tiles_n := v
-end
+  val r = ptr2oq(oq)
+in r->dirty_tiles_n := v end
 
 // TileIndex array helpers
 fn get_dirty_tile(dirty_tiles: ptr, idx: int): @(int, int) = let
   val p = ptr_add<TileIndex>(dirty_tiles, idx)
-  val r = $UN.cast{ref(TileIndex)}(p)
+  val r = ptr2tile_idx(p)
 in
   @(r->x, r->y)
 end
 
 fn set_dirty_tile(dirty_tiles: ptr, idx: int, x: int, y: int): void = let
   val p = ptr_add<TileIndex>(dirty_tiles, idx)
-  val r = $UN.cast{ref(TileIndex)}(p)
+  val r = ptr2tile_idx(p)
   val () = r->x := x
   val () = r->y := y
 in () end
@@ -117,66 +109,52 @@ fn remove_duplicate_tiles(array_ptr: ptr, len: int): int =
       in
         if not(found) then let
           val () = set_dirty_tile(array_ptr, new_len, ix, iy)
-        in
-          loop_i(i + 1, new_len + 1)
-        end else
-          loop_i(i + 1, new_len)
+        in loop_i(i + 1, new_len + 1) end
+        else loop_i(i + 1, new_len)
       end else new_len
   in
     loop_i(1, 1)
   end
 
+fn copy_dirty_array(old_dirty: ptr, new_dirty: ptr, n: int): void = let
+  fun loop(i: int): void =
+    if i < n then let
+      val @(x, y) = get_dirty_tile(old_dirty, i)
+      val () = set_dirty_tile(new_dirty, i, x, y)
+    in loop(i + 1) end else ()
+in loop(0) end
+
+fn free_oq_data(self: ptr): void = let
+  val tm = get_oq_tile_map(self)
+  val () = if tm != the_null_ptr then (tile_map_free(tm, true); set_oq_tile_map(self, the_null_ptr))
+  val dt = get_oq_dirty_tiles(self)
+  val () = if dt != the_null_ptr then free(dt)
+  val () = set_oq_dirty_tiles(self, the_null_ptr)
+  val () = set_oq_dirty_tiles_n(self, 0)
+in () end
+
 fn operation_queue_resize(self: ptr, new_size: int): bool =
-  if new_size = 0 then let
-    val tm = get_oq_tile_map(self)
-    val () =
-      if tm != the_null_ptr then let
-        val () = tile_map_free(tm, true)
-        val () = set_oq_tile_map(self, the_null_ptr)
-        val dt = get_oq_dirty_tiles(self)
-        val () = if dt != the_null_ptr then free(dt)
-        val () = set_oq_dirty_tiles(self, the_null_ptr)
-        val () = set_oq_dirty_tiles_n(self, 0)
-      in () end
-  in
-    true
-  end else let
-    val ptr_sz = sizeof<ptr>
-    val free_fifo_p = $UN.cast{ptr}(free_fifo_wrapper)
-    val new_tm = tile_map_new(new_size, ptr_sz, free_fifo_p)
+  if new_size = 0 then (free_oq_data(self); true)
+  else let
+    val free_fifo_p = fn2ptr(free_fifo_wrapper)
+    val new_tm = tile_map_new(new_size, sizeof<ptr>, free_fifo_p)
     val new_map_size = 4 * new_size * new_size
-    val ti_sz = sizeof<TileIndex>
-    val new_dirty = malloc(g0int2uint_int_size(new_map_size) * ti_sz)
+    val new_dirty = malloc(g0int2uint_int_size(new_map_size) * sizeof<TileIndex>)
     val () = assertloc(new_dirty > the_null_ptr)
-
     val old_tm = get_oq_tile_map(self)
-    val () =
-      if old_tm != the_null_ptr then let
-        val () = tile_map_copy_to(old_tm, new_tm)
-        val n = get_oq_dirty_tiles_n(self)
-        val old_dirty = get_oq_dirty_tiles(self)
-        fun copy_dirty(i: int): void =
-          if i < n then let
-            val @(x, y) = get_dirty_tile(old_dirty, i)
-            val () = set_dirty_tile(new_dirty, i, x, y)
-          in
-            copy_dirty(i + 1)
-          end else ()
-        val () = copy_dirty(0)
-        val () = tile_map_free(old_tm, false)
-        val () = free(old_dirty)
-      in () end
-
+    val () = if old_tm != the_null_ptr then let
+      val () = tile_map_copy_to(old_tm, new_tm)
+      val () = copy_dirty_array(get_oq_dirty_tiles(self), new_dirty, get_oq_dirty_tiles_n(self))
+      val () = tile_map_free(old_tm, false)
+      val () = free(get_oq_dirty_tiles(self))
+    in () end
     val () = set_oq_tile_map(self, new_tm)
     val () = set_oq_dirty_tiles(self, new_dirty)
-  in
-    false
-  end
+  in false end
 
 extern fun operation_queue_new(): ptr = "ext#operation_queue_new"
 implement operation_queue_new() = let
-  val sz = sizeof<OperationQueue_struct>
-  val p = malloc(sz)
+  val p = malloc(sizeof<OperationQueue_struct>)
   val () = assertloc(p > the_null_ptr)
   val () = set_oq_tile_map(p, the_null_ptr)
   val () = set_oq_dirty_tiles(p, the_null_ptr)
@@ -199,71 +177,66 @@ implement operation_queue_get_dirty_tiles(self_p, tiles_out) = let
   val dirty_n = get_oq_dirty_tiles_n(self_p)
   val n = remove_duplicate_tiles(dirty_tiles, dirty_n)
   val () = set_oq_dirty_tiles_n(self_p, n)
-  val () = if tiles_out != the_null_ptr then $UN.ptr0_set<ptr>(tiles_out, dirty_tiles)
+  val () = if tiles_out != the_null_ptr then mp_arr_pset(tiles_out, 0, dirty_tiles)
 in
   n
 end
 
 extern fun operation_queue_clear_dirty_tiles(self_p: ptr): void = "ext#operation_queue_clear_dirty_tiles"
 implement operation_queue_clear_dirty_tiles(self_p) =
-  if self_p != the_null_ptr then
-    set_oq_dirty_tiles_n(self_p, 0)
-  else ()
+  if self_p != the_null_ptr then set_oq_dirty_tiles_n(self_p, 0) else ()
 
 fn get_tile_map_size(tm: ptr): int = let
-  val r = $UN.cast{ref(TileMap_struct)}(tm)
+  val r = ptr2tilemap(tm)
+in r->size end
+
+fun ensure_tilemap_bounds(self_p: ptr, ix: int, iy: int): ptr = let
+  val tm = get_oq_tile_map(self_p)
 in
-  r->size
+  if not(tile_map_contains(tm, ix, iy)) then let
+    val cur_sz = get_tile_map_size(tm)
+    val _ = operation_queue_resize(self_p, cur_sz * 2)
+  in ensure_tilemap_bounds(self_p, ix, iy) end
+  else tm
 end
+
+fn get_or_create_fifo(q_slot: ptr): ptr = let
+  val q_ptr = mp_arr_pget(q_slot, 0)
+in
+  if q_ptr = the_null_ptr then let
+    val created = fifo_new()
+    val () = mp_arr_pset(q_slot, 0, created)
+  in created end
+  else q_ptr
+end
+
+fn add_dirty_tile(self_p: ptr, tm: ptr, ix: int, iy: int): void = let
+  val cur_sz = get_tile_map_size(tm)
+  val cap = 4 * cur_sz * cur_sz
+  val dt_ptr = get_oq_dirty_tiles(self_p)
+  val cur_n = get_oq_dirty_tiles_n(self_p)
+  val n_pruned: int =
+    if cur_n >= cap then let
+      val p_len = remove_duplicate_tiles(dt_ptr, cur_n)
+      val () = set_oq_dirty_tiles_n(self_p, p_len)
+    in p_len end
+    else cur_n
+  val () = set_dirty_tile(dt_ptr, n_pruned, ix, iy)
+  val next_n: int = g0int_add_int(n_pruned, 1)
+  val () = set_oq_dirty_tiles_n(self_p, next_n)
+in () end
 
 extern fun operation_queue_add(self_p: ptr, ix: int, iy: int, op_item: ptr): void = "ext#operation_queue_add"
 implement operation_queue_add(self_p, ix, iy, op_item) =
   if self_p != the_null_ptr then let
-    fun ensure_contains(): ptr = let
-      val tm = get_oq_tile_map(self_p)
-    in
-      if not(tile_map_contains(tm, ix, iy)) then let
-        val cur_sz = get_tile_map_size(tm)
-        val _ = operation_queue_resize(self_p, cur_sz * 2)
-      in
-        ensure_contains()
-      end else
-        tm
-    end
-    val tm = ensure_contains()
-
+    val tm = ensure_tilemap_bounds(self_p, ix, iy)
     val q_slot = tile_map_get(tm, ix, iy)
-    val q_ptr = $UN.ptr0_get<ptr>(q_slot)
-    val op_queue =
-      if q_ptr = the_null_ptr then let
-        val created = fifo_new()
-        val () = $UN.ptr0_set<ptr>(q_slot, created)
-      in
-        created
-      end else q_ptr
-
-    val is_first = (fifo_peek_first(op_queue) = the_null_ptr)
-    val () =
-      if is_first then let
-        val cur_sz = get_tile_map_size(tm)
-        val cap = 4 * cur_sz * cur_sz
-        val dt_ptr = get_oq_dirty_tiles(self_p)
-        val cur_n = get_oq_dirty_tiles_n(self_p)
-        val n_pruned: int =
-          if cur_n >= cap then let
-            val p_len = remove_duplicate_tiles(dt_ptr, cur_n)
-            val () = set_oq_dirty_tiles_n(self_p, p_len)
-          in
-            p_len
-          end else cur_n
-        val () = set_dirty_tile(dt_ptr, n_pruned, ix, iy)
-        val next_n: int = g0int_add_int(n_pruned, 1)
-        val () = set_oq_dirty_tiles_n(self_p, next_n)
-      in () end
-
-    val () = fifo_push(op_queue, op_item)
-  in () end
-  else ()
+    val op_queue = get_or_create_fifo(q_slot)
+    val is_first = fifo_peek_first(op_queue) = the_null_ptr
+    val () = if is_first then add_dirty_tile(self_p, tm, ix, iy)
+  in
+    fifo_push(op_queue, op_item)
+  end else ()
 
 extern fun operation_queue_pop(self_p: ptr, ix: int, iy: int): ptr = "ext#operation_queue_pop"
 implement operation_queue_pop(self_p, ix, iy) =
@@ -274,7 +247,7 @@ implement operation_queue_pop(self_p, ix, iy) =
     if not(tile_map_contains(tm, ix, iy)) then the_null_ptr
     else let
       val q_slot = tile_map_get(tm, ix, iy)
-      val op_queue = $UN.ptr0_get<ptr>(q_slot)
+      val op_queue = mp_arr_pget(q_slot, 0)
     in
       if op_queue = the_null_ptr then the_null_ptr
       else let
@@ -282,11 +255,9 @@ implement operation_queue_pop(self_p, ix, iy) =
       in
         if op_res = the_null_ptr then let
           val () = fifo_free(op_queue, free_op_func)
-          val () = $UN.ptr0_set<ptr>(q_slot, the_null_ptr)
-        in
-          the_null_ptr
-        end else
-          op_res
+          val () = mp_arr_pset(q_slot, 0, the_null_ptr)
+        in the_null_ptr end
+        else op_res
       end
     end
   end
@@ -300,7 +271,7 @@ implement operation_queue_peek_first(self_p, ix, iy) =
     if not(tile_map_contains(tm, ix, iy)) then the_null_ptr
     else let
       val q_slot = tile_map_get(tm, ix, iy)
-      val op_queue = $UN.ptr0_get<ptr>(q_slot)
+      val op_queue = mp_arr_pget(q_slot, 0)
     in
       if op_queue = the_null_ptr then the_null_ptr
       else fifo_peek_first(op_queue)
@@ -316,7 +287,7 @@ implement operation_queue_peek_last(self_p, ix, iy) =
     if not(tile_map_contains(tm, ix, iy)) then the_null_ptr
     else let
       val q_slot = tile_map_get(tm, ix, iy)
-      val op_queue = $UN.ptr0_get<ptr>(q_slot)
+      val op_queue = mp_arr_pget(q_slot, 0)
     in
       if op_queue = the_null_ptr then the_null_ptr
       else fifo_peek_last(op_queue)

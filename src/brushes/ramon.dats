@@ -2,7 +2,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
+#include "brushes/brush_helpers.hats"
 
 extern fun draw_engine_brush_set_base_value(b: ptr, id: int, v: float): void = "ext#draw_engine_brush_set_base_value"
 extern fun draw_engine_brush_set_mapping_n(b: ptr, setting: int, input: int, n: int): void = "ext#draw_engine_brush_set_mapping_n"
@@ -46,7 +46,7 @@ implement ramon_brush_name(i) =
       "Clouds"
     )
   in
-    $UN.ptr0_get<string>(ptr_add<string>(addr@names, i))
+    mp_arr_sget(addr@names, i)
   end
 
 extern fun ramon_apply(b: ptr, i: int): void = "ext#ramon_apply"
@@ -5789,8 +5789,8 @@ implement ramon_apply(b, i) =
     val ppn = addr@pns
     val pxs = addr@xs
     val pys = addr@ys
-    fn iget(q: ptr, k: int): int = $UN.ptr0_get<int>(ptr_add<int>(q, k))
-    fn fget(q: ptr, k: int): float = $UN.ptr0_get<float>(ptr_add<float>(q, k))
+    fn iget(q: ptr, k: int): int = mp_arr_iget(q, k)
+    fn fget(q: ptr, k: int): float = mp_arr_fget(q, k)
     fun one(k: int, kend: int): void =
       if k < kend then let
         val sid = iget(psid, k)

@@ -3,15 +3,17 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
 staload "./rectangle.dats"
-
 #include "./minepaint_types.hats"
+#include "./engine_safe.hats"
 
 typedef MinePaintSurface_struct = MinePaintSurface
 
+extern castfn ptr2surface(p: ptr): ref(MinePaintSurface_struct) = "mac#"
+extern castfn addr2ptr(p: ptr): ptr = "mac#"
+
 fn call_surface_destroy(f: ptr, self: ptr): void =
-  $UN.cast{MinePaintSurfaceDestroyFunction}(f)(self)
+  ptr2fn{MinePaintSurfaceDestroyFunction}(f)(self)
 
 fn call_surface_draw_dab(
   f: ptr, self: ptr,
@@ -20,7 +22,7 @@ fn call_surface_draw_dab(
   aspect_ratio: float, angle: float, lock_alpha: float,
   colorize: float, posterize: float, posterize_num: float, paint: float
 ): int =
-  $UN.cast{MinePaintSurfaceDrawDabFunction}(f)(
+  ptr2fn{MinePaintSurfaceDrawDabFunction}(f)(
     self, x, y, radius, r, g, b,
     opaque, hardness, softness, alpha_eraser,
     aspect_ratio, angle, lock_alpha,
@@ -32,46 +34,44 @@ fn call_surface_get_color(
   x: float, y: float, radius: float,
   r: ptr, g: ptr, b: ptr, a: ptr, paint: float
 ): void =
-  $UN.cast{MinePaintSurfaceGetColorFunction}(f)(self, x, y, radius, r, g, b, a, paint)
+  ptr2fn{MinePaintSurfaceGetColorFunction}(f)(self, x, y, radius, r, g, b, a, paint)
 
 fn call_surface_begin_atomic(f: ptr, self: ptr): void =
-  $UN.cast{MinePaintSurfaceBeginAtomicFunction}(f)(self)
+  ptr2fn{MinePaintSurfaceBeginAtomicFunction}(f)(self)
 
 fn call_surface_end_atomic(f: ptr, self: ptr, roi: ptr): void =
-  $UN.cast{MinePaintSurfaceEndAtomicFunction}(f)(self, roi)
+  ptr2fn{MinePaintSurfaceEndAtomicFunction}(f)(self, roi)
 
 fn call_surface_save_png(f: ptr, self: ptr, path: string, x: int, y: int, w: int, h: int): void =
-  $UN.cast{MinePaintSurfaceSavePngFunction}(f)(self, path, x, y, w, h)
+  ptr2fn{MinePaintSurfaceSavePngFunction}(f)(self, path, x, y, w, h)
 
 extern fun minepaint_surface_init(self: ptr): void = "ext#minepaint_surface_init"
 implement minepaint_surface_init(self) =
   if self != the_null_ptr then let
-    val s = $UN.cast{ref(MinePaintSurface_struct)}(self)
+    val s = ptr2surface(self)
     val () = s->refcount := 1
   in () end
 
 extern fun minepaint_surface_ref(self: ptr): void = "ext#minepaint_surface_ref"
 implement minepaint_surface_ref(self) =
   if self != the_null_ptr then let
-    val s = $UN.cast{ref(MinePaintSurface_struct)}(self)
+    val s = ptr2surface(self)
     val () = s->refcount := s->refcount + 1
   in () end
 
 extern fun minepaint_surface_unref(self: ptr): void = "ext#minepaint_surface_unref"
 implement minepaint_surface_unref(self) =
   if self != the_null_ptr then let
-    val s = $UN.cast{ref(MinePaintSurface_struct)}(self)
+    val s = ptr2surface(self)
     val rc = s->refcount - 1
     val () = s->refcount := rc
     val () =
       if rc <= 0 then let
         val d = s->destroy
-        val () =
-          if d != the_null_ptr then call_surface_destroy(d, self)
+        val () = if d != the_null_ptr then call_surface_destroy(d, self)
       in () end
   in () end
 
-// minepaint_surface_draw_dab
 extern fun minepaint_surface_draw_dab(
     self: ptr,
     x: float, y: float,
@@ -94,7 +94,7 @@ implement minepaint_surface_draw_dab(
     colorize, posterize, posterize_num, paint
 ) =
   if self != the_null_ptr then let
-    val s = $UN.cast{ref(MinePaintSurface_struct)}(self)
+    val s = ptr2surface(self)
     val f = s->draw_dab
   in
     if f != the_null_ptr then
@@ -108,7 +108,6 @@ implement minepaint_surface_draw_dab(
   end
   else 0
 
-// draw_engine_surface_draw_dab
 extern fun draw_engine_surface_draw_dab(
     self: ptr,
     x: float, y: float,
@@ -137,7 +136,6 @@ implement draw_engine_surface_draw_dab(
     colorize, posterize, posterize_num, paint
   )
 
-// minepaint_surface_get_color
 extern fun minepaint_surface_get_color(
     self: ptr,
     x: float, y: float,
@@ -156,16 +154,16 @@ implement minepaint_surface_get_color(self, x, y, radius, color_r, color_g, colo
   val () = color_a := 0.0f
 in
   if self != the_null_ptr then let
-    val s = $UN.cast{ref(MinePaintSurface_struct)}(self)
+    val s = ptr2surface(self)
     val f = s->get_color
   in
     if f != the_null_ptr then
       call_surface_get_color(
         f, self, x, y, radius,
-        $UN.cast{ptr}(addr@(color_r)),
-        $UN.cast{ptr}(addr@(color_g)),
-        $UN.cast{ptr}(addr@(color_b)),
-        $UN.cast{ptr}(addr@(color_a)),
+        addr2ptr(addr@(color_r)),
+        addr2ptr(addr@(color_g)),
+        addr2ptr(addr@(color_b)),
+        addr2ptr(addr@(color_a)),
         paint
       )
     else ()
@@ -173,7 +171,6 @@ in
   else ()
 end
 
-// minepaint_surface_get_alpha
 extern fun minepaint_surface_get_alpha(self: ptr, x: float, y: float, radius: float): float = "ext#minepaint_surface_get_alpha"
 implement minepaint_surface_get_alpha(self, x, y, radius) = let
   var r: float
@@ -185,31 +182,28 @@ in
   a
 end
 
-// minepaint_surface_begin_atomic
 extern fun minepaint_surface_begin_atomic(self: ptr): void = "ext#minepaint_surface_begin_atomic"
 implement minepaint_surface_begin_atomic(self) =
   if self != the_null_ptr then let
-    val s = $UN.cast{ref(MinePaintSurface_struct)}(self)
+    val s = ptr2surface(self)
     val f = s->begin_atomic
   in
     if f != the_null_ptr then call_surface_begin_atomic(f, self)
   end
 
-// minepaint_surface_end_atomic
 extern fun minepaint_surface_end_atomic(self: ptr, roi: ptr): void = "ext#minepaint_surface_end_atomic"
 implement minepaint_surface_end_atomic(self, roi) =
   if self != the_null_ptr then let
-    val s = $UN.cast{ref(MinePaintSurface_struct)}(self)
+    val s = ptr2surface(self)
     val f = s->end_atomic
   in
     if f != the_null_ptr then call_surface_end_atomic(f, self, roi)
   end
 
-// minepaint_surface_save_png
 extern fun minepaint_surface_save_png(self: ptr, path: string, x: int, y: int, w: int, h: int): void = "ext#minepaint_surface_save_png"
 implement minepaint_surface_save_png(self, path, x, y, w, h) =
   if self != the_null_ptr then let
-    val s = $UN.cast{ref(MinePaintSurface_struct)}(self)
+    val s = ptr2surface(self)
     val f = s->save_png
   in
     if f != the_null_ptr then call_surface_save_png(f, self, path, x, y, w, h)

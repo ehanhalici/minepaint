@@ -3,13 +3,14 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+#include "./engine_safe.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
 staload "./surface.dats"
 staload "./tiled_surface.dats"
+#include "./minepaint_types.hats"
 
 typedef MinePaintFixedTiledSurface_struct = @{
-  parent= MinePaintTiledSurface_struct,
+  parent= MinePaintTiledSurface,
   tile_size= size_t,
   tile_buffer= ptr,
   null_tile= ptr,
@@ -18,6 +19,11 @@ typedef MinePaintFixedTiledSurface_struct = @{
   width= int,
   height= int
 }
+
+extern castfn ptr2fixed_tiled_surface(p: ptr): ref(MinePaintFixedTiledSurface_struct) = "mac#"
+extern castfn ptr2tile_req(p: ptr): ref(MinePaintTileRequest) = "mac#"
+extern castfn req_fn2ptr(f: (ptr, ptr) -> void): ptr = "mac#"
+extern castfn destroy_fn2ptr(f: (ptr) -> void): ptr = "mac#"
 
 extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
@@ -38,102 +44,106 @@ extern fun minepaint_fixed_tiled_surface_get_width(self: ptr): int = "ext#minepa
 extern fun minepaint_fixed_tiled_surface_get_height(self: ptr): int = "ext#minepaint_fixed_tiled_surface_get_height"
 extern fun minepaint_fixed_tiled_surface_interface(self: ptr): ptr = "ext#minepaint_fixed_tiled_surface_interface"
 
+fn is_out_of_bounds(tx: int, ty: int, w: int, h: int): bool =
+  (tx < 0) || (ty < 0) || (tx >= w) || (ty >= h)
+
 fn reset_null_tile(self_p: ptr): void = let
-  val self = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(self_p)
+  val self = ptr2fixed_tiled_surface(self_p)
   val _ = memset(self->null_tile, 0, self->tile_size)
 in () end
 
+fn compute_tile_offset(self: ref(MinePaintFixedTiledSurface_struct), tx: int, ty: int): size_t = let
+  val rowstride = mul_size_size(int2size(self->tiles_width), self->tile_size)
+  val x_offset = mul_size_size(int2size(tx), self->tile_size)
+in
+  add_size_size(mul_size_size(rowstride, int2size(ty)), x_offset)
+end
+
 implement fixed_tile_request_start(tiled_surface, request) = let
-  val self = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(tiled_surface)
-  val req = $UN.cast{ref(MinePaintTileRequest_struct)}(request)
+  val self = ptr2fixed_tiled_surface(tiled_surface)
+  val req = ptr2tile_req(request)
   val tx = req->tx
   val ty = req->ty
 in
-  if (tx >= self->tiles_width) || (ty >= self->tiles_height) || (tx < 0) || (ty < 0) then let
-    val () = req->buffer := self->null_tile
-  in () end
+  if is_out_of_bounds(tx, ty, self->tiles_width, self->tiles_height) then
+    req->buffer := self->null_tile
   else let
-    val rowstride = mul_size_size(int2size(self->tiles_width), self->tile_size)
-    val x_offset = mul_size_size(int2size(tx), self->tile_size)
-    val tile_offset = add_size_size(mul_size_size(rowstride, int2size(ty)), x_offset)
-    val tile_pointer = ptr_add<byte>(self->tile_buffer, tile_offset)
-    val () = req->buffer := tile_pointer
-  in () end
+    val offset = compute_tile_offset(self, tx, ty)
+  in
+    req->buffer := ptr_add<byte>(self->tile_buffer, offset)
+  end
 end
 
 implement fixed_tile_request_end(tiled_surface, request) = let
-  val self = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(tiled_surface)
-  val req = $UN.cast{ref(MinePaintTileRequest_struct)}(request)
-  val tx = req->tx
-  val ty = req->ty
+  val self = ptr2fixed_tiled_surface(tiled_surface)
+  val req = ptr2tile_req(request)
 in
-  if (tx >= self->tiles_width) || (ty >= self->tiles_height) || (tx < 0) || (ty < 0) then
+  if is_out_of_bounds(req->tx, req->ty, self->tiles_width, self->tiles_height) then
     reset_null_tile(tiled_surface)
-  else ()
 end
 
 implement minepaint_fixed_tiled_surface_interface(self) = self
 
 implement minepaint_fixed_tiled_surface_get_width(self) =
-  if self != the_null_ptr then let
-    val s = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(self)
-  in s->width end
-  else 0
+  if self != the_null_ptr then (ptr2fixed_tiled_surface(self))->width else 0
 
 implement minepaint_fixed_tiled_surface_get_height(self) =
-  if self != the_null_ptr then let
-    val s = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(self)
-  in s->height end
-  else 0
+  if self != the_null_ptr then (ptr2fixed_tiled_surface(self))->height else 0
 
 implement free_simple_tiledsurf(surface) =
   if surface != the_null_ptr then let
-    val self = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(surface)
+    val self = ptr2fixed_tiled_surface(surface)
     val () = minepaint_tiled_surface_destroy(surface)
     val () = if self->tile_buffer != the_null_ptr then free(self->tile_buffer)
     val () = if self->null_tile != the_null_ptr then free(self->null_tile)
-    val () = free(surface)
-  in () end
+  in
+    free(surface)
+  end
+
+fn calc_tiles_dim(dim: int, tile_size: int): int =
+  g0float2int_float_int(ceilf(f_div(g0int2float_int_float(dim), g0int2float_int_float(tile_size))))
+
+fn setup_fixed_surface(
+  self: ref(MinePaintFixedTiledSurface_struct),
+  w: int, h: int, tw: int, th: int, single_bytes: size_t, buf: ptr, null_t: ptr
+): void = let
+  val () = self->tile_buffer := buf
+  val () = self->tile_size := single_bytes
+  val () = self->null_tile := null_t
+  val () = self->tiles_width := tw
+  val () = self->tiles_height := th
+  val () = self->width := w
+  val () = self->height := h
+in () end
 
 implement minepaint_fixed_tiled_surface_new(width, height) = let
-  val () = assertloc(width > 0)
-  val () = assertloc(height > 0)
-  val sz_self = sizeof<MinePaintFixedTiledSurface_struct>
-  val self_p = malloc(sz_self)
+  val () = assertloc(width > 0 && height > 0)
+  val self_p = malloc(sizeof<MinePaintFixedTiledSurface_struct>)
 in
   if self_p = the_null_ptr then the_null_ptr
   else let
-    val self = $UN.cast{ref(MinePaintFixedTiledSurface_struct)}(self_p)
+    val self = ptr2fixed_tiled_surface(self_p)
     val () = minepaint_tiled_surface_init(
       self_p,
-      $UN.cast{ptr}(fixed_tile_request_start),
-      $UN.cast{ptr}(fixed_tile_request_end)
+      req_fn2ptr(fixed_tile_request_start),
+      req_fn2ptr(fixed_tile_request_end)
     )
-    val tile_size_pixels = self->parent.tile_size
-    val () = self->parent.parent.destroy := $UN.cast{ptr}(free_simple_tiledsurf)
-
-    val tiles_w = g0float2int_float_int(ceilf(f_div(g0int2float_int_float(width), g0int2float_int_float(tile_size_pixels))))
-    val tiles_h = g0float2int_float_int(ceilf(f_div(g0int2float_int_float(height), g0int2float_int_float(tile_size_pixels))))
-
-    val single_tile_bytes = mul_size_size(int2size(g0int_mul(tile_size_pixels, tile_size_pixels)), int2size(8))
-    val buffer_bytes = mul_size_size(mul_size_size(int2size(tiles_w), int2size(tiles_h)), single_tile_bytes)
-
-    val buffer = malloc(buffer_bytes)
+    val ts = self->parent.tile_size
+    val () = self->parent.parent.destroy := destroy_fn2ptr(free_simple_tiledsurf)
+    val tw = calc_tiles_dim(width, ts)
+    val th = calc_tiles_dim(height, ts)
+    val single_bytes = mul_size_size(int2size(g0int_mul(ts, ts)), int2size(8))
+    val total_bytes = mul_size_size(mul_size_size(int2size(tw), int2size(th)), single_bytes)
+    val buf = malloc(total_bytes)
   in
-    if buffer = the_null_ptr then let
+    if buf = the_null_ptr then let
       val () = free(self_p)
     in the_null_ptr end
     else let
-      val _ = memset(buffer, 255, buffer_bytes)
-      val null_t = malloc(single_tile_bytes)
+      val _ = memset(buf, 255, total_bytes)
+      val null_t = malloc(single_bytes)
       val () = assertloc(null_t > the_null_ptr)
-      val () = self->tile_buffer := buffer
-      val () = self->tile_size := single_tile_bytes
-      val () = self->null_tile := null_t
-      val () = self->tiles_width := tiles_w
-      val () = self->tiles_height := tiles_h
-      val () = self->width := width
-      val () = self->height := height
+      val () = setup_fixed_surface(self, width, height, tw, th, single_bytes, buf, null_t)
       val () = reset_null_tile(self_p)
     in
       self_p

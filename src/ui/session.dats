@@ -2,255 +2,213 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
 staload "sys/libc.dats"
 staload "ui/state.dats"
 staload "ui/palette.dats"
 
 macdef MODE_0755 = $extval(uint, "0755")
+extern castfn addr2str(p: ptr): string = "mac#"
 
-fn cstr_empty(p: ptr): bool =
-  $UN.ptr0_get<char>(p) = '\0'
+fn f2d(v: float): double = g0float2float_float_double(v)
 
-fn copy_chars(dst: ptr, cap: int, src: ptr): int = let
-  fun loop(di: int, s: ptr): int =
-    if di >= cap - 1 then ~1
-    else let
-      val c = $UN.ptr0_get<char>(s)
-    in
-      if c = '\0' then let
-        val () = $UN.ptr0_set<char>(ptr_add<char>(dst, di), '\0')
-      in di end
-      else let
-        val () = $UN.ptr0_set<char>(ptr_add<char>(dst, di), c)
-      in loop(di + 1, ptr_add<char>(s, 1)) end
-    end
-in
-  loop(0, src)
-end
-
-fn append_chars(dst: ptr, cap: int, off: int, src: string): int = let
-  val sp = $UN.cast{ptr}(src)
-  fun loop(di: int, s: ptr): int =
-    if di >= cap - 1 then ~1
-    else let
-      val c = $UN.ptr0_get<char>(s)
-    in
-      if c = '\0' then let
-        val () = $UN.ptr0_set<char>(ptr_add<char>(dst, di), '\0')
-      in di end
-      else let
-        val () = $UN.ptr0_set<char>(ptr_add<char>(dst, di), c)
-      in loop(di + 1, ptr_add<char>(s, 1)) end
-    end
-in
-  loop(off, sp)
-end
-
-fn make_path(suffix: string): ptr = let
+fn build_session_path(buf: ptr, cap: size_t, suffix: string): bool = let
   val home = getenv("HOME")
 in
-  if home = the_null_ptr then the_null_ptr
-  else if cstr_empty(home) then the_null_ptr
+  if home = the_null_ptr then false
   else let
-    val buf = malloc(g0int2uint_int_size(512))
-    val n = copy_chars(buf, 512, home)
+    val home_str = addr2str(home)
+    val s1 = g1ofg0_string(home_str)
   in
-    if n < 0 then let
-      val () = free(buf)
-    in the_null_ptr end
-    else let
-      val n2 = append_chars(buf, 512, n, suffix)
-    in
-      if n2 < 0 then let
-        val () = free(buf)
-      in the_null_ptr end
-      else buf
-    end
+    if string_isnot_atend(s1, i2sz(0)) then let
+      val _ = mp_format_path(buf, cap, home_str, suffix)
+    in true end
+    else false
   end
 end
 
 fn ensure_dirs(): void = let
-  val cfg = make_path("/.config")
-  val () = if cfg != the_null_ptr then let
-    val _ = mkdir($UN.cast{string}(cfg), MODE_0755)
-    val () = free(cfg)
-  in () end else ()
-  val mp = make_path("/.config/minepaint")
-  val () = if mp != the_null_ptr then let
-    val _ = mkdir($UN.cast{string}(mp), MODE_0755)
-    val () = free(mp)
-  in () end else ()
+  var buf = @[byte][512]()
+  val p_buf = addr@(buf)
+  val cap = g0int2uint_int_size(512)
+  val ok1 = build_session_path(p_buf, cap, "/.config")
+  val () = if ok1 then let
+    val _ = mkdir(addr2str(p_buf), MODE_0755)
+  in () end
+  val ok2 = build_session_path(p_buf, cap, "/.config/minepaint")
+  val () = if ok2 then let
+    val _ = mkdir(addr2str(p_buf), MODE_0755)
+  in () end
 in () end
 
-fn f2d(v: float): double = g0float2float_float_double(v)
-
-fn apply_line(line: string): void = let
+fn parse_swatch(line: string): bool = let
   var idx: int = 0
   var a: float = 0.0f
   var b: float = 0.0f
   var c: float = 0.0f
-  val u = ui_get()
-  val n4 = sscanf_ifff(line, "swatch %d %f %f %f", idx, a, b, c)
+  val n = sscanf_ifff(line, "swatch %d %f %f %f", idx, a, b, c)
 in
-  if n4 = 4 then let
+  if n = 4 then let
     val () = pal_set(idx, 0, a)
     val () = pal_set(idx, 1, b)
     val () = pal_set(idx, 2, c)
-  in () end
-  else let
-    val n1 = sscanf_i(line, "active_swatch %d", idx)
-  in
-    if n1 = 1 then
-      u->active_swatch := (if (idx < ~1) || (idx > 11) then ~1 else idx)
-    else let
-      val ng = sscanf_i(line, "group %d", idx)
-    in
-      if ng = 1 then
-        u->active_group := (if (idx < 0) || (idx > 7) then 1 else idx)
-      else let
-        val nb = sscanf_i(line, "brush %d", idx)
-      in
-        if nb = 1 then
-          u->active_brush := (if idx < ~1 then ~1 else idx)
-        else let
-          val ns = sscanf_i(line, "scroll %d", idx)
-        in
-          if ns = 1 then
-            u->brush_scroll := (if idx < 0 then 0 else idx)
-          else let
-            val nc = sscanf_fff(line, "color %f %f %f", a, b, c)
-          in
-            if nc = 3 then let
-              val () = u->cur_r := (if g0float_lt(a, 0.0f) then 0.0f else if g0float_gt(a, 1.0f) then 1.0f else a)
-              val () = u->cur_g := (if g0float_lt(b, 0.0f) then 0.0f else if g0float_gt(b, 1.0f) then 1.0f else b)
-              val () = u->cur_b := (if g0float_lt(c, 0.0f) then 0.0f else if g0float_gt(c, 1.0f) then 1.0f else c)
-            in () end
-            else let
-              val n = sscanf_f(line, "size %f", a)
-            in
-              if n = 1 then u->val0 := a
-              else let
-                val n = sscanf_f(line, "opaque %f", a)
-              in
-                if n = 1 then u->val1 := a
-                else let
-                  val n = sscanf_f(line, "sharp %f", a)
-                in
-                  if n = 1 then u->val2 := a
-                  else let
-                    val n = sscanf_f(line, "grain %f", a)
-                  in
-                    if n = 1 then u->val3 := a
-                    else let
-                      val n = sscanf_f(line, "pigment %f", a)
-                    in
-                      if n = 1 then u->val4 := a
-                      else let
-                        val n = sscanf_f(line, "smooth %f", a)
-                      in
-                        if n = 1 then u->val5 := a
-                        else let
-                          val n = sscanf_f(line, "pressure %f", a)
-                        in
-                          if n = 1 then u->val6 := a
-                          else let
-                            val n = sscanf_f(line, "twist %f", a)
-                          in
-                            if n = 1 then u->val7 := a else ()
-                          end
-                        end
-                      end
-                    end
-                  end
-                end
-              end
-            end
-          end
-        end
-      end
-    end
-  end
+  in true end
+  else false
 end
+
+fn parse_active_swatch(line: string): bool = let
+  var idx: int = 0
+  val n = sscanf_i(line, "active_swatch %d", idx)
+in
+  if n = 1 then let
+    val u = ui_get()
+    val () = u->active_swatch := (if (idx < ~1) || (idx > 11) then ~1 else idx)
+  in true end
+  else false
+end
+
+fn parse_group_brush_scroll(line: string): bool = let
+  var idx: int = 0
+  val u = ui_get()
+in
+  if sscanf_i(line, "group %d", idx) = 1 then let
+    val () = u->active_group := (if (idx < 0) || (idx > 7) then 1 else idx)
+  in true end
+  else if sscanf_i(line, "brush %d", idx) = 1 then let
+    val () = u->active_brush := (if idx < ~1 then ~1 else idx)
+  in true end
+  else if sscanf_i(line, "scroll %d", idx) = 1 then let
+    val () = u->brush_scroll := (if idx < 0 then 0 else idx)
+  in true end
+  else false
+end
+
+fn parse_color(line: string): bool = let
+  var a: float = 0.0f
+  var b: float = 0.0f
+  var c: float = 0.0f
+  val n = sscanf_fff(line, "color %f %f %f", a, b, c)
+in
+  if n = 3 then let
+    val u = ui_get()
+    val () = u->cur_r := (if g0float_lt(a, 0.0f) then 0.0f else if g0float_gt(a, 1.0f) then 1.0f else a)
+    val () = u->cur_g := (if g0float_lt(b, 0.0f) then 0.0f else if g0float_gt(b, 1.0f) then 1.0f else b)
+    val () = u->cur_b := (if g0float_lt(c, 0.0f) then 0.0f else if g0float_gt(c, 1.0f) then 1.0f else c)
+  in true end
+  else false
+end
+
+fn parse_slider_setting(line: string): bool = let
+  var a: float = 0.0f
+  val u = ui_get()
+in
+  if sscanf_f(line, "size %f", a) = 1 then (u->val0 := a; true)
+  else if sscanf_f(line, "opaque %f", a) = 1 then (u->val1 := a; true)
+  else if sscanf_f(line, "sharp %f", a) = 1 then (u->val2 := a; true)
+  else if sscanf_f(line, "grain %f", a) = 1 then (u->val3 := a; true)
+  else if sscanf_f(line, "pigment %f", a) = 1 then (u->val4 := a; true)
+  else if sscanf_f(line, "smooth %f", a) = 1 then (u->val5 := a; true)
+  else if sscanf_f(line, "pressure %f", a) = 1 then (u->val6 := a; true)
+  else if sscanf_f(line, "twist %f", a) = 1 then (u->val7 := a; true)
+  else false
+end
+
+fn apply_line(line: string): void =
+  if parse_swatch(line) then ()
+  else if parse_active_swatch(line) then ()
+  else if parse_group_brush_scroll(line) then ()
+  else if parse_color(line) then ()
+  else if parse_slider_setting(line) then ()
+  else ()
 
 extern fun session_load(): int = "ext#session_load"
 implement session_load() = let
-  val path = make_path("/.config/minepaint/session.conf")
+  var path_buf = @[byte][512]()
+  val p_path = addr@(path_buf)
+  val ok = build_session_path(p_path, g0int2uint_int_size(512), "/.config/minepaint/session.conf")
 in
-  if path = the_null_ptr then 0
+  if not(ok) then 0
   else let
-    val f = fopen($UN.cast{string}(path), "r")
-    val () = free(path)
+    val f = fopen(addr2str(p_path), "r")
   in
     if f = the_null_ptr then 0
     else let
-      val buf = malloc(g0int2uint_int_size(256))
+      var line_buf = @[byte][256]()
+      val p_line = addr@(line_buf)
       fun loop(): void =
-        if fgets(buf, 256, f) != the_null_ptr then let
-          val () = apply_line($UN.cast{string}(buf))
+        if fgets(p_line, 256, f) != the_null_ptr then let
+          val () = apply_line(addr2str(p_line))
         in loop() end else ()
       val () = loop()
-      val () = free(buf)
       val _ = fclose(f)
     in 1 end
   end
 end
 
 fn put_line(f: ptr, buf: ptr): void = let
-  val _ = fputs($UN.cast{string}(buf), f)
+  val _ = fputs(addr2str(buf), f)
+in () end
+
+fn save_palette_and_state(f: ptr, buf: ptr, cap: size_t): void = let
+  val u = ui_get()
+  fun swatches(i: int): void =
+    if i < 12 then let
+      val r = pal_get(i, 0)
+      val g = pal_get(i, 1)
+      val b = pal_get(i, 2)
+      val _ = mp_snprintf_ifff(buf, cap, "swatch %d %.6f %.6f %.6f\n", i, f2d(r), f2d(g), f2d(b))
+      val () = put_line(f, buf)
+    in swatches(i + 1) end else ()
+  val () = swatches(0)
+  val _ = mp_snprintf_i(buf, cap, "active_swatch %d\n", u->active_swatch)
+  val () = put_line(f, buf)
+  val _ = mp_snprintf_i(buf, cap, "group %d\n", u->active_group)
+  val () = put_line(f, buf)
+  val _ = mp_snprintf_i(buf, cap, "brush %d\n", u->active_brush)
+  val () = put_line(f, buf)
+  val _ = mp_snprintf_i(buf, cap, "scroll %d\n", u->brush_scroll)
+  val () = put_line(f, buf)
+  val _ = mp_snprintf_fff(buf, cap, "color %.6f %.6f %.6f\n", f2d(u->cur_r), f2d(u->cur_g), f2d(u->cur_b))
+  val () = put_line(f, buf)
+in () end
+
+fn save_slider_values(f: ptr, buf: ptr, cap: size_t): void = let
+  val u = ui_get()
+  val _ = mp_snprintf_f(buf, cap, "size %.6f\n", f2d(u->val0))
+  val () = put_line(f, buf)
+  val _ = mp_snprintf_f(buf, cap, "opaque %.6f\n", f2d(u->val1))
+  val () = put_line(f, buf)
+  val _ = mp_snprintf_f(buf, cap, "sharp %.6f\n", f2d(u->val2))
+  val () = put_line(f, buf)
+  val _ = mp_snprintf_f(buf, cap, "grain %.6f\n", f2d(u->val3))
+  val () = put_line(f, buf)
+  val _ = mp_snprintf_f(buf, cap, "pigment %.6f\n", f2d(u->val4))
+  val () = put_line(f, buf)
+  val _ = mp_snprintf_f(buf, cap, "smooth %.6f\n", f2d(u->val5))
+  val () = put_line(f, buf)
+  val _ = mp_snprintf_f(buf, cap, "pressure %.6f\n", f2d(u->val6))
+  val () = put_line(f, buf)
+  val _ = mp_snprintf_f(buf, cap, "twist %.6f\n", f2d(u->val7))
+  val () = put_line(f, buf)
 in () end
 
 extern fun session_save(): void = "ext#session_save"
 implement session_save() = let
   val () = ensure_dirs()
-  val path = make_path("/.config/minepaint/session.conf")
+  var path_buf = @[byte][512]()
+  val p_path = addr@(path_buf)
+  val ok = build_session_path(p_path, g0int2uint_int_size(512), "/.config/minepaint/session.conf")
 in
-  if path = the_null_ptr then ()
+  if not(ok) then ()
   else let
-    val f = fopen($UN.cast{string}(path), "w")
-    val () = free(path)
+    val f = fopen(addr2str(p_path), "w")
   in
     if f = the_null_ptr then ()
     else let
-      val u = ui_get()
-      val buf = malloc(g0int2uint_int_size(256))
+      var buf = @[byte][256]()
+      val p_buf = addr@(buf)
       val cap = g0int2uint_int_size(256)
-      fun swatches(i: int): void =
-        if i < 12 then let
-          val r = pal_get(i, 0)
-          val g = pal_get(i, 1)
-          val b = pal_get(i, 2)
-          val _ = mp_snprintf_ifff(buf, cap, "swatch %d %.6f %.6f %.6f\n", i, f2d(r), f2d(g), f2d(b))
-          val () = put_line(f, buf)
-        in swatches(i + 1) end else ()
-      val () = swatches(0)
-      val _ = mp_snprintf_i(buf, cap, "active_swatch %d\n", u->active_swatch)
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_i(buf, cap, "group %d\n", u->active_group)
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_i(buf, cap, "brush %d\n", u->active_brush)
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_i(buf, cap, "scroll %d\n", u->brush_scroll)
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_fff(buf, cap, "color %.6f %.6f %.6f\n", f2d(u->cur_r), f2d(u->cur_g), f2d(u->cur_b))
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_f(buf, cap, "size %.6f\n", f2d(u->val0))
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_f(buf, cap, "opaque %.6f\n", f2d(u->val1))
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_f(buf, cap, "sharp %.6f\n", f2d(u->val2))
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_f(buf, cap, "grain %.6f\n", f2d(u->val3))
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_f(buf, cap, "pigment %.6f\n", f2d(u->val4))
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_f(buf, cap, "smooth %.6f\n", f2d(u->val5))
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_f(buf, cap, "pressure %.6f\n", f2d(u->val6))
-      val () = put_line(f, buf)
-      val _ = mp_snprintf_f(buf, cap, "twist %.6f\n", f2d(u->val7))
-      val () = put_line(f, buf)
-      val () = free(buf)
+      val () = save_palette_and_state(f, p_buf, cap)
+      val () = save_slider_values(f, p_buf, cap)
       val _ = fclose(f)
     in () end
   end

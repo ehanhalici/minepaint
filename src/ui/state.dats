@@ -2,7 +2,6 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
 staload "sys/libc.dats"
 
 extern fun slot_ui_get(): ptr = "ext#slot_ui_get"
@@ -31,37 +30,51 @@ typedef UIWidgetsState = @{
   brush_scroll= int,
   panel_h= int,
   active_swatch= int,
-  pal= ptr
+  pal= arrayref(float, 36)
 }
 
+extern castfn ptr2uistate(p: ptr): ref(UIWidgetsState)
+
 extern fun ui_get(): ref(UIWidgetsState) = "ext#ui_get"
-implement ui_get() = $UN.cast{ref(UIWidgetsState)}(slot_ui_get())
+implement ui_get() = ptr2uistate(slot_ui_get())
 
 extern fun ui_state_install(p: ptr): void = "ext#ui_state_install"
 implement ui_state_install(p) = slot_ui_set(p)
 
-extern fun ui_pal_ptr(): ptr = "ext#ui_pal_ptr"
-implement ui_pal_ptr() = let
-  val u = ui_get()
+fn pal_init_put(p: arrayref(float, 36), i: int, r: float, g: float, b: float): void = let
+  val o = g1ofg0(i * 3)
 in
-  u->pal
+  if (o >= 0) * (o + 2 < 36) then {
+    val () = p[o] := r
+    val () = p[o + 1] := g
+    val () = p[o + 2] := b
+  } else ()
 end
 
-fn pal_put(base: ptr, i: int, r: float, g: float, b: float): void = let
-  val o = i * 3
-  val () = $UN.ptr0_set<float>(ptr_add<float>(base, o), r)
-  val () = $UN.ptr0_set<float>(ptr_add<float>(base, o + 1), g)
-  val () = $UN.ptr0_set<float>(ptr_add<float>(base, o + 2), b)
-in () end
+fn init_palette_colors(p: arrayref(float, 36)): void = {
+  val () = pal_init_put(p, 0, 1.00f, 1.00f, 1.00f)
+  val () = pal_init_put(p, 1, 0.73f, 0.73f, 0.73f)
+  val () = pal_init_put(p, 2, 0.30f, 0.30f, 0.30f)
+  val () = pal_init_put(p, 3, 0.00f, 0.00f, 0.00f)
+  val () = pal_init_put(p, 4, 0.95f, 0.20f, 0.20f)
+  val () = pal_init_put(p, 5, 1.00f, 0.55f, 0.00f)
+  val () = pal_init_put(p, 6, 1.00f, 0.90f, 0.10f)
+  val () = pal_init_put(p, 7, 0.20f, 0.85f, 0.30f)
+  val () = pal_init_put(p, 8, 0.10f, 0.85f, 0.85f)
+  val () = pal_init_put(p, 9, 0.20f, 0.45f, 0.95f)
+  val () = pal_init_put(p, 10, 0.65f, 0.25f, 0.85f)
+  val () = pal_init_put(p, 11, 0.55f, 0.35f, 0.20f)
+}
 
 extern fun ui_state_new(): ptr = "ext#ui_state_new"
 implement ui_state_new() = let
-  val extra = g0int2uint_int_size(36) * sizeof<float>
-  val sz = sizeof<UIWidgetsState> + extra
+  val pal_arr = arrayref_make_elt<float>(i2sz(36), 0.0f)
+  val () = init_palette_colors(pal_arr)
+  val sz = sizeof<UIWidgetsState>
   val p = malloc(sz)
+  val () = assertloc(p > the_null_ptr)
   val _ = memset(p, 0, sz)
-  val u = $UN.cast{ref(UIWidgetsState)}(p)
-  val () = u->pal := add_ptr_bsz(p, sizeof<UIWidgetsState>)
+  val u = ptr2uistate(p)
   val () = u->edge_hover_time := 0.0
   val () = u->cur_r := 0.73f
   val () = u->cur_g := 0.73f
@@ -84,19 +97,7 @@ implement ui_state_new() = let
   val () = u->brush_scroll := 0
   val () = u->panel_h := 0
   val () = u->active_swatch := ~1
-  val base = u->pal
-  val () = pal_put(base, 0, 1.00f, 1.00f, 1.00f)
-  val () = pal_put(base, 1, 0.73f, 0.73f, 0.73f)
-  val () = pal_put(base, 2, 0.30f, 0.30f, 0.30f)
-  val () = pal_put(base, 3, 0.00f, 0.00f, 0.00f)
-  val () = pal_put(base, 4, 0.95f, 0.20f, 0.20f)
-  val () = pal_put(base, 5, 1.00f, 0.55f, 0.00f)
-  val () = pal_put(base, 6, 1.00f, 0.90f, 0.10f)
-  val () = pal_put(base, 7, 0.20f, 0.85f, 0.30f)
-  val () = pal_put(base, 8, 0.10f, 0.85f, 0.85f)
-  val () = pal_put(base, 9, 0.20f, 0.45f, 0.95f)
-  val () = pal_put(base, 10, 0.65f, 0.25f, 0.85f)
-  val () = pal_put(base, 11, 0.55f, 0.35f, 0.20f)
+  val () = u->pal := pal_arr
 in
   p
 end

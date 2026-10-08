@@ -2,8 +2,6 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
-
 typedef mp_timeval = $extype_struct "mp_timeval" of {
   tv_sec= lint,
   tv_usec= lint
@@ -42,6 +40,10 @@ extern fun mp_snprintf_f(buf: ptr, n: size_t, fmt: string, v: double): int = "ma
 extern fun mp_snprintf_i(buf: ptr, n: size_t, fmt: string, v: int): int = "mac#snprintf"
 extern fun mp_snprintf_fff(buf: ptr, n: size_t, fmt: string, a: double, b: double, c: double): int = "mac#snprintf"
 extern fun mp_snprintf_ifff(buf: ptr, n: size_t, fmt: string, i: int, a: double, b: double, c: double): int = "mac#snprintf"
+extern fun mp_snprintf_ss(buf: ptr, n: size_t, fmt: string, s1: string, s2: string): int = "mac#snprintf"
+extern fun mp_format_path(buf: ptr, n: size_t, s1: string, s2: string): int = "ext#mp_format_path"
+implement mp_format_path(buf, n, s1, s2) =
+  mp_snprintf_ss(buf, n, "%s%s", s1, s2)
 
 extern fun sscanf_i(s: string, fmt: string, i: &int): int = "mac#sscanf"
 extern fun sscanf_f(s: string, fmt: string, a: &float): int = "mac#sscanf"
@@ -51,8 +53,8 @@ extern fun sscanf_ifff(s: string, fmt: string, i: &int, a: &float, b: &float, c:
 extern fun get_time_seconds(): double = "ext#get_time_seconds"
 implement get_time_seconds() = let
   var tv: mp_timeval
-  val () = tv.tv_sec := $UN.cast{lint}(0)
-  val () = tv.tv_usec := $UN.cast{lint}(0)
+  val () = tv.tv_sec := 0L
+  val () = tv.tv_usec := 0L
   val _ = gettimeofday(tv, the_null_ptr)
   val sec = g0int2float_lint_double(tv.tv_sec)
   val usec = g0int2float_lint_double(tv.tv_usec)

@@ -27,12 +27,15 @@ typedef MinePaintBrushInputInfo = @{
   tooltip= string
 }
 
+extern castfn ptr2setting_info(p: ptr): ref(MinePaintBrushSettingInfo) = "mac#"
+extern castfn ptr2input_info(p: ptr): ref(MinePaintBrushInputInfo) = "mac#"
+
 fun init_setting_entry(
   p: ptr, idx: int,
   cname: string, name: string, constant: int,
   min_v: float, def_v: float, max_v: float, tooltip: string
 ): void = let
-  val entry = $UN.cast{ref(MinePaintBrushSettingInfo)}(ptr_add<MinePaintBrushSettingInfo>(p, idx))
+  val entry = ptr2setting_info(ptr_add<MinePaintBrushSettingInfo>(p, idx))
   val () = entry->cname := cname
   val () = entry->name := name
   val () = entry->constant := constant
@@ -48,7 +51,7 @@ fun init_input_entry(
   hard_min: float, soft_min: float, normal: float, soft_max: float, hard_max: float,
   name: string, tooltip: string
 ): void = let
-  val entry = $UN.cast{ref(MinePaintBrushInputInfo)}(ptr_add<MinePaintBrushInputInfo>(p, idx))
+  val entry = ptr2input_info(ptr_add<MinePaintBrushInputInfo>(p, idx))
   val () = entry->cname := cname
   val () = entry->hard_min := hard_min
   val () = entry->soft_min := soft_min

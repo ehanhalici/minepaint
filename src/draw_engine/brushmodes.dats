@@ -4,7 +4,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
+#include "./engine_safe.hats"
 
 fn i_add(a: int, b: int): int = g0int_add(a, b)
 fn i_sub(a: int, b: int): int = g0int_sub(a, b)
@@ -13,9 +13,9 @@ fn i_div(a: int, b: int): int = g0int_div(a, b)
 fn i_gt(a: int, b: int): bool = a > b
 fn i_lt(a: int, b: int): bool = a < b
 
-fn u16(x: uint): uint16 = $UN.cast{uint16}(x)
-fn u2f(x: uint): float = $UN.cast{float}(x)
-fn f2u(x: float): uint = $UN.cast{uint}(x)
+extern castfn u16(x: uint): uint16 = "mac#"
+extern castfn u2f(x: uint): float = "mac#"
+extern castfn f2u(x: float): uint = "mac#"
 
 fn f_add(a: float, b: float): float = g0float_add(a, b)
 fn f_sub(a: float, b: float): float = g0float_sub(a, b)
@@ -31,17 +31,17 @@ extern fun rgb_to_spectral(r: float, g: float, b: float, spectral: ptr): void = 
 extern fun spectral_to_rgb(spectral: ptr, rgb: ptr): void = "ext#spectral_to_rgb"
 
 // Helper inline getters/setters for 16-bit RGBA pixel components
-fn get_r(p: ptr): uint = g0uint2uint_uint16_uint($UN.ptr0_get<uint16>(p))
-fn get_g(p: ptr): uint = g0uint2uint_uint16_uint($UN.ptr0_get<uint16>(ptr_add<uint16>(p, 1)))
-fn get_b(p: ptr): uint = g0uint2uint_uint16_uint($UN.ptr0_get<uint16>(ptr_add<uint16>(p, 2)))
-fn get_a(p: ptr): uint = g0uint2uint_uint16_uint($UN.ptr0_get<uint16>(ptr_add<uint16>(p, 3)))
+fn get_r(p: ptr): uint = g0uint2uint_uint16_uint(mp_arr_u16get(p, 0))
+fn get_g(p: ptr): uint = g0uint2uint_uint16_uint(mp_arr_u16get(p, 1))
+fn get_b(p: ptr): uint = g0uint2uint_uint16_uint(mp_arr_u16get(p, 2))
+fn get_a(p: ptr): uint = g0uint2uint_uint16_uint(mp_arr_u16get(p, 3))
 
-fn set_r(p: ptr, v: uint): void = $UN.ptr0_set<uint16>(p, u16(v))
-fn set_g(p: ptr, v: uint): void = $UN.ptr0_set<uint16>(ptr_add<uint16>(p, 1), u16(v))
-fn set_b(p: ptr, v: uint): void = $UN.ptr0_set<uint16>(ptr_add<uint16>(p, 2), u16(v))
-fn set_a(p: ptr, v: uint): void = $UN.ptr0_set<uint16>(ptr_add<uint16>(p, 3), u16(v))
+fn set_r(p: ptr, v: uint): void = mp_arr_u16set(p, 0, u16(v))
+fn set_g(p: ptr, v: uint): void = mp_arr_u16set(p, 1, u16(v))
+fn set_b(p: ptr, v: uint): void = mp_arr_u16set(p, 2, u16(v))
+fn set_a(p: ptr, v: uint): void = mp_arr_u16set(p, 3, u16(v))
 
-fn get_mask_val(m: ptr): uint = g0uint2uint_uint16_uint($UN.ptr0_get<uint16>(m))
+fn get_mask_val(m: ptr): uint = g0uint2uint_uint16_uint(mp_arr_u16get(m, 0))
 
 // --- 1. NORMAL BLEND MODE ---
 extern fun draw_dab_pixels_BlendMode_Normal(
@@ -411,11 +411,13 @@ implement get_color_pixels_legacy(mask, rgba, sum_weight, sum_r, sum_g, sum_b, s
   end
 
   val @(w, r, g, b, a) = loop_outer(mask, rgba, 0U, 0U, 0U, 0U, 0U)
-  val () = if sum_weight != the_null_ptr then $UN.ptr0_set<float>(sum_weight, f_add($UN.ptr0_get<float>(sum_weight), u2f(w)))
-  val () = if sum_r != the_null_ptr then $UN.ptr0_set<float>(sum_r, f_add($UN.ptr0_get<float>(sum_r), u2f(r)))
-  val () = if sum_g != the_null_ptr then $UN.ptr0_set<float>(sum_g, f_add($UN.ptr0_get<float>(sum_g), u2f(g)))
-  val () = if sum_b != the_null_ptr then $UN.ptr0_set<float>(sum_b, f_add($UN.ptr0_get<float>(sum_b), u2f(b)))
-  val () = if sum_a != the_null_ptr then $UN.ptr0_set<float>(sum_a, f_add($UN.ptr0_get<float>(sum_a), u2f(a)))
+  fn add_accum(p: ptr, val_u: uint): void =
+    if p != the_null_ptr then mp_arr_fset(p, 0, f_add(mp_arr_fget(p, 0), u2f(val_u)))
+  val () = add_accum(sum_weight, w)
+  val () = add_accum(sum_r, r)
+  val () = add_accum(sum_g, g)
+  val () = add_accum(sum_b, b)
+  val () = add_accum(sum_a, a)
 in () end
 
 extern fun get_color_pixels_accumulate(

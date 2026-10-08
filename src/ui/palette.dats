@@ -2,7 +2,6 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
 staload "ui/state.dats"
 
 fn pal_clampf(v: float): float =
@@ -14,9 +13,11 @@ extern fun pal_get(i: int, c: int): float = "ext#pal_get"
 implement pal_get(i, c) =
   if (i < 0) || (i >= 12) || (c < 0) || (c > 2) then 0.0f
   else let
-    val base = ui_pal_ptr()
+    val u = ui_get()
+    val p = u->pal
+    val idx = g1ofg0(i * 3 + c)
   in
-    $UN.ptr0_get<float>(ptr_add<float>(base, i * 3 + c))
+    if (idx >= 0) * (idx < 36) then p[idx] else 0.0f
   end
 
 extern fun pal_get_color(i: int): @(float, float, float) = "ext#pal_get_color"
@@ -27,7 +28,9 @@ extern fun pal_set(i: int, c: int, v: float): void = "ext#pal_set"
 implement pal_set(i, c, v) =
   if (i < 0) || (i >= 12) || (c < 0) || (c > 2) then ()
   else let
-    val base = ui_pal_ptr()
+    val u = ui_get()
+    val p = u->pal
+    val idx = g1ofg0(i * 3 + c)
   in
-    $UN.ptr0_set<float>(ptr_add<float>(base, i * 3 + c), pal_clampf(v))
+    if (idx >= 0) * (idx < 36) then p[idx] := pal_clampf(v) else ()
   end

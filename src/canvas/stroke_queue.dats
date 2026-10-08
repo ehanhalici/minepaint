@@ -1,11 +1,9 @@
+// src/canvas/stroke_queue.dats
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
 staload "canvas/gl_surface.dats"
-staload "draw_engine/settings.dats"
-staload "draw_engine/draw_engine.dats"
 
 #define MINEPAINT_BRUSH_SETTING_SLOW_TRACKING 31
 
@@ -36,6 +34,9 @@ vtypedef input_point = @{ x= float, y= float, pressure= float, time= double }
 datavtype point_queue =
   | QueueNil of ()
   | QueueCons of (input_point, point_queue)
+
+extern castfn queue2ptr(q: point_queue): ptr = "mac#"
+extern castfn ptr2queue(p: ptr): point_queue = "mac#"
 
 // --- Pür ATS2 ile Kübik Enterpolasyon ---
 fun interpolate_cubic(t: float, p0: input_point, p1: input_point, p2: input_point, p3: input_point): input_point = let
@@ -85,6 +86,32 @@ fun send_stroke_to_engine(
   in () end
 in () end
 
+fn calc_step_count(dt_f: float, p1: input_point, p2: input_point): @(int, double) = let
+  val dx = f_sub(p2.x, p1.x)
+  val dy = f_sub(p2.y, p1.y)
+  val dist = sqrtf(f_add(powf(dx, 2.0f), powf(dy, 2.0f)))
+  val steps_t = f2i(f_div(dt_f, 0.01f))
+  val steps_d = f2i(f_div(dist, 1.0f))
+  val steps_candidate = max(steps_t, steps_d)
+  val steps = max(1, min(100, steps_candidate))
+  val sub_dtime_f = f_div(dt_f, i2f(steps))
+in
+  @(steps, g0float2float_float_double(sub_dtime_f))
+end
+
+fun emit_spline_steps(
+  layer: ptr, brush: ptr, surf: ptr, zoom: float,
+  p0: input_point, p1: input_point, p2: input_point, p3: input_point,
+  steps: int, sub_dtime: double, i: int
+): void =
+  if i <= steps then let
+    val t = f_div(i2f(i), i2f(steps))
+    val p = interpolate_cubic(t, p0, p1, p2, p3)
+    val () = send_stroke_to_engine(layer, brush, surf, zoom, p.x, p.y, p.pressure, sub_dtime)
+  in
+    emit_spline_steps(layer, brush, surf, zoom, p0, p1, p2, p3, steps, sub_dtime, i + 1)
+  end else ()
+
 // --- Spline Kuyruğunu İşleme ---
 fun process_queue(
   layer: ptr, brush: ptr, surf: ptr, zoom: float,
@@ -93,42 +120,19 @@ fun process_queue(
   case+ queue of
   | ~QueueCons(p0, ~QueueCons(p1, ~QueueCons(p2, ~QueueCons(p3, tail)))) => let
       val total_dtime_raw = p2.time - p1.time
-      val total_dtime: double = if total_dtime_raw <= 0.0001 then 0.0001 else total_dtime_raw
-      val dx = f_sub(p2.x, p1.x)
-      val dy = f_sub(p2.y, p1.y)
-      val dist = sqrtf(f_add(powf(dx, 2.0f), powf(dy, 2.0f)))
-
+      val total_dtime = if total_dtime_raw <= 0.0001 then 0.0001 else total_dtime_raw
       val dt_f = g0float2float_double_float(total_dtime)
-      val steps_t: int = f2i(f_div(dt_f, 0.01f))
-      val steps_d: int = f2i(f_div(dist, 1.0f))
-
-      val steps_candidate = max(steps_t, steps_d)
-      val steps_clamped = max(1, min(100, steps_candidate))
-
-      val sub_dtime_f = f_div(dt_f, i2f(steps_clamped))
-      val sub_dtime = g0float2float_float_double(sub_dtime_f)
-
-      fun stroke_loop(i: int): void =
-        if i <= steps_clamped then let
-          val t = f_div(i2f(i), i2f(steps_clamped))
-          val p = interpolate_cubic(t, p0, p1, p2, p3)
-          val () = send_stroke_to_engine(layer, brush, surf, zoom, p.x, p.y, p.pressure, sub_dtime)
-        in stroke_loop(i + 1) end else ()
-
-      val () = stroke_loop(1)
+      val @(steps, sub_dtime) = calc_step_count(dt_f, p1, p2)
+      val () = emit_spline_steps(layer, brush, surf, zoom, p0, p1, p2, p3, steps, sub_dtime, 1)
       val nq = QueueCons(p1, QueueCons(p2, QueueCons(p3, tail)))
     in
       process_queue(layer, brush, surf, zoom, nq, force_finish)
     end
   | _ =>
-    if force_finish then let
-      val () = free_queue(queue)
-    in QueueNil() end
+    if force_finish then (free_queue(queue); QueueNil())
     else queue
 
 // --- Dışa Aktarılan Stroke Queue API'si ---
-
-// Fırçayı çizgisiz ışınlama
 extern fun stroke_queue_teleport(brush: ptr, surf: ptr, x: float, y: float): void = "ext#stroke_queue_teleport"
 implement stroke_queue_teleport(brush, surf, x, y) = let
   val saved_tracking = minepaint_brush_get_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING)
@@ -139,43 +143,39 @@ implement stroke_queue_teleport(brush, surf, x, y) = let
   val () = minepaint_brush_set_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING, saved_tracking)
 in () end
 
-// Yeni bir çizgi başlatma
 extern fun stroke_queue_start(wx: float, wy: float, pressure: float): ptr = "ext#stroke_queue_start"
 implement stroke_queue_start(wx, wy, pressure) = let
   val p0 = @{ x= wx, y= wy, pressure= pressure, time= 0.0 }
   val nq = QueueCons(p0, QueueNil())
 in
-  $UN.castvwtp0{ptr}(nq)
+  queue2ptr(nq)
 end
 
-// Çizgiyi uzatma ve enterpole ederek motora gönderme
 extern fun stroke_queue_step(
   layer: ptr, brush: ptr, surf: ptr, zoom: float,
   q_ptr: ptr, wx: float, wy: float, pressure: float, elapsed: double
 ): ptr = "ext#stroke_queue_step"
 implement stroke_queue_step(layer, brush, surf, zoom, q_ptr, wx, wy, pressure, elapsed) = let
-  val q = $UN.castvwtp0{point_queue}(q_ptr)
+  val q = ptr2queue(q_ptr)
   val pt = @{ x= wx, y= wy, pressure= pressure, time= elapsed }
   val q1 = push_queue(q, pt)
   val q2 = process_queue(layer, brush, surf, zoom, q1, false)
 in
-  $UN.castvwtp0{ptr}(q2)
+  queue2ptr(q2)
 end
 
-// Çizgiyi sonlandırma
 extern fun stroke_queue_finish(
   layer: ptr, brush: ptr, surf: ptr, zoom: float, q_ptr: ptr
 ): void = "ext#stroke_queue_finish"
 implement stroke_queue_finish(layer, brush, surf, zoom, q_ptr) = let
-  val q = $UN.castvwtp0{point_queue}(q_ptr)
+  val q = ptr2queue(q_ptr)
   val q1 = process_queue(layer, brush, surf, zoom, q, true)
   val () = free_queue(q1)
 in () end
 
-// Kuyruk belleğini serbest bırakma
 extern fun stroke_queue_free(q_ptr: ptr): void = "ext#stroke_queue_free"
 implement stroke_queue_free(q_ptr) = let
-  val q = $UN.castvwtp0{point_queue}(q_ptr)
+  val q = ptr2queue(q_ptr)
 in
   free_queue(q)
 end

@@ -3,8 +3,6 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload UN = "prelude/SATS/unsafe.sats"
-
 typedef GLuint = uint
 
 #define TILE_HASH_SIZE 1024
@@ -24,6 +22,23 @@ typedef Layer_Record = @{
   tiles= ptr,
   tile_count= int
 }
+
+extern castfn ptr2layer(p: ptr): ref(Layer_Record) = "mac#"
+extern castfn ptr2tile(p: ptr): ref(CanvasTile) = "mac#"
+
+extern castfn ptr2parr{n:int}(p: ptr): arrayref(ptr, n) = "mac#"
+
+fn mp_slot_get(p: ptr): ptr = let
+  val a = ptr2parr{1}(p)
+in
+  a[0]
+end
+
+fn mp_slot_set(p: ptr, v: ptr): void = let
+  val a = ptr2parr{1}(p)
+in
+  a[0] := v
+end
 
 // OpenGL Sabitleri
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
@@ -105,16 +120,17 @@ in
   g0uint2int_uint_int(idx)
 end
 
-// --- Pür ATS2 ile Sonsuz Katman Oluşturma (O(1) Hash Tablosu ile) ---
+// --- Pür ATS2 ile Sonsuz Katman Oluşturma ---
 implement layer_create(w, h) = let
   val p = malloc(sizeof<Layer_Record>)
-  val r = $UN.cast{ref(Layer_Record)}(p)
-  val buckets_mem = malloc(g0int2uint_int_size(TILE_HASH_SIZE) * sizeof<ptr>)
+  val r = ptr2layer(p)
+  val sz = g0int2uint_int_size(TILE_HASH_SIZE) * sizeof<ptr>
+  val buckets_mem = malloc(sz)
   val () = assertloc(buckets_mem > the_null_ptr)
 
   fun init_buckets(i: int): void =
     if i < TILE_HASH_SIZE then let
-      val () = $UN.ptr0_set<ptr>(ptr_add<ptr>(buckets_mem, i), the_null_ptr)
+      val () = mp_slot_set(ptr_add<ptr>(buckets_mem, i), the_null_ptr)
     in init_buckets(i + 1) end else ()
 
   val () = init_buckets(0)
@@ -131,7 +147,7 @@ implement layer_create_c(w, h) = layer_create(w, h)
 fun find_tile_in_bucket(cur: ptr, tx: int, ty: int): ptr =
   if cur = the_null_ptr then the_null_ptr
   else let
-    val t = $UN.cast{ref(CanvasTile)}(cur)
+    val t = ptr2tile(cur)
   in
     if (t->tx = tx) && (t->ty = ty) then cur
     else find_tile_in_bucket(t->next_in_bucket, tx, ty)
@@ -139,21 +155,15 @@ fun find_tile_in_bucket(cur: ptr, tx: int, ty: int): ptr =
 
 implement layer_find_tile(layer, tx, ty) = let
   val () = assertloc(layer != the_null_ptr)
-  val lr = $UN.cast{ref(Layer_Record)}(layer)
+  val lr = ptr2layer(layer)
   val idx = tile_hash(tx, ty)
-  val slot = ptr_add<ptr>(lr->buckets, idx)
-  val head = $UN.ptr0_get<ptr>(slot)
+  val head = mp_slot_get(ptr_add<ptr>(lr->buckets, idx))
 in
   find_tile_in_bucket(head, tx, ty)
 end
 
 // --- Tile Oluşturma (1024x1024 - 4MB Sparse Allocation) ---
-fun alloc_tile(tx: int, ty: int, next_bucket: ptr, next_layer: ptr): ptr = let
-  val p = malloc(sizeof<CanvasTile>)
-  val t = $UN.cast{ref(CanvasTile)}(p)
-  val () = t->tx := tx
-  val () = t->ty := ty
-
+fn init_tile_texture_and_fbo(): @(GLuint, GLuint) = let
   var tex_id: GLuint
   var fbo_id: GLuint
   val () = glGenTextures(1, tex_id)
@@ -163,16 +173,23 @@ fun alloc_tile(tx: int, ty: int, next_bucket: ptr, next_layer: ptr): ptr = let
   val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
   val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
   val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-
   val () = glGenFramebuffers(1, fbo_id)
   val () = glBindFramebuffer(GL_FRAMEBUFFER, fbo_id)
   val () = glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex_id, 0)
-
   val () = glClearColor(0.0f, 0.0f, 0.0f, 0.0f)
   val () = glClear(GL_COLOR_BUFFER_BIT)
   val () = glBindFramebuffer(GL_FRAMEBUFFER, 0u)
   val () = glBindTexture(GL_TEXTURE_2D, 0u)
+in
+  @(tex_id, fbo_id)
+end
 
+fun alloc_tile(tx: int, ty: int, next_bucket: ptr, next_layer: ptr): ptr = let
+  val p = malloc(sizeof<CanvasTile>)
+  val t = ptr2tile(p)
+  val @(tex_id, fbo_id) = init_tile_texture_and_fbo()
+  val () = t->tx := tx
+  val () = t->ty := ty
   val () = t->texture := tex_id
   val () = t->fbo := fbo_id
   val () = t->next_in_bucket := next_bucket
@@ -182,16 +199,16 @@ in
 end
 
 implement layer_get_or_create_tile(layer, tx, ty) = let
-  val lr = $UN.cast{ref(Layer_Record)}(layer)
+  val lr = ptr2layer(layer)
   val found = layer_find_tile(layer, tx, ty)
 in
   if found != the_null_ptr then found
   else let
     val idx = tile_hash(tx, ty)
     val slot = ptr_add<ptr>(lr->buckets, idx)
-    val old_head = $UN.ptr0_get<ptr>(slot)
+    val old_head = mp_slot_get(slot)
     val nt = alloc_tile(tx, ty, old_head, lr->tiles)
-    val () = $UN.ptr0_set<ptr>(slot, nt)
+    val () = mp_slot_set(slot, nt)
     val () = lr->tiles := nt
     val () = lr->tile_count := lr->tile_count + 1
   in
@@ -201,15 +218,13 @@ end
 
 // --- Tile Çizim Bağlantısı (FBO + Projeksiyon) ---
 implement layer_bind_tile(tile) = let
-  val t = $UN.cast{ref(CanvasTile)}(tile)
+  val t = ptr2tile(tile)
   val () = glBindFramebuffer(GL_FRAMEBUFFER, t->fbo)
   val () = glViewport(0, 0, 1024, 1024)
-
   val tx_f = g0int2float(t->tx) * 1024.0f
   val ty_f = g0int2float(t->ty) * 1024.0f
   val tx1_f = tx_f + 1024.0f
   val ty1_f = ty_f + 1024.0f
-
   val () = glMatrixMode(GL_PROJECTION)
   val () = glPushMatrix()
   val () = glLoadIdentity()
@@ -235,49 +250,44 @@ implement layer_unbind_tile() = let
   val () = glBindFramebuffer(GL_FRAMEBUFFER, 0u)
 in () end
 
-// --- Görünür Tile'ları Ekrana Çizme (Frustum Culling ile) ---
+// --- Görünür Tile'ları Ekrana Çizme ---
+fn render_tile_quad(
+  tex: GLuint, u0: float, u1: float, v0: float, v1: float,
+  x0: float, y0: float, x1: float, y1: float
+): void = let
+  val () = glBindTexture(GL_TEXTURE_2D, tex)
+  val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+  val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+  val () = glBegin(GL_QUADS)
+  val () = (glTexCoord2f(u0, v1); glVertex2f(x0, y0))
+  val () = (glTexCoord2f(u1, v1); glVertex2f(x1, y0))
+  val () = (glTexCoord2f(u1, v0); glVertex2f(x1, y1))
+  val () = (glTexCoord2f(u0, v0); glVertex2f(x0, y1))
+  val () = glEnd()
+in () end
+
 fun draw_tiles_rec(cur: ptr, vl: float, vt: float, vr: float, vb: float, zoom: float): void =
   if cur = the_null_ptr then ()
   else let
-    val t = $UN.cast{ref(CanvasTile)}(cur)
+    val t = ptr2tile(cur)
     val x0 = g0int2float(t->tx) * 1024.0f
     val y0 = g0int2float(t->ty) * 1024.0f
-    val x1 = x0 + 1024.0f
-    val y1 = y0 + 1024.0f
-    // Yarım ekran pikseli: birleşim çizgisi rasterda düşmesin, yakınlaşınca da şerit olmasın.
     val bleed = g0float_div_float(0.5f, zoom)
     val du = g0float_div_float(bleed, 1024.0f)
     val x0e = g0float_sub_float(x0, bleed)
     val y0e = g0float_sub_float(y0, bleed)
-    val x1e = g0float_add_float(x1, bleed)
-    val y1e = g0float_add_float(y1, bleed)
-    val u0 = g0float_sub_float(0.0f, du)
-    val u1 = g0float_add_float(1.0f, du)
-    val v0 = g0float_sub_float(0.0f, du)
-    val v1 = g0float_add_float(1.0f, du)
-
+    val x1e = g0float_add_float(x0 + 1024.0f, bleed)
+    val y1e = g0float_add_float(y0 + 1024.0f, bleed)
     val visible = (x1e >= vl) && (x0e <= vr) && (y1e >= vt) && (y0e <= vb)
-    val () = if visible then let
-      val () = glBindTexture(GL_TEXTURE_2D, t->texture)
-      val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-      val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-      val () = glBegin(GL_QUADS)
-      val () = glTexCoord2f(u0, v1)
-      val () = glVertex2f(x0e, y0e)
-      val () = glTexCoord2f(u1, v1)
-      val () = glVertex2f(x1e, y0e)
-      val () = glTexCoord2f(u1, v0)
-      val () = glVertex2f(x1e, y1e)
-      val () = glTexCoord2f(u0, v0)
-      val () = glVertex2f(x0e, y1e)
-      val () = glEnd()
-    in () end else ()
+    val () = if visible then
+      render_tile_quad(t->texture, ~du, 1.0f + du, ~du, 1.0f + du, x0e, y0e, x1e, y1e)
+    else ()
   in
     draw_tiles_rec(t->next_in_layer, vl, vt, vr, vb, zoom)
   end
 
 implement layer_draw_tiles(layer, vl, vt, vr, vb, zoom) = let
-  val lr = $UN.cast{ref(Layer_Record)}(layer)
+  val lr = ptr2layer(layer)
 in
   if lr->tiles != the_null_ptr then let
     val () = glEnable(GL_TEXTURE_2D)
@@ -293,7 +303,7 @@ end
 fun free_tiles_rec(cur: ptr): void =
   if cur = the_null_ptr then ()
   else let
-    val t = $UN.cast{ref(CanvasTile)}(cur)
+    val t = ptr2tile(cur)
     val next = t->next_in_layer
     var tex: GLuint = t->texture
     var fbo: GLuint = t->fbo
@@ -305,21 +315,20 @@ fun free_tiles_rec(cur: ptr): void =
   end
 
 implement layer_clear(layer) = let
-  val lr = $UN.cast{ref(Layer_Record)}(layer)
+  val lr = ptr2layer(layer)
   val () = free_tiles_rec(lr->tiles)
   val () = lr->tiles := the_null_ptr
   val () = lr->tile_count := 0
-
   fun clear_buckets(i: int): void =
     if i < TILE_HASH_SIZE then let
-      val () = $UN.ptr0_set<ptr>(ptr_add<ptr>(lr->buckets, i), the_null_ptr)
+      val () = mp_slot_set(ptr_add<ptr>(lr->buckets, i), the_null_ptr)
     in clear_buckets(i + 1) end else ()
-
-  val () = clear_buckets(0)
-in () end
+in
+  clear_buckets(0)
+end
 
 implement layer_destroy(layer) = let
-  val lr = $UN.cast{ref(Layer_Record)}(layer)
+  val lr = ptr2layer(layer)
   val () = layer_clear(layer)
   val () = free(lr->buckets)
   val () = free(layer)
