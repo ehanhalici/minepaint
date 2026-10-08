@@ -13,6 +13,11 @@
 
 #define RNG_DOUBLE_SIZE 240
 
+// Durum düzeni (double dizisi): [0..9] u, [10..28] buf, sonra arr_pos (int).
+// Öz-referanslı pointer yerine buf içindeki konum indeks olarak tutulur.
+#define RNG_ARR_POS_BYTE_OFFSET 232
+#define RNG_ARR_NONE (~1)
+
 extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
 
@@ -47,14 +52,15 @@ end
 fn mp_rng_get_buf_ptr(s: ptr, i: int): ptr =
   ptr_add<double>(s, 10 + i)
 
-fn mp_rng_get_arr_ptr(s: ptr): ptr = let
-  val a = ptr2parr{1}(ptr_add<double>(s, 29))
+// Okuma konumu: buf içinde indeks; RNG_ARR_NONE ise tampon henüz hazır değil.
+fn mp_rng_get_arr_pos(s: ptr): int = let
+  val a = ptr2iarr{1}(ptr_add<byte>(s, RNG_ARR_POS_BYTE_OFFSET))
 in
   a[0]
 end
 
-fn mp_rng_set_arr_ptr(s: ptr, v: ptr): void = let
-  val a = ptr2parr{1}(ptr_add<double>(s, 29))
+fn mp_rng_set_arr_pos(s: ptr, v: int): void = let
+  val a = ptr2iarr{1}(ptr_add<byte>(s, RNG_ARR_POS_BYTE_OFFSET))
 in
   a[0] := v
 end
@@ -170,7 +176,7 @@ implement rng_double_set_seed(self, seed) = let
   val () = seed_init_u(u_ptr, ss_init, ulp)
   val () = seed_outer_loop(u_ptr, seed_masked, TT - 1)
   val () = seed_copy_to_ran_u(self, u_ptr)
-  val () = mp_rng_set_arr_ptr(self, the_null_ptr)
+  val () = mp_rng_set_arr_pos(self, RNG_ARR_NONE)
 in () end
 
 extern fun rng_double_cycle(self: ptr): double = "ext#rng_double_cycle"
@@ -178,21 +184,21 @@ implement rng_double_cycle(self) = let
   val buf_ptr = mp_rng_get_buf_ptr(self, 0)
   val () = rng_double_get_array(self, buf_ptr, QUALITY)
   val () = mp_rng_set_buf(self, KK, ~1.0)
-  val () = mp_rng_set_arr_ptr(self, mp_rng_get_buf_ptr(self, 1))
+  val () = mp_rng_set_arr_pos(self, 1)
 in
   mp_rng_get_buf(self, 0)
 end
 
 extern fun rng_double_next(self: ptr): double = "ext#rng_double_next"
 implement rng_double_next(self) = let
-  val p = mp_rng_get_arr_ptr(self)
+  val pos = mp_rng_get_arr_pos(self)
 in
-  if p = the_null_ptr then rng_double_cycle(self)
+  if pos < 0 then rng_double_cycle(self)
   else let
-    val v = mp_arr_dget(p, 0)
+    val v = mp_rng_get_buf(self, pos)
   in
     if v >= 0.0 then let
-      val () = mp_rng_set_arr_ptr(self, ptr_add<double>(p, 1))
+      val () = mp_rng_set_arr_pos(self, pos + 1)
     in v end
     else rng_double_cycle(self)
   end
@@ -203,7 +209,7 @@ implement rng_double_new(seed) = let
   val sz = g0int2uint_int_size(RNG_DOUBLE_SIZE)
   val p = malloc(sz)
   val () = assertloc(p > the_null_ptr)
-  val () = mp_rng_set_arr_ptr(p, the_null_ptr)
+  val () = mp_rng_set_arr_pos(p, RNG_ARR_NONE)
   val () = rng_double_set_seed(p, seed)
 in
   p

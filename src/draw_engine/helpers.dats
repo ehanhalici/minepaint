@@ -71,36 +71,6 @@ in
   end
 end
 
-// 32-bit XorShift Rastgele Sayı Üreticisi (PRNG) - Saf ATS2
-typedef rng_state = ref(uint)
-
-fun rng_create(seed: uint): rng_state =
-  ref(if g0uint_eq_uint(seed, 0U) then 2463534242U else seed)
-
-fun rng_next_double(r: rng_state): double = let
-  val x = !r
-  val x1 = g0uint_lxor_uint(x, g0uint_lsl_uint(x, 13))
-  val x2 = g0uint_lxor_uint(x1, g0uint_lsr_uint(x1, 17))
-  val x3 = g0uint_lxor_uint(x2, g0uint_lsl_uint(x2, 5))
-  val () = !r := x3
-  val pos = g0uint_lsr_uint(x3, 1)
-  val pos_int: int = g0uint2int_uint_int(pos)
-in
-  g0int2float_int_double(pos_int) / 2147483648.0
-end
-
-// Gauss Dağılımı (Merkezi Limit Teoremi) - Saf ATS2
-fun rng_rand_gauss(r: rng_state): float = let
-  val s1 = rng_next_double(r)
-  val s2 = rng_next_double(r)
-  val s3 = rng_next_double(r)
-  val s4 = rng_next_double(r)
-  val sum = s1 + s2 + s3 + s4
-  val gauss = sum * 1.73205080757 - 3.46410161514
-in
-  g0float2float_double_float(gauss)
-end
-
 // Spektral Katsayı Tabloları (Pattern Matching, < 15 satır)
 fn get_spectral_r(i: int): float =
   case+ i of
