@@ -1,9 +1,6 @@
 // src/window/input.dats
-#define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
-
-staload "sys/libc.dats"
 
 // --- Araç Türleri (Platform-Bağımsız) ---
 #define INPUT_TOOL_MOUSE 0
@@ -24,27 +21,13 @@ typedef InputState = @{
   last_time= double
 }
 
-extern castfn ptr2input_state(p: ptr): ref(InputState) = "mac#"
+val g_in = ref<InputState>(@{
+  tool= INPUT_TOOL_MOUSE,
+  pressure= INPUT_DEFAULT_PRESSURE,
+  last_time= 0.0
+})
 
-extern fun slot_input_get(): ptr = "ext#slot_input_get"
-extern fun slot_input_set(p: ptr): void = "ext#slot_input_set"
-
-// --- Durum Bellek Yönetimi ---
-fn input_state_ref(): ref(InputState) = let
-  val p = slot_input_get()
-in
-  if p != the_null_ptr then ptr2input_state(p)
-  else let
-    val np = malloc(sizeof<InputState>)
-    val st = ptr2input_state(np)
-    val () = st->tool := INPUT_TOOL_MOUSE
-    val () = st->pressure := INPUT_DEFAULT_PRESSURE
-    val () = st->last_time := 0.0
-    val () = slot_input_set(np)
-  in
-    st
-  end
-end
+fn input_state_ref(): ref(InputState) = g_in
 
 // --- Basınç Değeri Yardımcıları ---
 extern fun input_get_default_pressure(): float = "ext#input_get_default_pressure"

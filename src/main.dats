@@ -17,10 +17,10 @@ staload "app/ui.dats"
 #dynload "src/canvas/stroke_queue.dats"
 #dynload "src/canvas/canvas.dats"
 #dynload "src/ui/state.dats"
+#dynload "src/window/input.dats"
 
 val g_slot_settings = ref<ptr>(the_null_ptr)
 val g_slot_inputs = ref<ptr>(the_null_ptr)
-val g_slot_input = ref<ptr>(the_null_ptr)
 val g_slot_xi2 = ref<ptr>(the_null_ptr)
 
 extern fun slot_settings_get(): ptr = "ext#slot_settings_get"
@@ -32,11 +32,6 @@ extern fun slot_inputs_get(): ptr = "ext#slot_inputs_get"
 implement slot_inputs_get() = !g_slot_inputs
 extern fun slot_inputs_set(p: ptr): void = "ext#slot_inputs_set"
 implement slot_inputs_set(p) = !g_slot_inputs := p
-
-extern fun slot_input_get(): ptr = "ext#slot_input_get"
-implement slot_input_get() = !g_slot_input
-extern fun slot_input_set(p: ptr): void = "ext#slot_input_set"
-implement slot_input_set(p) = !g_slot_input := p
 
 extern fun slot_xi2_get(): ptr = "ext#slot_xi2_get"
 implement slot_xi2_get() = !g_slot_xi2
