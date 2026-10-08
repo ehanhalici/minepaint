@@ -10,7 +10,7 @@ staload "canvas/layer.dats"
 staload "brushes/brush_group.sats"
 
 typedef canvas_state_record = @{
-  brush= ptr,
+  brush= int,
   surf= ptr,
   layer= ptr,
   cam_x= float,
@@ -47,9 +47,9 @@ extern fun glClear(mask: int): void = "mac#"
 extern fun glTranslatef(x: float, y: float, z: float): void = "mac#"
 extern fun glScalef(x: float, y: float, z: float): void = "mac#"
 
-extern fun minepaint_brush_reset(brush: ptr): void = "ext#minepaint_brush_reset"
-extern fun minepaint_brush_set_base_value(brush: ptr, setting: int, value: float): void = "ext#minepaint_brush_set_base_value"
-extern fun minepaint_brush_get_base_value(brush: ptr, setting: int): float = "ext#minepaint_brush_get_base_value"
+extern fun minepaint_brush_reset(brush: int): void = "ext#minepaint_brush_reset"
+extern fun minepaint_brush_set_base_value(brush: int, setting: int, value: float): void = "ext#minepaint_brush_set_base_value"
+extern fun minepaint_brush_get_base_value(brush: int, setting: int): float = "ext#minepaint_brush_get_base_value"
 
 extern fun get_time_seconds(): double = "ext#get_time_seconds"
 fn i2f(i: int): float = g0int2float_int_float(i)
@@ -61,19 +61,19 @@ fn f_mul(a: float, b: float): float = g0float_mul_float(a, b)
 fn f_div(a: float, b: float): float = g0float_div_float(a, b)
 
 // Stroke Queue API
-extern fun stroke_queue_teleport(brush: ptr, surf: ptr, x: float, y: float): void = "ext#stroke_queue_teleport"
+extern fun stroke_queue_teleport(brush: int, surf: ptr, x: float, y: float): void = "ext#stroke_queue_teleport"
 extern fun stroke_queue_start(wx: float, wy: float, pressure: float): int = "ext#stroke_queue_start"
 extern fun stroke_queue_step(
-  layer: ptr, brush: ptr, surf: ptr, zoom: float,
+  layer: ptr, brush: int, surf: ptr, zoom: float,
   qh: int, wx: float, wy: float, pressure: float, elapsed: double
 ): int = "ext#stroke_queue_step"
 extern fun stroke_queue_finish(
-  layer: ptr, brush: ptr, surf: ptr, zoom: float, qh: int
+  layer: ptr, brush: int, surf: ptr, zoom: float, qh: int
 ): void = "ext#stroke_queue_finish"
 extern fun stroke_queue_free(qh: int): void = "ext#stroke_queue_free"
 
-extern fun minepaint_brush_apply_startup(b: ptr): void = "ext#minepaint_brush_apply_startup"
-extern fun catalog_apply_brush(b: ptr, g: BrushGroup, i: int): void = "ext#catalog_apply_brush"
+extern fun minepaint_brush_apply_startup(b: int): void = "ext#minepaint_brush_apply_startup"
+extern fun catalog_apply_brush(b: int, g: BrushGroup, i: int): void = "ext#catalog_apply_brush"
 
 // --- Render Yardımcıları (SLAP, SRP) ---
 fn setup_canvas_viewport(w: int, h: int): void = {
@@ -219,7 +219,7 @@ implement canvas_set_brush_color(p, r, g, b) = let
   val @(h, s, v) = rgb_to_hsv(r, g, b)
   val st = ptr2canvas(p)
 in
-  if st->brush != the_null_ptr then {
+  if st->brush >= 0 then {
     val () = minepaint_brush_set_base_value(st->brush, MINEPAINT_BRUSH_SETTING_COLOR_H, h)
     val () = minepaint_brush_set_base_value(st->brush, MINEPAINT_BRUSH_SETTING_COLOR_S, s)
     val () = minepaint_brush_set_base_value(st->brush, MINEPAINT_BRUSH_SETTING_COLOR_V, v)
@@ -230,32 +230,32 @@ extern fun canvas_set_brush_setting(p: ptr, id: int, v: float): void = "ext#canv
 implement canvas_set_brush_setting(p, id, v) = let
   val st = ptr2canvas(p)
 in
-  if st->brush != the_null_ptr then minepaint_brush_set_base_value(st->brush, id, v) else ()
+  if st->brush >= 0 then minepaint_brush_set_base_value(st->brush, id, v) else ()
 end
 
 extern fun canvas_apply_startup(p: ptr): void = "ext#canvas_apply_startup"
 implement canvas_apply_startup(p) = let
   val st = ptr2canvas(p)
 in
-  if st->brush != the_null_ptr then minepaint_brush_apply_startup(st->brush) else ()
+  if st->brush >= 0 then minepaint_brush_apply_startup(st->brush) else ()
 end
 
 extern fun canvas_apply_catalog_brush(p: ptr, g: BrushGroup, i: int): void = "ext#canvas_apply_catalog_brush"
 implement canvas_apply_catalog_brush(p, g, i) = let
   val st = ptr2canvas(p)
 in
-  if st->brush != the_null_ptr then catalog_apply_brush(st->brush, g, i) else ()
+  if st->brush >= 0 then catalog_apply_brush(st->brush, g, i) else ()
 end
 
 extern fun canvas_get_brush_setting(p: ptr, id: int): float = "ext#canvas_get_brush_setting"
 implement canvas_get_brush_setting(p, id) = let
   val st = ptr2canvas(p)
 in
-  if st->brush != the_null_ptr then minepaint_brush_get_base_value(st->brush, id) else 0.0f
+  if st->brush >= 0 then minepaint_brush_get_base_value(st->brush, id) else 0.0f
 end
 
 // --- Canvas Durum Oluşturucu ---
-extern fun canvas_state_create(brush: ptr): ptr = "ext#canvas_state_create"
+extern fun canvas_state_create(brush: int): ptr = "ext#canvas_state_create"
 implement canvas_state_create(brush) = let
   val surf = glsurface_create()
   val p = malloc(sizeof<canvas_state_record>)

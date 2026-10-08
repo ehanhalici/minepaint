@@ -4,9 +4,9 @@
 
 #include "brushes/brush_helpers.hats"
 
-extern fun draw_engine_brush_set_base_value(b: ptr, id: int, v: float): void = "ext#draw_engine_brush_set_base_value"
-extern fun draw_engine_brush_set_mapping_n(b: ptr, setting: int, input: int, n: int): void = "ext#draw_engine_brush_set_mapping_n"
-extern fun draw_engine_brush_set_mapping_point(b: ptr, setting: int, input: int, index: int, x: float, y: float): void = "ext#draw_engine_brush_set_mapping_point"
+extern fun draw_engine_brush_set_base_value(b: int, id: int, v: float): void = "ext#draw_engine_brush_set_base_value"
+extern fun draw_engine_brush_set_mapping_n(b: int, setting: int, input: int, n: int): void = "ext#draw_engine_brush_set_mapping_n"
+extern fun draw_engine_brush_set_mapping_point(b: int, setting: int, input: int, index: int, x: float, y: float): void = "ext#draw_engine_brush_set_mapping_point"
 
 extern fun dieterle_brush_count(): int = "ext#dieterle_brush_count"
 implement dieterle_brush_count() = 19
@@ -40,7 +40,7 @@ implement dieterle_brush_name(i) =
     table_sget(names, 19, i)
   end
 
-extern fun dieterle_apply(b: ptr, i: int): void = "ext#dieterle_apply"
+extern fun dieterle_apply(b: int, i: int): void = "ext#dieterle_apply"
 implement dieterle_apply(b, i) =
   if (i < 0) || (i >= 19) then ()
   else let

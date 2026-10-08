@@ -7,37 +7,37 @@ staload "brushes/brush_group.sats"
 // Harici Fırça Koleksiyonu İmzaları
 extern fun dieterle_brush_count(): int = "ext#dieterle_brush_count"
 extern fun dieterle_brush_name(i: int): string = "ext#dieterle_brush_name"
-extern fun dieterle_apply(b: ptr, i: int): void = "ext#dieterle_apply"
+extern fun dieterle_apply(b: int, i: int): void = "ext#dieterle_apply"
 
 extern fun classic_brush_count(): int = "ext#classic_brush_count"
 extern fun classic_brush_name(i: int): string = "ext#classic_brush_name"
-extern fun classic_apply(b: ptr, i: int): void = "ext#classic_apply"
+extern fun classic_apply(b: int, i: int): void = "ext#classic_apply"
 
 extern fun deevad_brush_count(): int = "ext#deevad_brush_count"
 extern fun deevad_brush_name(i: int): string = "ext#deevad_brush_name"
-extern fun deevad_apply(b: ptr, i: int): void = "ext#deevad_apply"
+extern fun deevad_apply(b: int, i: int): void = "ext#deevad_apply"
 
 extern fun favorites_brush_count(): int = "ext#favorites_brush_count"
 extern fun favorites_brush_name(i: int): string = "ext#favorites_brush_name"
-extern fun favorites_apply(b: ptr, i: int): void = "ext#favorites_apply"
+extern fun favorites_apply(b: int, i: int): void = "ext#favorites_apply"
 
 extern fun ramon_brush_count(): int = "ext#ramon_brush_count"
 extern fun ramon_brush_name(i: int): string = "ext#ramon_brush_name"
-extern fun ramon_apply(b: ptr, i: int): void = "ext#ramon_apply"
+extern fun ramon_apply(b: int, i: int): void = "ext#ramon_apply"
 
 extern fun experimental_brush_count(): int = "ext#experimental_brush_count"
 extern fun experimental_brush_name(i: int): string = "ext#experimental_brush_name"
-extern fun experimental_apply(b: ptr, i: int): void = "ext#experimental_apply"
+extern fun experimental_apply(b: int, i: int): void = "ext#experimental_apply"
 
 extern fun tanda_brush_count(): int = "ext#tanda_brush_count"
 extern fun tanda_brush_name(i: int): string = "ext#tanda_brush_name"
-extern fun tanda_apply(b: ptr, i: int): void = "ext#tanda_apply"
+extern fun tanda_apply(b: int, i: int): void = "ext#tanda_apply"
 
 extern fun kaerhon_brush_count(): int = "ext#kaerhon_brush_count"
 extern fun kaerhon_brush_name(i: int): string = "ext#kaerhon_brush_name"
-extern fun kaerhon_apply(b: ptr, i: int): void = "ext#kaerhon_apply"
+extern fun kaerhon_apply(b: int, i: int): void = "ext#kaerhon_apply"
 
-extern fun draw_engine_brush_prepare_load(b: ptr): void = "ext#draw_engine_brush_prepare_load"
+extern fun draw_engine_brush_prepare_load(b: int): void = "ext#draw_engine_brush_prepare_load"
 
 // --- Sınır Dönüşümleri (brush_group.sats) ---
 implement brush_group_of_int(g) =
@@ -100,7 +100,7 @@ fn group_get_brush_name(grp: BrushGroup, i: int): string =
   | GroupKaerhon() => kaerhon_brush_name(i)
 
 // Tüketici Örüntü Eşleme: Fırça Uygulama
-fn group_apply_item(grp: BrushGroup, b: ptr, i: int): void =
+fn group_apply_item(grp: BrushGroup, b: int, i: int): void =
   case+ grp of
   | GroupDieterle() => dieterle_apply(b, i)
   | GroupClassic() => classic_apply(b, i)
@@ -124,7 +124,7 @@ implement brush_count(g) = group_get_count(g)
 extern fun brush_name(g: BrushGroup, i: int): string = "ext#brush_name"
 implement brush_name(g, i) = group_get_brush_name(g, i)
 
-extern fun catalog_apply_brush(b: ptr, g: BrushGroup, i: int): void = "ext#catalog_apply_brush"
+extern fun catalog_apply_brush(b: int, g: BrushGroup, i: int): void = "ext#catalog_apply_brush"
 implement catalog_apply_brush(b, g, i) = let
   val () = draw_engine_brush_prepare_load(b)
 in

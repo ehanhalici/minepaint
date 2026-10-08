@@ -9,15 +9,15 @@ staload "canvas/gl_surface.dats"
 #define MINEPAINT_BRUSH_SETTING_SLOW_TRACKING 31
 
 extern fun minepaint_brush_stroke_to(
-  brush: ptr, surf: ptr,
+  brush: int, surf: ptr,
   x: float, y: float, pressure: float,
   xtilt: float, ytilt: float, dtime: double,
   viewzoom: float, viewrotation: float, barrel_rotation: float, dir: int
 ): int = "ext#minepaint_brush_stroke_to"
-extern fun minepaint_brush_reset(brush: ptr): void = "ext#minepaint_brush_reset"
-extern fun minepaint_brush_new_stroke(brush: ptr): void = "ext#minepaint_brush_new_stroke"
-extern fun minepaint_brush_set_base_value(brush: ptr, setting: int, value: float): void = "ext#minepaint_brush_set_base_value"
-extern fun minepaint_brush_get_base_value(brush: ptr, setting: int): float = "ext#minepaint_brush_get_base_value"
+extern fun minepaint_brush_reset(brush: int): void = "ext#minepaint_brush_reset"
+extern fun minepaint_brush_new_stroke(brush: int): void = "ext#minepaint_brush_new_stroke"
+extern fun minepaint_brush_set_base_value(brush: int, setting: int, value: float): void = "ext#minepaint_brush_set_base_value"
+extern fun minepaint_brush_get_base_value(brush: int, setting: int): float = "ext#minepaint_brush_get_base_value"
 
 extern fun sqrtf(x: float): float = "mac#"
 extern fun powf(x: float, y: float): float = "mac#"
@@ -162,7 +162,7 @@ fun push_queue(h: int, pt: input_point): int =
 
 // --- Motora Çizim Gönderme ---
 fun send_stroke_to_engine(
-  layer: ptr, brush: ptr, surf: ptr, zoom: float,
+  layer: ptr, brush: int, surf: ptr, zoom: float,
   x: float, y: float, pressure: float, dtime: double
 ): void = let
   val () = if layer != the_null_ptr then let
@@ -185,7 +185,7 @@ in
 end
 
 fun emit_spline_steps(
-  layer: ptr, brush: ptr, surf: ptr, zoom: float,
+  layer: ptr, brush: int, surf: ptr, zoom: float,
   p0: input_point, p1: input_point, p2: input_point, p3: input_point,
   steps: int, sub_dtime: double, i: int
 ): void =
@@ -199,7 +199,7 @@ fun emit_spline_steps(
 
 // --- Spline Kuyruğunu İşleme ---
 fun process_queue(
-  layer: ptr, brush: ptr, surf: ptr, zoom: float,
+  layer: ptr, brush: int, surf: ptr, zoom: float,
   h: int, force_finish: bool
 ): int = let
   val p1 = next_get(h)
@@ -223,7 +223,7 @@ in
 end
 
 // --- Dışa Aktarılan Stroke Queue API'si ---
-extern fun stroke_queue_teleport(brush: ptr, surf: ptr, x: float, y: float): void = "ext#stroke_queue_teleport"
+extern fun stroke_queue_teleport(brush: int, surf: ptr, x: float, y: float): void = "ext#stroke_queue_teleport"
 implement stroke_queue_teleport(brush, surf, x, y) = let
   val saved_tracking = minepaint_brush_get_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING)
   val () = minepaint_brush_set_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING, 0.0f)
@@ -238,7 +238,7 @@ implement stroke_queue_start(wx, wy, pressure) =
   make_node(@{ x= wx, y= wy, pressure= pressure, time= 0.0 }, STROKE_NONE)
 
 extern fun stroke_queue_step(
-  layer: ptr, brush: ptr, surf: ptr, zoom: float,
+  layer: ptr, brush: int, surf: ptr, zoom: float,
   qh: int, wx: float, wy: float, pressure: float, elapsed: double
 ): int = "ext#stroke_queue_step"
 implement stroke_queue_step(layer, brush, surf, zoom, qh, wx, wy, pressure, elapsed) = let
@@ -249,7 +249,7 @@ in
 end
 
 extern fun stroke_queue_finish(
-  layer: ptr, brush: ptr, surf: ptr, zoom: float, qh: int
+  layer: ptr, brush: int, surf: ptr, zoom: float, qh: int
 ): void = "ext#stroke_queue_finish"
 implement stroke_queue_finish(layer, brush, surf, zoom, qh) = let
   val q1 = process_queue(layer, brush, surf, zoom, qh, true)

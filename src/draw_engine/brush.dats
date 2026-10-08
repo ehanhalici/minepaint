@@ -1,8 +1,7 @@
 // src/draw_engine/brush.dats
-#define ATS_DYNLOADFLAG 0
+// Brush records live in a dynloaded arena. main.dats loads this file.
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
-#include "./engine_safe.hats"
 #include "./minepaint_types.hats"
 
 staload "./settings.dats"
@@ -10,106 +9,167 @@ staload "./helpers.dats"
 staload "./surface.dats"
 #include "./brushsettings_gen.hats"
 
-#define BRUSH_STRUCT_SIZE 1232
+#define BRUSH_CAP 8
+#define BRUSH_NONE (~1)
+#define ST_N 44
+#define BV_N 65
+#define ST_SLOTS 352
+#define BV_SLOTS 520
 
-extern fun malloc(sz: size_t): ptr = "mac#malloc"
-extern fun free(p: ptr): void = "mac#free"
-extern fun memset(p: ptr, v: int, sz: size_t): ptr = "mac#memset"
+val g_alive = arrayref_make_elt<bool>(i2sz(BRUSH_CAP), false)
+val g_reset = arrayref_make_elt<int>(i2sz(BRUSH_CAP), 0)
+val g_rng = arrayref_make_elt<ptr>(i2sz(BRUSH_CAP), the_null_ptr)
+val g_state = arrayref_make_elt<float>(i2sz(ST_SLOTS), 0.0f)
+val g_base = arrayref_make_elt<float>(i2sz(BV_SLOTS), 0.0f)
+val g_val = arrayref_make_elt<float>(i2sz(BV_SLOTS), 0.0f)
+val g_map = arrayref_make_elt<int>(i2sz(BV_SLOTS), 0)
+val g_fresh = ref<int>(0)
+val g_nfree = ref<int>(0)
+val g_free = arrayref_make_elt<int>(i2sz(BRUSH_CAP), 0)
 
-fn mp_brush_alloc(): ptr = let
-  val p = malloc(g0int2uint_int_size(BRUSH_STRUCT_SIZE))
-  val () = assertloc(p > the_null_ptr)
-  val _ = memset(p, 0, g0int2uint_int_size(BRUSH_STRUCT_SIZE))
-  val a = ptr2farr{44}(p)
+fn brush_alive(h: int): bool = let
+  val i = g1ofg0(h)
 in
-  a[35] := ~1.0f;
-  p
+  if (i >= 0) * (i < BRUSH_CAP) then g_alive[i] else false
 end
 
-fn mp_brush_destroy(b: ptr): void = free(b)
+fn alloc_brush(): int =
+  if !g_nfree > 0 then let
+    val n = !g_nfree - 1
+    val () = !g_nfree := n
+    val i = g1ofg0(n)
+  in
+    if (i >= 0) * (i < BRUSH_CAP) then g_free[i] else BRUSH_NONE
+  end else let
+    val n = !g_fresh
+  in
+    if n < BRUSH_CAP then (!g_fresh := n + 1; n) else BRUSH_NONE
+  end
 
-fn mp_brush_get_state(b: ptr, i: int): float = let
-  val a = ptr2farr{44}(b)
-  val idx = g1ofg0(i)
+fn recycle_brush(h: int): void = let
+  val n = !g_nfree
+  val i = g1ofg0(n)
+  val hi = g1ofg0(h)
+  val () = if (i >= 0) * (i < BRUSH_CAP) then g_free[i] := h
+  val () = if (hi >= 0) * (hi < BRUSH_CAP) then g_alive[hi] := false
+  val () = if (hi >= 0) * (hi < BRUSH_CAP) then !g_nfree := n + 1
+in () end
+
+fn st_get(h: int, i: int): float = let
+  val s = g1ofg0(h * ST_N + i)
 in
-  if (idx >= 0) * (idx < 44) then a[idx] else 0.0f
+  if brush_alive(h) * (s >= 0) * (s < ST_SLOTS) then g_state[s] else 0.0f
 end
 
-fn mp_brush_set_state(b: ptr, i: int, v: float): void = let
-  val a = ptr2farr{44}(b)
-  val idx = g1ofg0(i)
+fn st_set(h: int, i: int, v: float): void = let
+  val s = g1ofg0(h * ST_N + i)
 in
-  if (idx >= 0) * (idx < 44) then a[idx] := v else ()
+  if brush_alive(h) * (s >= 0) * (s < ST_SLOTS) then g_state[s] := v else ()
 end
 
-fn mp_brush_get_base(b: ptr, i: int): float = let
-  val a = ptr2farr{65}(ptr_add<float>(b, 44))
-  val idx = g1ofg0(i)
+fn base_get(h: int, i: int): float = let
+  val s = g1ofg0(h * BV_N + i)
 in
-  if (idx >= 0) * (idx < 65) then a[idx] else 0.0f
+  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_base[s] else 0.0f
 end
 
-fn mp_brush_set_base(b: ptr, i: int, v: float): void = let
-  val a = ptr2farr{65}(ptr_add<float>(b, 44))
-  val idx = g1ofg0(i)
+fn base_set(h: int, i: int, v: float): void = let
+  val s = g1ofg0(h * BV_N + i)
 in
-  if (idx >= 0) * (idx < 65) then a[idx] := v else ()
+  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_base[s] := v else ()
 end
 
-fn mp_brush_get_val(b: ptr, i: int): float = let
-  val a = ptr2farr{65}(ptr_add<float>(b, 109))
-  val idx = g1ofg0(i)
+fn val_get(h: int, i: int): float = let
+  val s = g1ofg0(h * BV_N + i)
 in
-  if (idx >= 0) * (idx < 65) then a[idx] else 0.0f
+  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_val[s] else 0.0f
 end
 
-fn mp_brush_set_val(b: ptr, i: int, v: float): void = let
-  val a = ptr2farr{65}(ptr_add<float>(b, 109))
-  val idx = g1ofg0(i)
+fn val_set(h: int, i: int, v: float): void = let
+  val s = g1ofg0(h * BV_N + i)
 in
-  if (idx >= 0) * (idx < 65) then a[idx] := v else ()
+  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_val[s] := v else ()
 end
 
-fn mp_brush_get_reset(b: ptr): int = let
-  val a = ptr2iarr{1}(ptr_add<int>(b, 174))
+fn map_get(h: int, i: int): int = let
+  val s = g1ofg0(h * BV_N + i)
 in
-  a[0]
+  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_map[s] else MAPPING_NONE
 end
 
-fn mp_brush_set_reset(b: ptr, v: int): void = let
-  val a = ptr2iarr{1}(ptr_add<int>(b, 174))
+fn map_set(h: int, i: int, m: int): void = let
+  val s = g1ofg0(h * BV_N + i)
 in
-  a[0] := v
+  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_map[s] := m else ()
 end
 
-fn mp_brush_get_mapping(b: ptr, i: int): int = let
-  val a = ptr2iarr{65}(ptr_add<byte>(b, 704))
-  val idx = g1ofg0(i)
+fn reset_get(h: int): int = let
+  val i = g1ofg0(h)
 in
-  if (idx >= 0) * (idx < 65) then a[idx] else MAPPING_NONE
+  if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_reset[i] else 0
 end
 
-fn mp_brush_set_mapping(b: ptr, i: int, m: int): void = let
-  val a = ptr2iarr{65}(ptr_add<byte>(b, 704))
-  val idx = g1ofg0(i)
+fn reset_set(h: int, v: int): void = let
+  val i = g1ofg0(h)
 in
-  if (idx >= 0) * (idx < 65) then a[idx] := m else ()
+  if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_reset[i] := v else ()
 end
 
-fn mp_brush_get_rng(b: ptr): ptr = let
-  val a = ptr2parr{1}(ptr_add<byte>(b, 1224))
+fn rng_get(h: int): ptr = let
+  val i = g1ofg0(h)
 in
-  a[0]
+  if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_rng[i] else the_null_ptr
 end
 
-fn mp_brush_set_rng(b: ptr, r: ptr): void = let
-  val a = ptr2parr{1}(ptr_add<byte>(b, 1224))
+fn rng_set(h: int, r: ptr): void = let
+  val i = g1ofg0(h)
 in
-  a[0] := r
+  if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_rng[i] := r else ()
 end
 
-fn mp_brush_clear_states(b: ptr): void = let
-  val _ = memset(b, 0, g0int2uint_int_size(44) * sizeof<float>)
+fun zero_state(h: int, i: int): void =
+  if i < ST_N then let
+    val () = st_set(h, i, 0.0f)
+  in zero_state(h, i + 1) end else ()
+
+fun zero_base(h: int, i: int): void =
+  if i < BV_N then let
+    val () = base_set(h, i, 0.0f)
+    val () = val_set(h, i, 0.0f)
+    val () = map_set(h, i, 0)
+  in zero_base(h, i + 1) end else ()
+
+fn mp_brush_alloc(): int = let
+  val h = alloc_brush()
+  val () = assertloc(h >= 0)
+  val i = g1ofg0(h)
+  val () = if (i >= 0) * (i < BRUSH_CAP) then g_alive[i] := true
+  val () = reset_set(h, 0)
+  val () = rng_set(h, the_null_ptr)
+  val () = zero_state(h, 0)
+  val () = zero_base(h, 0)
+  val () = st_set(h, 35, ~1.0f)
+in
+  h
+end
+
+fn mp_brush_destroy(b: int): void = recycle_brush(b)
+
+fn mp_brush_get_state(b: int, i: int): float = st_get(b, i)
+fn mp_brush_set_state(b: int, i: int, v: float): void = st_set(b, i, v)
+fn mp_brush_get_base(b: int, i: int): float = base_get(b, i)
+fn mp_brush_set_base(b: int, i: int, v: float): void = base_set(b, i, v)
+fn mp_brush_get_val(b: int, i: int): float = val_get(b, i)
+fn mp_brush_set_val(b: int, i: int, v: float): void = val_set(b, i, v)
+fn mp_brush_get_reset(b: int): int = reset_get(b)
+fn mp_brush_set_reset(b: int, v: int): void = reset_set(b, v)
+fn mp_brush_get_mapping(b: int, i: int): int = map_get(b, i)
+fn mp_brush_set_mapping(b: int, i: int, m: int): void = map_set(b, i, m)
+fn mp_brush_get_rng(b: int): ptr = rng_get(b)
+fn mp_brush_set_rng(b: int, r: ptr): void = rng_set(b, r)
+
+fn mp_brush_clear_states(b: int): void = let
+  val () = zero_state(b, 0)
 in
   mp_brush_set_state(b, 35, ~1.0f)
 end
@@ -151,7 +211,7 @@ end
 fn is_color_setting(i: int): bool =
   (i = 34) || (i = 35) || (i = 36)
 
-fn reset_setting_default(b: ptr, i: int): void = let
+fn reset_setting_default(b: int, i: int): void = let
   val info_p = minepaint_brush_setting_info(i)
   val s = ptr2setting_info(info_p)
   val m = mp_brush_get_mapping(b, i)
@@ -162,7 +222,7 @@ in
   if m != MAPPING_NONE then clear_mapping_curves(m)
 end
 
-fn reset_settings(b: ptr, keep_color: int): void = let
+fn reset_settings(b: int, keep_color: int): void = let
   fun loop(i: int): void =
     if i < MINEPAINT_BRUSH_SETTINGS_COUNT then let
       val skip = (keep_color > 0) && is_color_setting(i)
@@ -172,7 +232,7 @@ in
   loop(0)
 end
 
-fn alloc_mappings(b: ptr): void = let
+fn alloc_mappings(b: int): void = let
   fun loop(i: int): void =
     if i < MINEPAINT_BRUSH_SETTINGS_COUNT then let
       val m = minepaint_mapping_new(MAPPING_INPUTS)
@@ -182,7 +242,7 @@ in
   loop(0)
 end
 
-fn free_mappings(b: ptr): void = let
+fn free_mappings(b: int): void = let
   fun loop(i: int): void =
     if i < MINEPAINT_BRUSH_SETTINGS_COUNT then let
       val m = mp_brush_get_mapping(b, i)
@@ -193,10 +253,10 @@ in
   loop(0)
 end
 
-extern fun draw_engine_brush_new(): ptr = "ext#draw_engine_brush_new"
+extern fun draw_engine_brush_new(): int = "ext#draw_engine_brush_new"
 implement draw_engine_brush_new() = let
   val p = mp_brush_alloc()
-  val () = assertloc(p > the_null_ptr)
+  val () = assertloc(p >= 0)
   val () = mp_brush_set_reset(p, 1)
   val () = alloc_mappings(p)
   val () = reset_settings(p, 0)
@@ -204,9 +264,9 @@ in
   p
 end
 
-extern fun draw_engine_brush_free(b: ptr): void = "ext#draw_engine_brush_free"
+extern fun draw_engine_brush_free(b: int): void = "ext#draw_engine_brush_free"
 implement draw_engine_brush_free(b) =
-  if b != the_null_ptr then let
+  if b >= 0 then let
     val rng = mp_brush_get_rng(b)
     val () = if rng != the_null_ptr then rng_double_free(rng)
     val () = free_mappings(b)
@@ -214,16 +274,16 @@ implement draw_engine_brush_free(b) =
     mp_brush_destroy(b)
   end
 
-extern fun draw_engine_brush_reset(b: ptr): void = "ext#draw_engine_brush_reset"
+extern fun draw_engine_brush_reset(b: int): void = "ext#draw_engine_brush_reset"
 implement draw_engine_brush_reset(b) =
-  if b != the_null_ptr then mp_brush_set_reset(b, 1)
+  if b >= 0 then mp_brush_set_reset(b, 1)
 
-extern fun draw_engine_brush_new_stroke(b: ptr): void = "ext#draw_engine_brush_new_stroke"
+extern fun draw_engine_brush_new_stroke(b: int): void = "ext#draw_engine_brush_new_stroke"
 implement draw_engine_brush_new_stroke(b) = ()
 
-extern fun draw_engine_brush_set_base_value(b: ptr, id: int, v: float): void = "ext#draw_engine_brush_set_base_value"
+extern fun draw_engine_brush_set_base_value(b: int, id: int, v: float): void = "ext#draw_engine_brush_set_base_value"
 implement draw_engine_brush_set_base_value(b, id, v) =
-  if b != the_null_ptr then
+  if b >= 0 then
     if (id >= 0) * (id < 65) then let
       val m = mp_brush_get_mapping(b, id)
       val () = mp_brush_set_base(b, id, v)
@@ -233,30 +293,30 @@ implement draw_engine_brush_set_base_value(b, id, v) =
     end
 
 extern fun draw_engine_brush_set_mapping_n(
-  b: ptr, setting: int, input: int, n: int
+  b: int, setting: int, input: int, n: int
 ): void = "ext#draw_engine_brush_set_mapping_n"
 implement draw_engine_brush_set_mapping_n(b, setting, input, n) =
-  if b != the_null_ptr then
+  if b >= 0 then
     if (setting >= 0) * (setting < 65) * (input >= 0) * (input < 18) * (n >= 0) * (n <= 64) * (n != 1) then
       minepaint_mapping_set_n(mp_brush_get_mapping(b, setting), input, n)
 
 extern fun draw_engine_brush_set_mapping_point(
-  b: ptr, setting: int, input: int, index: int, x: float, y: float
+  b: int, setting: int, input: int, index: int, x: float, y: float
 ): void = "ext#draw_engine_brush_set_mapping_point"
 implement draw_engine_brush_set_mapping_point(b, setting, input, index, x, y) =
-  if b != the_null_ptr then
+  if b >= 0 then
     if (setting >= 0) * (setting < 65) * (input >= 0) * (input < 18) then
       minepaint_mapping_set_point(mp_brush_get_mapping(b, setting), input, index, x, y)
 
-extern fun draw_engine_brush_prepare_load(b: ptr): void = "ext#draw_engine_brush_prepare_load"
+extern fun draw_engine_brush_prepare_load(b: int): void = "ext#draw_engine_brush_prepare_load"
 implement draw_engine_brush_prepare_load(b) =
-  if b != the_null_ptr then let
+  if b >= 0 then let
     val () = reset_settings(b, 1)
   in
     mp_brush_set_reset(b, 1)
   end
 
-fn apply_startup_base_values(b: ptr): void = let
+fn apply_startup_base_values(b: int): void = let
   val () = reset_settings(b, 0)
   val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_OPAQUE, 1.0f)
   val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_OPAQUE_LINEARIZE, 1.0f)
@@ -275,7 +335,7 @@ in
   draw_engine_brush_set_base_value(b, BRUSH_SETTING_PAINT_MODE, 0.0f)
 end
 
-fn apply_startup_dynamics(b: ptr): void = let
+fn apply_startup_dynamics(b: int): void = let
   val () = draw_engine_brush_set_mapping_n(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 4)
   val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 0, 0.0f, ~1.4f)
   val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 1, 0.8f, 0.0f)
@@ -291,29 +351,29 @@ in
   mp_brush_set_reset(b, 1)
 end
 
-extern fun draw_engine_brush_apply_startup(b: ptr): void = "ext#draw_engine_brush_apply_startup"
+extern fun draw_engine_brush_apply_startup(b: int): void = "ext#draw_engine_brush_apply_startup"
 implement draw_engine_brush_apply_startup(b) =
-  if b != the_null_ptr then let
+  if b >= 0 then let
     val () = apply_startup_base_values(b)
   in
     apply_startup_dynamics(b)
   end
 
-extern fun draw_engine_brush_get_base_value(b: ptr, id: int): float = "ext#draw_engine_brush_get_base_value"
+extern fun draw_engine_brush_get_base_value(b: int, id: int): float = "ext#draw_engine_brush_get_base_value"
 implement draw_engine_brush_get_base_value(b, id) =
-  if b != the_null_ptr then
+  if b >= 0 then
     if (id >= 0) * (id < 65) then mp_brush_get_base(b, id) else 0.0f
   else 0.0f
 
-extern fun draw_engine_brush_get_state(b: ptr, i: int): float = "ext#draw_engine_brush_get_state"
+extern fun draw_engine_brush_get_state(b: int, i: int): float = "ext#draw_engine_brush_get_state"
 implement draw_engine_brush_get_state(b, i) =
-  if b != the_null_ptr then
+  if b >= 0 then
     if (i >= 0) * (i < 44) then mp_brush_get_state(b, i) else 0.0f
   else 0.0f
 
-extern fun draw_engine_brush_set_state(b: ptr, i: int, v: float): void = "ext#draw_engine_brush_set_state"
+extern fun draw_engine_brush_set_state(b: int, i: int, v: float): void = "ext#draw_engine_brush_set_state"
 implement draw_engine_brush_set_state(b, i, v) =
-  if b != the_null_ptr then
+  if b >= 0 then
     if (i >= 0) * (i < 44) then mp_brush_set_state(b, i, v)
 
 fn clamp_radius(r_exp: float): float =
@@ -321,7 +381,7 @@ fn clamp_radius(r_exp: float): float =
   else if r_exp > 1000.0f then 1000.0f
   else r_exp
 
-fn calc_actual_rad(b: ptr, base_radius: float): float = let
+fn calc_actual_rad(b: int, base_radius: float): float = let
   val cur_rad = mp_brush_get_state(b, BRUSH_STATE_ACTUAL_RADIUS)
 in
   if cur_rad <= 0.001f then let
@@ -330,7 +390,7 @@ in
   else cur_rad
 end
 
-fn calc_dab_rates(b: ptr): @(float, float, float) = let
+fn calc_dab_rates(b: int): @(float, float, float) = let
   val dabs_act_st = mp_brush_get_state(b, BRUSH_STATE_DABS_PER_ACTUAL_RADIUS)
   val dabs_bas_st = mp_brush_get_state(b, BRUSH_STATE_DABS_PER_BASIC_RADIUS)
   val dabs_sec_st = mp_brush_get_state(b, BRUSH_STATE_DABS_PER_SECOND)
@@ -342,7 +402,7 @@ in
   @(dabs_actual, dabs_basic, dabs_sec)
 end
 
-fun count_dabs_to(b: ptr, x: float, y: float, dt: float): float = let
+fun count_dabs_to(b: int, x: float, y: float, dt: float): float = let
   val base_radius = clamp_radius(expf(mp_brush_get_base(b, BRUSH_SETTING_RADIUS_LOGARITHMIC)))
   val actual_rad = calc_actual_rad(b, base_radius)
   val dx = f_sub(x, mp_brush_get_state(b, BRUSH_STATE_X))
@@ -357,7 +417,7 @@ in
   if total < 0.0f then 0.0f else total
 end
 
-fn jitter_rng(b: ptr): ptr = let
+fn jitter_rng(b: int): ptr = let
   val p = mp_brush_get_rng(b)
 in
   if p = the_null_ptr then let
@@ -403,7 +463,7 @@ in
 end
 
 fn populate_input_buffer(
-  b: ptr, in_p: &(@[float][MAPPING_INPUTS]), cur_p: float, viewzoom: float, base_radius_log: float
+  b: int, in_p: &(@[float][MAPPING_INPUTS]), cur_p: float, viewzoom: float, base_radius_log: float
 ): void = let
   val gain = expf(mp_brush_get_base(b, BRUSH_SETTING_PRESSURE_GAIN_LOG))
   val zoom_lin = if viewzoom < 0.01f then 0.01f else viewzoom
@@ -421,7 +481,7 @@ in
 end
 
 fun eval_mapping_slot(
-  b: ptr, in_p: &(@[float][MAPPING_INPUTS]), i: int
+  b: int, in_p: &(@[float][MAPPING_INPUTS]), i: int
 ): void =
   if i < MINEPAINT_BRUSH_SETTINGS_COUNT then let
     val m = mp_brush_get_mapping(b, i)
@@ -430,11 +490,11 @@ fun eval_mapping_slot(
   in eval_mapping_slot(b, in_p, i + 1) end
   else ()
 
-fn eval_mappings(b: ptr, in_p: &(@[float][MAPPING_INPUTS])): void =
+fn eval_mappings(b: int, in_p: &(@[float][MAPPING_INPUTS])): void =
   eval_mapping_slot(b, in_p, 0)
 
 fn update_tracking_speed(
-  b: ptr, cur_x: float, cur_y: float, norm_speed: float, step_ddab: float, dt: float
+  b: int, cur_x: float, cur_y: float, norm_speed: float, step_ddab: float, dt: float
 ): void = let
   val slow_tracking_per_dab = mp_brush_get_val(b, BRUSH_SETTING_SLOW_TRACKING_PER_DAB)
   val fac = f_sub(1.0f, engine_exp_decay(slow_tracking_per_dab, step_ddab))
@@ -455,7 +515,7 @@ in
   mp_brush_set_state(b, BRUSH_STATE_NORM_SPEED2_SLOW, f_add(old_s2, f_mul(f_sub(norm_speed, old_s2), fac2)))
 end
 
-fn update_actual_geometry(b: ptr): void = let
+fn update_actual_geometry(b: int): void = let
   val rad_log = mp_brush_get_val(b, BRUSH_SETTING_RADIUS_LOGARITHMIC)
   val rad_clamped = clamp_radius(expf(rad_log))
   val () = mp_brush_set_state(b, BRUSH_STATE_ACTUAL_RADIUS, rad_clamped)
@@ -465,7 +525,7 @@ in
 end
 
 fun update_states(
-  b: ptr,
+  b: int,
   step_ddab: float, step_dx: float, step_dy: float,
   step_dpress: float, step_dtime: float, viewzoom: float
 ): void = let
@@ -498,7 +558,7 @@ in
   update_actual_geometry(b)
 end
 
-fn compute_opaque_final(b: ptr): float = let
+fn compute_opaque_final(b: int): float = let
   val opaque_fac = mp_brush_get_val(b, BRUSH_SETTING_OPAQUE_MULTIPLY)
   val opaque_raw0 = mp_brush_get_val(b, BRUSH_SETTING_OPAQUE)
   val opaque_pos = if opaque_raw0 < 0.0f then 0.0f else opaque_raw0
@@ -534,7 +594,7 @@ in
   else @(radius_raw, hardness)
 end
 
-fun prepare_and_draw_dab(b: ptr, surf: ptr): int = let
+fun prepare_and_draw_dab(b: int, surf: ptr): int = let
   val opaque_final = compute_opaque_final(b)
   val jitter = mp_brush_get_val(b, BRUSH_SETTING_OFFSET_BY_RANDOM)
   val amp = if g0float_gt(jitter, 0.0f) then jitter else 0.0f
@@ -578,7 +638,7 @@ in
   )
 end
 
-fn reset_stroke_state(b: ptr, x: float, y: float, p_clean: float): int = let
+fn reset_stroke_state(b: int, x: float, y: float, p_clean: float): int = let
   val () = mp_brush_set_reset(b, 0)
   val () = mp_brush_clear_states(b)
   val () = mp_brush_set_state(b, BRUSH_STATE_X, x)
@@ -597,7 +657,7 @@ in
 end
 
 fun dab_loop(
-  b: ptr, surf: ptr, target_x: float, target_y: float, p_clean: float,
+  b: int, surf: ptr, target_x: float, target_y: float, p_clean: float,
   dtime_left: double, dabs_moved: float, dabs_todo: float, viewzoom: float
 ): @(double, float, float) =
   if f_add(dabs_moved, dabs_todo) >= 1.0f then let
@@ -626,7 +686,7 @@ fun dab_loop(
   else @(dtime_left, dabs_moved, dabs_todo)
 
 extern fun draw_engine_brush_stroke_to(
-    b: ptr, surf: ptr,
+    b: int, surf: ptr,
     x: float, y: float, pressure: float,
     xtilt: float, ytilt: float, dtime: double,
     viewzoom: float, viewrotation: float, barrel_rotation: float, linear: int
@@ -634,7 +694,7 @@ extern fun draw_engine_brush_stroke_to(
 implement draw_engine_brush_stroke_to(
   b, surf, x, y, pressure, xtilt, ytilt, dtime, viewzoom, viewrotation, barrel_rotation, linear
 ) =
-  if b = the_null_ptr then 1
+  if b < 0 then 1
   else let
     val p_clean = if pressure < 0.0f then 0.0f else pressure
     val dt_clean = if dtime <= 0.0 then 0.0001 else dtime

@@ -24,13 +24,13 @@ in
   if (i >= 0) * (i < nsz) then a[i] else ""
 end
 
-extern fun draw_engine_brush_set_base_value(b: ptr, id: int, v: float): void = "ext#draw_engine_brush_set_base_value"
-extern fun draw_engine_brush_set_mapping_n(b: ptr, setting: int, input: int, n: int): void = "ext#draw_engine_brush_set_mapping_n"
-extern fun draw_engine_brush_set_mapping_point(b: ptr, setting: int, input: int, index: int, x: float, y: float): void = "ext#draw_engine_brush_set_mapping_point"
+extern fun draw_engine_brush_set_base_value(b: int, id: int, v: float): void = "ext#draw_engine_brush_set_base_value"
+extern fun draw_engine_brush_set_mapping_n(b: int, setting: int, input: int, n: int): void = "ext#draw_engine_brush_set_mapping_n"
+extern fun draw_engine_brush_set_mapping_point(b: int, setting: int, input: int, index: int, x: float, y: float): void = "ext#draw_engine_brush_set_mapping_point"
 
 fun {npt:int}
 apply_points(
-  b: ptr, sid: int, inp: int, p0: int, pi: int, n: int,
+  b: int, sid: int, inp: int, p0: int, pi: int, n: int,
   xs: &(@[float][npt]), np: int(npt), ys: &(@[float][npt])
 ): void =
   if pi < n then let
@@ -41,7 +41,7 @@ apply_points(
 
 fun {ncurve,npt:int}
 apply_curves(
-  b: ptr, sid: int, c: int, c1: int,
+  b: int, sid: int, c: int, c1: int,
   inps: &(@[int][ncurve]), nc: int(ncurve),
   p0s: &(@[int][ncurve]), pns: &(@[int][ncurve]),
   xs: &(@[float][npt]), np: int(npt), ys: &(@[float][npt])
@@ -58,7 +58,7 @@ apply_curves(
 
 fun {nset,ncurve,npt:int}
 brush_apply_range(
-  b: ptr, k: int, kend: int,
+  b: int, k: int, kend: int,
   sids: &(@[int][nset]), ns: int(nset),
   bases: &(@[float][nset]),
   c0s: &(@[int][nset]), c1s: &(@[int][nset]),

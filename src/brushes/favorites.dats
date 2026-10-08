@@ -8,5 +8,5 @@ implement favorites_brush_count() = 0
 extern fun favorites_brush_name(i: int): string = "ext#favorites_brush_name"
 implement favorites_brush_name(i) = ""
 
-extern fun favorites_apply(b: ptr, i: int): void = "ext#favorites_apply"
+extern fun favorites_apply(b: int, i: int): void = "ext#favorites_apply"
 implement favorites_apply(b, i) = ()

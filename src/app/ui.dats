@@ -2,9 +2,9 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-extern fun minepaint_brush_new(): ptr = "ext#minepaint_brush_new"
-extern fun minepaint_brush_apply_startup(brush: ptr): void = "ext#minepaint_brush_apply_startup"
-extern fun canvas_state_create(brush: ptr): ptr = "ext#canvas_state_create"
+extern fun minepaint_brush_new(): int = "ext#minepaint_brush_new"
+extern fun minepaint_brush_apply_startup(brush: int): void = "ext#minepaint_brush_apply_startup"
+extern fun canvas_state_create(brush: int): ptr = "ext#canvas_state_create"
 extern fun window_create_and_run(canvas_ptr: ptr, ui: ptr): int = "ext#window_create_and_run"
 extern fun ui_state_new(): ptr = "ext#ui_state_new"
 
