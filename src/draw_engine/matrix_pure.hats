@@ -1,4 +1,4 @@
-// Value-level 3x3 affine transforms. Included by matrix.dats and symmetry.dats.
+// Value-level 3x3 affine transforms. Included by symmetry.dats and tiled_surface.dats.
 // One definition of the arithmetic, no pointers.
 
 extern fun cosf(x: float): float = "mac#cosf"

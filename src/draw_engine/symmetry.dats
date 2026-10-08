@@ -327,21 +327,7 @@ implement minepaint_symmetry_current_angle(h) = f_get(g_cur_ang, h)
 extern fun minepaint_symmetry_current_lines(h: int): float = "ext#minepaint_symmetry_current_lines"
 implement minepaint_symmetry_current_lines(h) = f_get(g_cur_lines, h)
 
-fn write_out(out: &(@[float][9]), t: MinePaintTransform): void = let
-  val () = out[0] := t.r0
-  val () = out[1] := t.r1
-  val () = out[2] := t.r2
-  val () = out[3] := t.r3
-  val () = out[4] := t.r4
-  val () = out[5] := t.r5
-  val () = out[6] := t.r6
-  val () = out[7] := t.r7
-in
-  out[8] := t.r8
-end
-
-extern fun minepaint_symmetry_matrix_load(
-  h: int, idx: int, out: &(@[float][9])
-): void = "ext#minepaint_symmetry_matrix_load"
-implement minepaint_symmetry_matrix_load(h, idx, out) =
-  write_out(out, load_mat(h, idx))
+extern fun minepaint_symmetry_matrix_get(
+  h: int, idx: int
+): MinePaintTransform = "ext#minepaint_symmetry_matrix_get"
+implement minepaint_symmetry_matrix_get(h, idx) = load_mat(h, idx)

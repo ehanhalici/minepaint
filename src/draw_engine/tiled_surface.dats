@@ -7,7 +7,6 @@
 
 staload "./rectangle.dats"
 staload "./bbox.dats"
-staload "./matrix.dats"
 staload "./symmetry.dats"
 staload "./operationqueue.dats"
 staload "./dab.dats"
@@ -16,6 +15,7 @@ staload "./surface.dats"
 staload "./helpers.dats"
 
 #include "./minepaint_types.hats"
+#include "./matrix_pure.hats"
 #define M_PI 3.14159265358979323846f
 
 extern castfn ptr2tiled_surface(p: ptr): ref(MinePaintTiledSurface) = "mac#"
@@ -643,11 +643,9 @@ fn transform_and_draw(
   lock_alpha: float, colorize: float, posterize: float,
   posterize_num: float, paint: float, bbox_index: int
 ): void = let
-  var mbuf = @[float][9](0.0f)
-  var tx: float
-  var ty: float
-  val () = minepaint_symmetry_matrix_load(sym, midx, mbuf)
-  val () = minepaint_transform_point(addr@mbuf, x, y, tx, ty)
+  val t = minepaint_symmetry_matrix_get(sym, midx)
+  val tx = mat_apply_x(t, x, y)
+  val ty = mat_apply_y(t, x, y)
   val _ = draw_dab_internal(
     surface, tx, ty, radius, color_r, color_g, color_b,
     opaque, hardness, softness, color_a, aspect_ratio, dab_angle,
