@@ -1,13 +1,8 @@
-#define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-staload "sys/libc.dats"
 staload "brushes/brush_group.sats"
 staload "ui/widget_drag.sats"
-
-extern fun slot_ui_get(): ptr = "ext#slot_ui_get"
-extern fun slot_ui_set(p: ptr): void = "ext#slot_ui_set"
 
 typedef UIWidgetsState = @{
   edge_hover_time= double,
@@ -35,13 +30,25 @@ typedef UIWidgetsState = @{
   pal= arrayref(float, 36)
 }
 
-extern castfn ptr2uistate(p: ptr): ref(UIWidgetsState)
+val g_pal = arrayref_make_elt<float>(i2sz(36), 0.0f)
+val g_ui = ref<UIWidgetsState>(@{
+  edge_hover_time= 0.0,
+  cur_r= 0.0f, cur_g= 0.0f, cur_b= 0.0f,
+  cur_h= 0.0f, cur_s= 0.0f, cur_v= 0.0f,
+  val0= 0.0f, val1= 0.0f, val2= 0.0f, val3= 0.0f,
+  val4= 0.0f, val5= 0.0f, val6= 0.0f, val7= 0.0f,
+  active_drag= DragNone(),
+  active_group= GroupClassic(),
+  sidebar_visible= 0,
+  active_brush= 0,
+  brush_scroll= 0,
+  panel_h= 0,
+  active_swatch= 0,
+  pal= g_pal
+})
 
 extern fun ui_get(): ref(UIWidgetsState) = "ext#ui_get"
-implement ui_get() = ptr2uistate(slot_ui_get())
-
-extern fun ui_state_install(p: ptr): void = "ext#ui_state_install"
-implement ui_state_install(p) = slot_ui_set(p)
+implement ui_get() = g_ui
 
 fn pal_init_put(p: arrayref(float, 36), i: int, r: float, g: float, b: float): void = let
   val o = g1ofg0(i * 3)
@@ -68,15 +75,11 @@ fn init_palette_colors(p: arrayref(float, 36)): void = {
   val () = pal_init_put(p, 11, 0.55f, 0.35f, 0.20f)
 }
 
-extern fun ui_state_new(): ptr = "ext#ui_state_new"
+extern fun ui_state_new(): void = "ext#ui_state_new"
 implement ui_state_new() = let
   val pal_arr = arrayref_make_elt<float>(i2sz(36), 0.0f)
   val () = init_palette_colors(pal_arr)
-  val sz = sizeof<UIWidgetsState>
-  val p = malloc(sz)
-  val () = assertloc(p > the_null_ptr)
-  val _ = memset(p, 0, sz)
-  val u = ptr2uistate(p)
+  val u = g_ui
   val () = u->edge_hover_time := 0.0
   val () = u->cur_r := 0.73f
   val () = u->cur_g := 0.73f
@@ -101,5 +104,4 @@ implement ui_state_new() = let
   val () = u->active_swatch := ~1
   val () = u->pal := pal_arr
 in
-  p
 end

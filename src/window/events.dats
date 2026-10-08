@@ -7,7 +7,6 @@ staload "x11/xi2.sats"
 staload "window/input.dats"
 staload "gl/gl.dats"
 staload "sys/libc.dats"
-staload "ui/state.dats"
 
 extern fun canvas_render(p: int, canvas_w: int, canvas_h: int): void = "ext#canvas_render"
 extern fun canvas_on_wheel(p: int, mx: int, my: int, dy: int): void = "ext#canvas_on_wheel"
@@ -290,9 +289,8 @@ in
   end else ()
 end
 
-extern fun window_create_and_run(canvas_ptr: int, ui: ptr): int = "ext#window_create_and_run"
-implement window_create_and_run(canvas_ptr, ui) = let
-  val () = ui_state_install(ui)
+extern fun window_create_and_run(canvas_ptr: int): int = "ext#window_create_and_run"
+implement window_create_and_run(canvas_ptr) = let
   val app = app_create(1000, 600, "MinePaint")
 in
   if app = the_null_ptr then 1
