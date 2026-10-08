@@ -14,8 +14,8 @@ staload "ui/draw2d.dats"
 staload "ui/font.dats"
 staload "ui/sidebar_state.dats"
 
-extern fun canvas_set_brush_color(p: ptr, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
-extern fun canvas_apply_catalog_brush(p: ptr, g: BrushGroup, i: int): void = "ext#canvas_apply_catalog_brush"
+extern fun canvas_set_brush_color(p: int, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
+extern fun canvas_apply_catalog_brush(p: int, g: BrushGroup, i: int): void = "ext#canvas_apply_catalog_brush"
 extern fun brush_group_count(): int = "ext#brush_group_count"
 extern fun brush_count(g: BrushGroup): int = "ext#brush_count"
 extern fun brush_name(g: BrushGroup, i: int): string = "ext#brush_name"
@@ -34,10 +34,10 @@ fn select_group_tab(t: int): bool =
 extern fun tab_label(i: int): string = "ext#tab_label"
 extern fun list_visible(sh: float): int = "ext#list_visible"
 extern fun clamp_scroll(scroll: int, count: int, vis: int): int = "ext#clamp_scroll"
-extern fun sync_sliders(canvas_ptr: ptr): void = "ext#sync_sliders"
-extern fun do_reset(canvas_ptr: ptr): void = "ext#do_reset"
+extern fun sync_sliders(canvas_ptr: int): void = "ext#sync_sliders"
+extern fun do_reset(canvas_ptr: int): void = "ext#do_reset"
 extern fun commit_swatch(): void = "ext#commit_swatch"
-extern fun slider_update_from_pct(canvas_ptr: ptr, i: int, pct: float): void = "ext#slider_update_from_pct"
+extern fun slider_update_from_pct(canvas_ptr: int, i: int, pct: float): void = "ext#slider_update_from_pct"
 extern fun slider_get_label(i: int): string = "ext#slider_get_label"
 extern fun slider_get_val(i: int): float = "ext#slider_get_val"
 extern fun slider_get_pct(i: int): float = "ext#slider_get_pct"
@@ -76,7 +76,7 @@ in
   if u->active_drag >= 0 then 1 else 0
 end
 
-extern fun widgets_on_mouse_up(canvas_ptr: ptr): void = "ext#widgets_on_mouse_up"
+extern fun widgets_on_mouse_up(canvas_ptr: int): void = "ext#widgets_on_mouse_up"
 implement widgets_on_mouse_up(canvas_ptr) = let
   val u = ui_get()
 in
@@ -94,7 +94,7 @@ in
   else false
 end
 
-fn activate_swatch(i: int, canvas_ptr: ptr): void = let
+fn activate_swatch(i: int, canvas_ptr: int): void = let
   val u = ui_get()
   val @(pr, pg, pb) = get_palette_color(i)
   val @(ph, ps, pv) = rgb_to_hsv(pr, pg, pb)
@@ -108,7 +108,7 @@ fn activate_swatch(i: int, canvas_ptr: ptr): void = let
   val () = canvas_set_brush_color(canvas_ptr, pr, pg, pb)
 in () end
 
-fn check_swatch_click(mx: float, my: float, canvas_ptr: ptr): bool = let
+fn check_swatch_click(mx: float, my: float, canvas_ptr: int): bool = let
   fun check_pal(i: int): bool =
     if i < 12 then let
       val row = i / 6
@@ -124,7 +124,7 @@ in
   check_pal(0)
 end
 
-fn update_hue(mx: float, canvas_ptr: ptr): void = let
+fn update_hue(mx: float, canvas_ptr: int): void = let
   val u = ui_get()
   val raw_h = f_div(f_sub(mx, 20.0f), 210.0f)
   val h_val = f_clamp(raw_h, 0.0f, 1.0f)
@@ -137,7 +137,7 @@ fn update_hue(mx: float, canvas_ptr: ptr): void = let
   val () = commit_swatch()
 in () end
 
-fn check_hue_bar_click(mx: float, my: float, canvas_ptr: ptr): bool = let
+fn check_hue_bar_click(mx: float, my: float, canvas_ptr: int): bool = let
   val in_hue = (mx >= 20.0f) * (mx <= 230.0f) * (my >= 115.0f) * (my <= 135.0f)
 in
   if in_hue then let
@@ -148,7 +148,7 @@ in
   else false
 end
 
-fn update_sv(mx: float, my: float, canvas_ptr: ptr): void = let
+fn update_sv(mx: float, my: float, canvas_ptr: int): void = let
   val u = ui_get()
   val raw_s = f_div(f_sub(mx, 20.0f), 210.0f)
   val raw_v = f_sub(1.0f, f_div(f_sub(my, 145.0f), 75.0f))
@@ -164,7 +164,7 @@ fn update_sv(mx: float, my: float, canvas_ptr: ptr): void = let
   val () = commit_swatch()
 in () end
 
-fn check_sv_box_click(mx: float, my: float, canvas_ptr: ptr): bool = let
+fn check_sv_box_click(mx: float, my: float, canvas_ptr: int): bool = let
   val in_sv = (mx >= 20.0f) * (mx <= 230.0f) * (my >= 145.0f) * (my <= 220.0f)
 in
   if in_sv then let
@@ -175,7 +175,7 @@ in
   else false
 end
 
-fn check_slider_click(mx: float, my: float, canvas_ptr: ptr): bool = let
+fn check_slider_click(mx: float, my: float, canvas_ptr: int): bool = let
   val u = ui_get()
   fun loop(i: int): bool =
     if i < 8 then let
@@ -193,7 +193,7 @@ in
   loop(0)
 end
 
-fn check_reset_click(mx: float, my: float, canvas_ptr: ptr): bool = let
+fn check_reset_click(mx: float, my: float, canvas_ptr: int): bool = let
   val in_reset = (mx >= 168.0f) * (mx <= 234.0f) * (my >= 492.0f) * (my <= 514.0f)
 in
   if in_reset then (do_reset(canvas_ptr); true)
@@ -216,7 +216,7 @@ in
   loop(0)
 end
 
-fn check_brush_list_click(mx: float, my: float, canvas_ptr: ptr): bool = let
+fn check_brush_list_click(mx: float, my: float, canvas_ptr: int): bool = let
   val u = ui_get()
   val ph = g0int2float(u->panel_h)
   val in_list = (mx >= 16.0f) * (mx <= 234.0f) * (my >= 568.0f) * (f_lt(my, f_sub(ph, 8.0f)))
@@ -237,7 +237,7 @@ in
   end
 end
 
-extern fun widgets_on_mouse_down(mx: float, my: float, btn: int, canvas_ptr: ptr): int = "ext#widgets_on_mouse_down"
+extern fun widgets_on_mouse_down(mx: float, my: float, btn: int, canvas_ptr: int): int = "ext#widgets_on_mouse_down"
 implement widgets_on_mouse_down(mx, my, btn, canvas_ptr) =
   if btn != 1 then 0
   else if check_collapse_button(mx, my, 250.0f) then 1
@@ -250,7 +250,7 @@ implement widgets_on_mouse_down(mx, my, btn, canvas_ptr) =
   else if check_brush_list_click(mx, my, canvas_ptr) then 1
   else 0
 
-extern fun widgets_on_mouse_move(mx: float, my: float, canvas_ptr: ptr): int = "ext#widgets_on_mouse_move"
+extern fun widgets_on_mouse_move(mx: float, my: float, canvas_ptr: int): int = "ext#widgets_on_mouse_move"
 implement widgets_on_mouse_move(mx, my, canvas_ptr) = let
   val u = ui_get()
   val drag = u->active_drag

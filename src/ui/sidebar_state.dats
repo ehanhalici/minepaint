@@ -8,11 +8,11 @@ staload "ui/palette.dats"
 staload "ui/session.dats"
 staload "ui/color.dats"
 
-extern fun canvas_set_brush_setting(p: ptr, id: int, v: float): void = "ext#canvas_set_brush_setting"
-extern fun canvas_set_brush_color(p: ptr, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
-extern fun canvas_apply_startup(p: ptr): void = "ext#canvas_apply_startup"
-extern fun canvas_apply_catalog_brush(p: ptr, g: BrushGroup, i: int): void = "ext#canvas_apply_catalog_brush"
-extern fun canvas_get_brush_setting(p: ptr, id: int): float = "ext#canvas_get_brush_setting"
+extern fun canvas_set_brush_setting(p: int, id: int, v: float): void = "ext#canvas_set_brush_setting"
+extern fun canvas_set_brush_color(p: int, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
+extern fun canvas_apply_startup(p: int): void = "ext#canvas_apply_startup"
+extern fun canvas_apply_catalog_brush(p: int, g: BrushGroup, i: int): void = "ext#canvas_apply_catalog_brush"
+extern fun canvas_get_brush_setting(p: int, id: int): float = "ext#canvas_get_brush_setting"
 extern fun brush_count(g: BrushGroup): int = "ext#brush_count"
 
 fn f_add(a: float, b: float): float = g0float_add_float(a, b)
@@ -100,7 +100,7 @@ in
   f_clamp(raw_pct, 0.0f, 1.0f)
 end
 
-extern fun slider_update_from_pct(canvas_ptr: ptr, i: int, pct: float): void = "ext#slider_update_from_pct"
+extern fun slider_update_from_pct(canvas_ptr: int, i: int, pct: float): void = "ext#slider_update_from_pct"
 implement slider_update_from_pct(canvas_ptr, i, pct) = let
   val @(_, set_id, min_v, max_v, _) = get_slider_info(i)
   val clamped_pct = f_clamp(pct, 0.0f, 1.0f)
@@ -110,7 +110,7 @@ implement slider_update_from_pct(canvas_ptr, i, pct) = let
 in () end
 
 // Fırçadan UI kaydırıcılarına ayar kopyalama
-extern fun sync_sliders(canvas_ptr: ptr): void = "ext#sync_sliders"
+extern fun sync_sliders(canvas_ptr: int): void = "ext#sync_sliders"
 implement sync_sliders(canvas_ptr) = let
   val u = ui_get()
   val () = u->val0 := canvas_get_brush_setting(canvas_ptr, 3)
@@ -124,7 +124,7 @@ implement sync_sliders(canvas_ptr) = let
 in () end
 
 // UI kaydırıcılarından fırçaya ayar gönderme
-fn push_sliders(canvas_ptr: ptr): void = let
+fn push_sliders(canvas_ptr: int): void = let
   fun loop(i: int): void =
     if i < 8 then let
       val @(_, set_id, lo, hi, v) = get_slider_info(i)
@@ -148,7 +148,7 @@ in
   in () end else ()
 end
 
-extern fun do_reset(canvas_ptr: ptr): void = "ext#do_reset"
+extern fun do_reset(canvas_ptr: int): void = "ext#do_reset"
 implement do_reset(canvas_ptr) = let
   val u = ui_get()
   val () = canvas_apply_startup(canvas_ptr)
@@ -165,7 +165,7 @@ implement do_reset(canvas_ptr) = let
   val () = commit_swatch()
 in () end
 
-fn apply_saved_brush(canvas_ptr: ptr): void = let
+fn apply_saved_brush(canvas_ptr: int): void = let
   val u = ui_get()
   val g = u->active_group
   val n = brush_count(g)
@@ -184,7 +184,7 @@ end
 extern fun widgets_save_session(): void = "ext#widgets_save_session"
 implement widgets_save_session() = session_save()
 
-extern fun widgets_restore_session(canvas_ptr: ptr): void = "ext#widgets_restore_session"
+extern fun widgets_restore_session(canvas_ptr: int): void = "ext#widgets_restore_session"
 implement widgets_restore_session(canvas_ptr) = let
   val loaded = session_load()
 in

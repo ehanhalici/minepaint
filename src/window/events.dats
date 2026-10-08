@@ -9,23 +9,23 @@ staload "gl/gl.dats"
 staload "sys/libc.dats"
 staload "ui/state.dats"
 
-extern fun canvas_render(p: ptr, canvas_w: int, canvas_h: int): void = "ext#canvas_render"
-extern fun canvas_on_wheel(p: ptr, mx: int, my: int, dy: int): void = "ext#canvas_on_wheel"
-extern fun canvas_on_mouse_down(p: ptr, mx: float, my: float, btn: int, is_pan: int, pressure: float): void = "ext#canvas_on_mouse_down"
-extern fun canvas_on_mouse_move(p: ptr, mx: float, my: float, btn: int, is_pan: int, pressure: float): void = "ext#canvas_on_mouse_move"
-extern fun canvas_on_mouse_up(p: ptr, mx: float, my: float, btn: int, is_pan: int): void = "ext#canvas_on_mouse_up"
+extern fun canvas_render(p: int, canvas_w: int, canvas_h: int): void = "ext#canvas_render"
+extern fun canvas_on_wheel(p: int, mx: int, my: int, dy: int): void = "ext#canvas_on_wheel"
+extern fun canvas_on_mouse_down(p: int, mx: float, my: float, btn: int, is_pan: int, pressure: float): void = "ext#canvas_on_mouse_down"
+extern fun canvas_on_mouse_move(p: int, mx: float, my: float, btn: int, is_pan: int, pressure: float): void = "ext#canvas_on_mouse_move"
+extern fun canvas_on_mouse_up(p: int, mx: float, my: float, btn: int, is_pan: int): void = "ext#canvas_on_mouse_up"
 
 extern fun widgets_render(sx: float, sy: float, sw: float, sh: float): void = "ext#widgets_render"
-extern fun widgets_on_mouse_down(mx: float, my: float, btn: int, canvas_ptr: ptr): int = "ext#widgets_on_mouse_down"
-extern fun widgets_on_mouse_move(mx: float, my: float, canvas_ptr: ptr): int = "ext#widgets_on_mouse_move"
-extern fun widgets_on_mouse_up(canvas_ptr: ptr): void = "ext#widgets_on_mouse_up"
+extern fun widgets_on_mouse_down(mx: float, my: float, btn: int, canvas_ptr: int): int = "ext#widgets_on_mouse_down"
+extern fun widgets_on_mouse_move(mx: float, my: float, canvas_ptr: int): int = "ext#widgets_on_mouse_move"
+extern fun widgets_on_mouse_up(canvas_ptr: int): void = "ext#widgets_on_mouse_up"
 extern fun widgets_is_dragging(): int = "ext#widgets_is_dragging"
 extern fun widgets_on_wheel(mx: float, my: float, dy: int): int = "ext#widgets_on_wheel"
 extern fun widgets_get_sidebar_visible(): int = "ext#widgets_get_sidebar_visible"
 extern fun widgets_on_edge_hover(mx: float, my: float, win_w: float, cur_time: double): void = "ext#widgets_on_edge_hover"
 extern fun widgets_try_click_floating_toggle(mx: float, my: float, win_w: float, cur_time: double): int = "ext#widgets_try_click_floating_toggle"
 extern fun widgets_render_floating_toggle(win_w: float, cur_time: double): void = "ext#widgets_render_floating_toggle"
-extern fun widgets_restore_session(canvas_ptr: ptr): void = "ext#widgets_restore_session"
+extern fun widgets_restore_session(canvas_ptr: int): void = "ext#widgets_restore_session"
 extern fun widgets_save_session(): void = "ext#widgets_save_session"
 
 extern fun app_create(w: int, h: int, title: string): ptr = "ext#app_create"
@@ -118,7 +118,7 @@ in
 end
 
 fn handle_wheel_action(
-  st: ref(AppState), canvas_ptr: ptr, bx: int, by: int, dy: int
+  st: ref(AppState), canvas_ptr: int, bx: int, by: int, dy: int
 ): void = let
   val s_vis = widgets_get_sidebar_visible()
   val sidebar_x = st->win_w - st->sidebar_w
@@ -130,7 +130,7 @@ in
   end else canvas_on_wheel(canvas_ptr, bx, by, dy)
 end
 
-fn handle_button_press(p_st: ptr, canvas_ptr: ptr, p_xev: ptr): void = let
+fn handle_button_press(p_st: ptr, canvas_ptr: int, p_xev: ptr): void = let
   val st = ptr2appstate(p_st)
   val bx = mp_xevent_btn_x(p_xev)
   val by = mp_xevent_btn_y(p_xev)
@@ -164,7 +164,7 @@ in
   end
 end
 
-fn handle_button_release(p_st: ptr, canvas_ptr: ptr, p_xev: ptr): void = let
+fn handle_button_release(p_st: ptr, canvas_ptr: int, p_xev: ptr): void = let
   val st = ptr2appstate(p_st)
   val bx = mp_xevent_btn_x(p_xev)
   val by = mp_xevent_btn_y(p_xev)
@@ -184,7 +184,7 @@ in
   in () end else ()
 end
 
-fn handle_motion_notify(p_st: ptr, canvas_ptr: ptr, p_xev: ptr): void = let
+fn handle_motion_notify(p_st: ptr, canvas_ptr: int, p_xev: ptr): void = let
   val st = ptr2appstate(p_st)
   val mx = mp_xevent_motion_x(p_xev)
   val my = mp_xevent_motion_y(p_xev)
@@ -213,7 +213,7 @@ in
   end
 end
 
-fn render_frame(p_st: ptr, app: ptr, canvas_ptr: ptr): void = let
+fn render_frame(p_st: ptr, app: ptr, canvas_ptr: int): void = let
   val st = ptr2appstate(p_st)
   val s_vis = widgets_get_sidebar_visible()
   val cur_time = get_time_seconds()
@@ -258,7 +258,7 @@ fn xev_kind_of(t: int): xev_kind =
   else if t = MotionNotify then XevMotion()
   else XevOther()
 
-fn dispatch_xev(k: xev_kind, p_st: ptr, app: ptr, p_xev: ptr, canvas_ptr: ptr): void =
+fn dispatch_xev(k: xev_kind, p_st: ptr, app: ptr, p_xev: ptr, canvas_ptr: int): void =
   case+ k of
   | XevConfigure() => handle_configure(p_st, p_xev)
   | XevClient() => handle_client_message(p_st, app, p_xev)
@@ -272,7 +272,7 @@ fn dispatch_xev(k: xev_kind, p_st: ptr, app: ptr, p_xev: ptr, canvas_ptr: ptr): 
   | XevMotion() => handle_motion_notify(p_st, canvas_ptr, p_xev)
   | XevOther() => ()
 
-fun event_loop(p_st: ptr, app: ptr, p_xev: ptr, canvas_ptr: ptr): void = let
+fun event_loop(p_st: ptr, app: ptr, p_xev: ptr, canvas_ptr: int): void = let
   val st = ptr2appstate(p_st)
 in
   if st->running > 0 then let
@@ -290,7 +290,7 @@ in
   end else ()
 end
 
-extern fun window_create_and_run(canvas_ptr: ptr, ui: ptr): int = "ext#window_create_and_run"
+extern fun window_create_and_run(canvas_ptr: int, ui: ptr): int = "ext#window_create_and_run"
 implement window_create_and_run(canvas_ptr, ui) = let
   val () = ui_state_install(ui)
   val app = app_create(1000, 600, "MinePaint")
