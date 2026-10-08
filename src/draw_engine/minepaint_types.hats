@@ -48,22 +48,9 @@ typedef MinePaintSurface = @{
   refcount= int
 }
 
-typedef MinePaintSymmetryState = @{
-  type= int,
-  center_x= float,
-  center_y= float,
-  angle= float,
-  num_lines= float
-}
-
-typedef MinePaintSymmetryData = @{
-  active= int,
-  pending_active= int,
-  state_current= MinePaintSymmetryState,
-  state_pending= MinePaintSymmetryState,
-  num_symmetry_matrices= int,
-  symmetry_matrices= ptr
-}
+// Symmetry object handle into symmetry.dats. There is one record layout,
+// and it is not a pointer.
+#define SYMMETRY_NONE (~1)
 
 typedef MinePaintTileRequest = @{
   tx= int,
@@ -82,7 +69,7 @@ typedef MinePaintTiledSurface = @{
   parent= MinePaintSurface,
   tile_request_start= ptr,
   tile_request_end= ptr,
-  symmetry_data= ptr,
+  symmetry_data= int,
   operation_queue= ptr,
   num_bboxes= int,
   num_bboxes_dirtied= int,

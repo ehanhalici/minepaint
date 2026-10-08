@@ -19,7 +19,6 @@ staload "./helpers.dats"
 extern castfn ptr2tiled_surface(p: ptr): ref(MinePaintTiledSurface) = "mac#"
 extern castfn ptr2tile_req(p: ptr): ref(MinePaintTileRequest) = "mac#"
 extern castfn ptr2dab_op(p: ptr): ref(OperationDataDrawDab) = "mac#"
-extern castfn ptr2symm_data(p: ptr): ref(MinePaintSymmetryData) = "mac#"
 extern castfn ptr2rect(p: ptr): ref(MinePaintRectangle) = "mac#"
 extern castfn ptr2rects(p: ptr): ref(MinePaintRectangles) = "mac#"
 extern castfn u16(x: uint): uint16 = "mac#"
@@ -36,7 +35,7 @@ fn call_tile_request_end(f: ptr, self: ptr, req: ptr): void =
 fn get_tiled_surface_default_bboxes(self: ptr): ptr =
   (ptr2tiled_surface(self))->default_bboxes
 
-fn get_tiled_surface_symmetry_data(self: ptr): ptr =
+fn get_tiled_surface_symmetry_data(self: ptr): int =
   (ptr2tiled_surface(self))->symmetry_data
 
 fn f_add(a: float, b: float): float = g0float_add(a, b)
@@ -65,9 +64,6 @@ fn f_clamp(x: float, min_v: float, max_v: float): float =
 
 fn i_min(a: int, b: int): int = if a < b then a else b
 fn i_max(a: int, b: int): int = if a > b then a else b
-
-fn get_matrix_ptr(m: ptr, idx: int): ptr =
-  ptr_add<float>(m, int2size(g0int_mul(idx, 9)))
 
 fn get_dirty_tile(dirty_tiles: ptr, idx: int): @(int, int) = let
   val x = mp_arr_iget(dirty_tiles, idx * 2)
@@ -498,10 +494,11 @@ fun clean_bounding_boxes(bboxes: ptr, i: int, n: int): void =
 fn prepare_bounding_boxes(self_p: ptr): void =
   if self_p != the_null_ptr then let
     val self = ptr2tiled_surface(self_p)
-    val symm = ptr2symm_data(self->symmetry_data)
-    val cur_state = symm->state_current
-    val mult = (if cur_state.type = 4 then 2 else 1): int
-    val num_desired = g0int_mul(g0float2int_float_int(cur_state.num_lines), mult)
+    val h = self->symmetry_data
+    val ty = minepaint_symmetry_current_type(h)
+    val nl = minepaint_symmetry_current_lines(h)
+    val mult = (if ty = 4 then 2 else 1): int
+    val num_desired = g0int_mul(g0float2int_float_int(nl), mult)
     val () = realloc_bounding_boxes(self, self_p, num_desired)
     val n_clean = i_min(self->num_bboxes, self->num_bboxes_dirtied)
     val () = clean_bounding_boxes(self->bboxes, 0, n_clean)
@@ -643,16 +640,18 @@ fn draw_dab_internal(
   end
 
 fn transform_and_draw(
-  surface: ptr, m: ptr, x: float, y: float, radius: float,
+  surface: ptr, sym: int, midx: int, x: float, y: float, radius: float,
   color_r: float, color_g: float, color_b: float,
   opaque: float, hardness: float, softness: float,
   color_a: float, aspect_ratio: float, dab_angle: float,
   lock_alpha: float, colorize: float, posterize: float,
   posterize_num: float, paint: float, bbox_index: int
 ): void = let
+  var mbuf = @[float][9](0.0f)
   var tx: float
   var ty: float
-  val () = minepaint_transform_point(m, x, y, tx, ty)
+  val () = minepaint_symmetry_matrix_load(sym, midx, mbuf)
+  val () = minepaint_transform_point(addr@mbuf, x, y, tx, ty)
   val _ = draw_dab_internal(
     surface, tx, ty, radius, color_r, color_g, color_b,
     opaque, hardness, softness, color_a, aspect_ratio, dab_angle,
@@ -661,82 +660,84 @@ fn transform_and_draw(
 in () end
 
 fn draw_verthorz_symmetry(
-  surface: ptr, mats: ptr, x: float, y: float, radius: float,
+  surface: ptr, sym: int, x: float, y: float, radius: float,
   cr: float, cg: float, cb: float, opaq: float, h: float, s: float,
   ca: float, ar: float, angle: float, symm_angle: float,
   la: float, col: float, post: float, pnum: float, paint: float
 ): void = let
   val a_sub = f_sub(f_mul(~2.0f, symm_angle), angle)
-  val () = transform_and_draw(surface, get_matrix_ptr(mats, 0), x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, a_sub, la, col, post, pnum, paint, 1)
-  val () = transform_and_draw(surface, get_matrix_ptr(mats, 1), x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, angle, la, col, post, pnum, paint, 2)
+  val () = transform_and_draw(surface, sym, 0, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, a_sub, la, col, post, pnum, paint, 1)
+  val () = transform_and_draw(surface, sym, 1, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, angle, la, col, post, pnum, paint, 2)
 in
-  transform_and_draw(surface, get_matrix_ptr(mats, 2), x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, a_sub, la, col, post, pnum, paint, 3)
+  transform_and_draw(surface, sym, 2, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, a_sub, la, col, post, pnum, paint, 3)
 end
 
 fun draw_rot_symmetry(
-  surface: ptr, mats: ptr, c: int, n: int, x: float, y: float, radius: float,
+  surface: ptr, sym: int, c: int, n: int, x: float, y: float, radius: float,
   cr: float, cg: float, cb: float, opaq: float, h: float, s: float,
   ca: float, ar: float, angle: float, rot_a: float,
   la: float, col: float, post: float, pnum: float, paint: float
 ): void =
   if c < n then let
     val da = f_sub(angle, f_mul(g0int2float_int_float(c), rot_a))
-    val () = transform_and_draw(surface, get_matrix_ptr(mats, c - 1), x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, da, la, col, post, pnum, paint, c)
+    val () = transform_and_draw(surface, sym, c - 1, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, da, la, col, post, pnum, paint, c)
   in
-    draw_rot_symmetry(surface, mats, c + 1, n, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, angle, rot_a, la, col, post, pnum, paint)
+    draw_rot_symmetry(surface, sym, c + 1, n, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, angle, rot_a, la, col, post, pnum, paint)
   end
 
 fun draw_snow_symmetry(
-  surface: ptr, mats: ptr, c: int, n: int, base_idx: int, x: float, y: float, radius: float,
+  surface: ptr, sym: int, c: int, n: int, base_idx: int, x: float, y: float, radius: float,
   cr: float, cg: float, cb: float, opaq: float, h: float, s: float,
   ca: float, ar: float, base_a: float, rot_a: float,
   la: float, col: float, post: float, pnum: float, paint: float
 ): void =
   if c < n then let
     val da = f_sub(base_a, f_mul(g0int2float_int_float(c), rot_a))
-    val () = transform_and_draw(surface, get_matrix_ptr(mats, base_idx + c), x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, da, la, col, post, pnum, paint, n + c)
+    val () = transform_and_draw(surface, sym, base_idx + c, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, da, la, col, post, pnum, paint, n + c)
   in
-    draw_snow_symmetry(surface, mats, c + 1, n, base_idx, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, base_a, rot_a, la, col, post, pnum, paint)
+    draw_snow_symmetry(surface, sym, c + 1, n, base_idx, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, base_a, rot_a, la, col, post, pnum, paint)
   end
 
 fn dispatch_symmetry_dab(
-  surface: ptr, self: ref(MinePaintTiledSurface), symm: ref(MinePaintSymmetryData),
+  surface: ptr, self: ref(MinePaintTiledSurface), sym: int,
   x: float, y: float, radius: float, cr: float, cg: float, cb: float,
   opaq: float, h: float, s: float, ca: float, ar: float, angle: float,
   la: float, col: float, post: float, pnum: float, paint: float
 ): void =
-  if (symm->active > 0) * (symm->num_symmetry_matrices > 0) then let
-    val st = symm->state_current
-    val mats = symm->symmetry_matrices
-    val lines = g0float2int_float_int(st.num_lines)
-    val rot_a = f_div(360.0f, st.num_lines)
+  if (minepaint_symmetry_active(sym) > 0) * (minepaint_symmetry_matrix_count(sym) > 0) then let
+    val ty = minepaint_symmetry_current_type(sym)
+    val lines_f = minepaint_symmetry_current_lines(sym)
+    val ang = minepaint_symmetry_current_angle(sym)
+    val lines = g0float2int_float_int(lines_f)
+    val rot_a = f_div(360.0f, lines_f)
   in
-    case+ st.type of
+    case+ ty of
     | 0 => let
-        val a_vert = f_sub(f_mul(~2.0f, f_add(90.0f, st.angle)), angle)
-        val () = transform_and_draw(surface, mats, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, a_vert, la, col, post, pnum, paint, 1)
+        val a_vert = f_sub(f_mul(~2.0f, f_add(90.0f, ang)), angle)
+        val () = transform_and_draw(surface, sym, 0, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, a_vert, la, col, post, pnum, paint, 1)
       in
         self->num_bboxes_dirtied := i_min(self->num_bboxes, 2)
       end
     | 1 => let
-        val a_horz = f_sub(f_mul(~2.0f, st.angle), angle)
-        val () = transform_and_draw(surface, mats, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, a_horz, la, col, post, pnum, paint, 1)
+        val a_horz = f_sub(f_mul(~2.0f, ang), angle)
+        val () = transform_and_draw(surface, sym, 0, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, a_horz, la, col, post, pnum, paint, 1)
       in
         self->num_bboxes_dirtied := i_min(self->num_bboxes, 2)
       end
     | 2 => let
-        val () = draw_verthorz_symmetry(surface, mats, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, angle, st.angle, la, col, post, pnum, paint)
+        val () = draw_verthorz_symmetry(surface, sym, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, angle, ang, la, col, post, pnum, paint)
       in
         self->num_bboxes_dirtied := i_min(self->num_bboxes, 4)
       end
     | 3 => let
-        val () = draw_rot_symmetry(surface, mats, 1, lines, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, angle, rot_a, la, col, post, pnum, paint)
+        val () = draw_rot_symmetry(surface, sym, 1, lines, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, angle, rot_a, la, col, post, pnum, paint)
       in
         self->num_bboxes_dirtied := i_min(self->num_bboxes, lines)
       end
     | 4 => let
-        val () = draw_snow_symmetry(surface, mats, 0, lines, lines - 1, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, f_sub(f_mul(~2.0f, st.angle), angle), rot_a, la, col, post, pnum, paint)
-        val () = draw_rot_symmetry(surface, mats, 1, lines, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, angle, rot_a, la, col, post, pnum, paint)
+        val mirrored = f_sub(f_mul(~2.0f, ang), angle)
+        val () = draw_snow_symmetry(surface, sym, 0, lines, lines - 1, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, mirrored, rot_a, la, col, post, pnum, paint)
+        val () = draw_rot_symmetry(surface, sym, 1, lines, x, y, radius, cr, cg, cb, opaq, h, s, ca, ar, angle, rot_a, la, col, post, pnum, paint)
       in
         self->num_bboxes_dirtied := i_min(self->num_bboxes, lines * 2)
       end
@@ -765,9 +766,8 @@ implement tiled_surface_draw_dab(
 in
   if modified then let
     val self = ptr2tiled_surface(surface)
-    val symm = ptr2symm_data(self->symmetry_data)
     val () = dispatch_symmetry_dab(
-      surface, self, symm, x, y, radius, color_r, color_g, color_b,
+      surface, self, self->symmetry_data, x, y, radius, color_r, color_g, color_b,
       opaque, hardness, softness, color_a, aspect_ratio, angle,
       lock_alpha, colorize, posterize, posterize_num, paint
     )
@@ -911,12 +911,9 @@ implement minepaint_tiled_surface_destroy(self_p) =
     val def_boxes = get_tiled_surface_default_bboxes(self_p)
     val () = if self->bboxes != def_boxes then free(self->bboxes)
     val () = if def_boxes != the_null_ptr then free(def_boxes)
-    val symm_ptr = self->symmetry_data
+    val symm_h = self->symmetry_data
   in
-    if symm_ptr != the_null_ptr then {
-      val () = minepaint_symmetry_data_destroy(symm_ptr)
-      val () = free(symm_ptr)
-    }
+    if symm_h >= 0 then minepaint_symmetry_data_destroy(symm_h)
   end
 
 extern fun minepaint_tiled_surface_set_symmetry_state(

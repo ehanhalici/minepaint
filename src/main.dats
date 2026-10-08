@@ -6,6 +6,7 @@ staload "app/ui.dats"
 // mapping.dats keeps its arena in top-level values. Those run only when this
 // file's dynload calls mapping's dynload. The path must match patsopt -d.
 #dynload "src/draw_engine/mapping.dats"
+#dynload "src/draw_engine/symmetry.dats"
 
 val g_slot_settings = ref<ptr>(the_null_ptr)
 val g_slot_inputs = ref<ptr>(the_null_ptr)
