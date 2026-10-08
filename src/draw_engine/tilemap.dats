@@ -1,125 +1,173 @@
-// src/draw_engine/tilemap.dats
-// Native ATS2 implementation of TileMap for infinite 2D canvas tiling
-#define ATS_DYNLOADFLAG 0
+// Tile map as an integer handle. Each slot holds a FIFO handle.
+// main.dats dynloads this file.
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+#include "./minepaint_types.hats"
 
-#include "./engine_safe.hats"
+#define TM_CAP 8
+#define TM_MAX 256
+#define TM_ENTRIES 262144
+#define TM_SLOTS 2097152
 
-typedef TileIndex_struct = @{
-  x= int,
-  y= int
-}
+val g_alive = arrayref_make_elt<bool>(i2sz(TM_CAP), false)
+val g_size = arrayref_make_elt<int>(i2sz(TM_CAP), 0)
+val g_slot = arrayref_make_elt<int>(i2sz(TM_SLOTS), FIFO_NONE)
+val g_fresh = ref<int>(0)
+val g_nfree = ref<int>(0)
+val g_free = arrayref_make_elt<int>(i2sz(TM_CAP), 0)
 
-typedef TileMap_struct = @{
-  map= ptr,
-  size= int,
-  item_size= size_t,
-  item_free_func= ptr
-}
+extern fun fifo_free(h: int, user_free: (ptr) -> void): void = "ext#fifo_free"
 
-extern castfn ptr2tilemap(p: ptr): ref(TileMap_struct) = "mac#"
-extern castfn ptr2freefn(p: ptr): (ptr) -> void = "mac#"
-
-extern fun malloc(sz: size_t): ptr = "mac#malloc"
-extern fun free(p: ptr): void = "mac#free"
-
-extern fun tile_map_new(size: int, item_size: size_t, item_free_func: ptr): ptr = "ext#tile_map_new"
-implement tile_map_new(size, item_size, item_free_func) = let
-  val sz = sizeof<TileMap_struct>
-  val p = malloc(sz)
-  val () = assertloc(p > the_null_ptr)
-  val self = ptr2tilemap(p)
-
-  val map_entries = 4 * size * size
-  val map_bytes = g0int2uint_int_size(map_entries) * item_size
-  val map_mem = malloc(map_bytes)
-  val () = assertloc(map_mem > the_null_ptr)
-
-  val isz = g0uint2int_size_int(item_size)
-  fun init_map(i: int): void =
-    if i < map_entries then let
-      val slot = ptr_add<byte>(map_mem, i * isz)
-      val () = mp_arr_pset(slot, 0, the_null_ptr)
-    in
-      init_map(i + 1)
-    end else ()
-  val () = init_map(0)
-
-  val () = self->size := size
-  val () = self->item_size := item_size
-  val () = self->item_free_func := item_free_func
-  val () = self->map := map_mem
+fn alive_get(h: int): bool = let
+  val i = g1ofg0(h)
 in
-  p
+  if (i >= 0) * (i < TM_CAP) then g_alive[i] else false
 end
 
-fn free_map_items(map_mem: ptr, entries: int, item_sz: int, free_fn: ptr): void = let
-  val c_free = ptr2freefn(free_fn)
-  fun loop_free(i: int): void =
-    if i < entries then let
-      val slot = ptr_add<byte>(map_mem, i * item_sz)
-      val it = mp_arr_pget(slot, 0)
-      val () = if it != the_null_ptr then c_free(it)
-    in
-      loop_free(i + 1)
-    end else ()
+fn alive_set(h: int, v: bool): void = let
+  val i = g1ofg0(h)
 in
-  loop_free(0)
+  if (i >= 0) * (i < TM_CAP) then g_alive[i] := v else ()
 end
 
-extern fun tile_map_free(self_p: ptr, free_items: bool): void = "ext#tile_map_free"
-implement tile_map_free(self_p, free_items) =
-  if self_p != the_null_ptr then let
-    val self = ptr2tilemap(self_p)
-    val map_mem = self->map
-    val sz = self->size
-    val map_entries = 4 * sz * sz
-    val free_fn = self->item_free_func
-    val isz = g0uint2int_size_int(self->item_size)
-    val () = if free_items * (free_fn != the_null_ptr) then free_map_items(map_mem, map_entries, isz, free_fn)
-    val () = if map_mem != the_null_ptr then free(map_mem)
-    val () = free(self_p)
-  in () end
+fn size_get(h: int): int = let
+  val i = g1ofg0(h)
+in
+  if (i >= 0) * (i < TM_CAP) then g_size[i] else 0
+end
 
-extern fun tile_map_contains(self_p: ptr, x: int, y: int): bool = "ext#tile_map_contains"
-implement tile_map_contains(self_p, x, y) =
-  if self_p = the_null_ptr then false
+fn size_set(h: int, v: int): void = let
+  val i = g1ofg0(h)
+in
+  if (i >= 0) * (i < TM_CAP) then g_size[i] := v else ()
+end
+
+fn slot_get(idx: int): int = let
+  val i = g1ofg0(idx)
+in
+  if (i >= 0) * (i < TM_SLOTS) then g_slot[i] else FIFO_NONE
+end
+
+fn slot_set(idx: int, v: int): void = let
+  val i = g1ofg0(idx)
+in
+  if (i >= 0) * (i < TM_SLOTS) then g_slot[i] := v else ()
+end
+
+fn entries_of(sz: int): int = 4 * sz * sz
+
+fn offset_of(sz: int, x: int, y: int): int =
+  (sz + y) * (sz * 2) + (sz + x)
+
+fn slot_index(h: int, linear: int): int = h * TM_ENTRIES + linear
+
+fn alloc_tm(): int =
+  if !g_nfree > 0 then let
+    val n = !g_nfree - 1
+    val () = !g_nfree := n
+    val i = g1ofg0(n)
+  in
+    if (i >= 0) * (i < TM_CAP) then g_free[i] else TILEMAP_NONE
+  end else let
+    val n = !g_fresh
+  in
+    if n < TM_CAP then (!g_fresh := n + 1; n) else TILEMAP_NONE
+  end
+
+fn recycle_tm(h: int): void = let
+  val n = !g_nfree
+  val i = g1ofg0(n)
+  val () = if (i >= 0) * (i < TM_CAP) then g_free[i] := h
+  val () = if (g1ofg0(h) >= 0) * (g1ofg0(h) < TM_CAP) then !g_nfree := n + 1
+in () end
+
+fn clear_slots(h: int, n: int): void = let
+  fun loop(i: int): void =
+    if i < n then let
+      val () = slot_set(slot_index(h, i), FIFO_NONE)
+    in
+      loop(i + 1)
+    end else ()
+in
+  loop(0)
+end
+
+extern fun tile_map_new(sz: int): int = "ext#tile_map_new"
+implement tile_map_new(sz) = let
+  val h = alloc_tm()
+  val () = assertloc(h >= 0)
+  val () = assertloc((sz > 0) * (sz <= TM_MAX))
+  val () = size_set(h, sz)
+  val () = alive_set(h, true)
+  val () = clear_slots(h, entries_of(sz))
+in
+  h
+end
+
+extern fun tile_map_size(h: int): int = "ext#tile_map_size"
+implement tile_map_size(h) = if alive_get(h) then size_get(h) else 0
+
+extern fun tile_map_contains(h: int, x: int, y: int): bool = "ext#tile_map_contains"
+implement tile_map_contains(h, x, y) =
+  if not(alive_get(h)) then false
   else let
-    val self = ptr2tilemap(self_p)
-    val sz = self->size
+    val sz = size_get(h)
   in
     (x >= ~sz) && (x < sz) && (y >= ~sz) && (y < sz)
   end
 
-extern fun tile_map_get(self_p: ptr, x: int, y: int): ptr = "ext#tile_map_get"
-implement tile_map_get(self_p, x, y) = let
-  val self = ptr2tilemap(self_p)
-  val sz = self->size
-  val rowstride = sz * 2
-  val offset = (sz + y) * rowstride + (sz + x)
-  val () = assertloc(offset >= 0 && offset < 4 * sz * sz)
-  val item_sz = g0uint2int_size_int(self->item_size)
+extern fun tile_map_get_fifo(h: int, x: int, y: int): int = "ext#tile_map_get_fifo"
+implement tile_map_get_fifo(h, x, y) = let
+  val sz = size_get(h)
+  val off = offset_of(sz, x, y)
+  val () = assertloc((off >= 0) * (off < entries_of(sz)))
 in
-  ptr_add<byte>(self->map, offset * item_sz)
+  slot_get(slot_index(h, off))
 end
 
-extern fun tile_map_copy_to(self_p: ptr, other_p: ptr): void = "ext#tile_map_copy_to"
-implement tile_map_copy_to(self_p, other_p) =
-  if (self_p != the_null_ptr) * (other_p != the_null_ptr) then let
-    val self = ptr2tilemap(self_p)
-    val sz = self->size
+extern fun tile_map_set_fifo(h: int, x: int, y: int, fh: int): void = "ext#tile_map_set_fifo"
+implement tile_map_set_fifo(h, x, y, fh) = let
+  val sz = size_get(h)
+  val off = offset_of(sz, x, y)
+  val () = assertloc((off >= 0) * (off < entries_of(sz)))
+in
+  slot_set(slot_index(h, off), fh)
+end
+
+extern fun tile_map_free(h: int, free_items: bool, user_free: (ptr) -> void): void = "ext#tile_map_free"
+implement tile_map_free(h, free_items, user_free) =
+  if alive_get(h) then let
+    val n = entries_of(size_get(h))
+    fun loop(i: int): void =
+      if i < n then let
+        val fh = slot_get(slot_index(h, i))
+        val () = if free_items * (fh >= 0) then fifo_free(fh, user_free)
+        val () = slot_set(slot_index(h, i), FIFO_NONE)
+      in
+        loop(i + 1)
+      end else ()
+    val () = loop(0)
+    val () = alive_set(h, false)
+  in
+    recycle_tm(h)
+  end else ()
+
+extern fun tile_map_copy_to(src: int, dst: int): void = "ext#tile_map_copy_to"
+implement tile_map_copy_to(src, dst) =
+  if alive_get(src) * alive_get(dst) then let
+    val sz = size_get(src)
     fun loop_y(y: int): void =
       if y < sz then let
         fun loop_x(x: int): void =
           if x < sz then let
-            val src_slot = tile_map_get(self_p, x, y)
-            val dst_slot = tile_map_get(other_p, x, y)
-            val v = mp_arr_pget(src_slot, 0)
-            val () = mp_arr_pset(dst_slot, 0, v)
-          in loop_x(x + 1) end else ()
+            val () = tile_map_set_fifo(dst, x, y, tile_map_get_fifo(src, x, y))
+          in
+            loop_x(x + 1)
+          end else ()
         val () = loop_x(~sz)
-      in loop_y(y + 1) end else ()
+      in
+        loop_y(y + 1)
+      end else ()
   in
     loop_y(~sz)
   end else ()

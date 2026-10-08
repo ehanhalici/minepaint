@@ -51,6 +51,9 @@ typedef MinePaintSurface = @{
 // Symmetry object handle into symmetry.dats. There is one record layout,
 // and it is not a pointer.
 #define SYMMETRY_NONE (~1)
+#define FIFO_NONE (~1)
+#define TILEMAP_NONE (~1)
+#define OQ_NONE (~1)
 
 typedef MinePaintTileRequest = @{
   tx= int,
@@ -70,7 +73,7 @@ typedef MinePaintTiledSurface = @{
   tile_request_start= ptr,
   tile_request_end= ptr,
   symmetry_data= int,
-  operation_queue= ptr,
+  operation_queue= int,
   num_bboxes= int,
   num_bboxes_dirtied= int,
   bboxes= ptr,

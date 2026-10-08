@@ -426,7 +426,7 @@ implement process_op(rgba_p, mask, tx, ty, op_ptr) =
     apply_colorize_posterize(mask, rgba_p, op_rec)
   end
 
-fun drain_op_queue(q: ptr, rgba_p: ptr, mask: ptr, tx: int, ty: int, cur_op: ptr): void =
+fun drain_op_queue(q: int, rgba_p: ptr, mask: ptr, tx: int, ty: int, cur_op: ptr): void =
   if cur_op != the_null_ptr then let
     val () = process_op(rgba_p, mask, tx, ty, cur_op)
     val () = free(cur_op)
@@ -581,7 +581,7 @@ fn init_dab_data(
 in () end
 
 fun queue_dab_tiles(
-  q: ptr, op_p: ptr, op_sz: size_t, ty: int, ty2: int, tx1: int, tx2: int
+  q: int, op_p: ptr, op_sz: size_t, ty: int, ty2: int, tx1: int, tx2: int
 ): void =
   if ty <= ty2 then let
     fun loop_tx(tx: int): void =
