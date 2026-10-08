@@ -8,6 +8,7 @@ staload "gl/gl.dats"
 staload "sys/libc.dats"
 staload "ui/state.dats"
 staload "brushes/brush_group.sats"
+staload "ui/widget_drag.sats"
 staload "ui/palette.dats"
 staload "ui/color.dats"
 staload "ui/draw2d.dats"
@@ -73,14 +74,18 @@ extern fun widgets_is_dragging(): int = "ext#widgets_is_dragging"
 implement widgets_is_dragging() = let
   val u = ui_get()
 in
-  if u->active_drag >= 0 then 1 else 0
+  case+ u->active_drag of
+  | DragNone() => 0
+  | DragHue() => 1
+  | DragSv() => 1
+  | DragSlider(_) => 1
 end
 
 extern fun widgets_on_mouse_up(canvas_ptr: int): void = "ext#widgets_on_mouse_up"
 implement widgets_on_mouse_up(canvas_ptr) = let
   val u = ui_get()
 in
-  u->active_drag := ~1
+  u->active_drag := DragNone()
 end
 
 // --- Atomic Mouse Dispatch Helpers ---
@@ -142,7 +147,7 @@ fn check_hue_bar_click(mx: float, my: float, canvas_ptr: int): bool = let
 in
   if in_hue then let
     val u = ui_get()
-    val () = u->active_drag := 10
+    val () = u->active_drag := DragHue()
     val () = update_hue(mx, canvas_ptr)
   in true end
   else false
@@ -169,7 +174,7 @@ fn check_sv_box_click(mx: float, my: float, canvas_ptr: int): bool = let
 in
   if in_sv then let
     val u = ui_get()
-    val () = u->active_drag := 11
+    val () = u->active_drag := DragSv()
     val () = update_sv(mx, my, canvas_ptr)
   in true end
   else false
@@ -183,7 +188,7 @@ fn check_slider_click(mx: float, my: float, canvas_ptr: int): bool = let
       val in_sl = (mx >= 15.0f) * (mx <= 235.0f) * (my >= f_add(sy_pos, 8.0f)) * (my <= f_add(sy_pos, 28.0f))
     in
       if in_sl then let
-        val () = u->active_drag := i
+        val () = u->active_drag := DragSlider(i)
         val raw_pct = f_div(f_sub(mx, 20.0f), 210.0f)
         val () = slider_update_from_pct(canvas_ptr, i, raw_pct)
       in true end
@@ -255,14 +260,14 @@ implement widgets_on_mouse_move(mx, my, canvas_ptr) = let
   val u = ui_get()
   val drag = u->active_drag
 in
-  if drag < 0 then 0
-  else if drag = 10 then (update_hue(mx, canvas_ptr); 1)
-  else if drag = 11 then (update_sv(mx, my, canvas_ptr); 1)
-  else if (drag >= 0) * (drag < 8) then let
-    val raw_pct = f_div(f_sub(mx, 20.0f), 210.0f)
-    val () = slider_update_from_pct(canvas_ptr, drag, raw_pct)
-  in 1 end
-  else 0
+  case+ drag of
+  | DragNone() => 0
+  | DragHue() => (update_hue(mx, canvas_ptr); 1)
+  | DragSv() => (update_sv(mx, my, canvas_ptr); 1)
+  | DragSlider(i) => let
+      val raw_pct = f_div(f_sub(mx, 20.0f), 210.0f)
+      val () = slider_update_from_pct(canvas_ptr, i, raw_pct)
+    in 1 end
 end
 
 extern fun widgets_on_wheel(mx: float, my: float, dy: int): int = "ext#widgets_on_wheel"

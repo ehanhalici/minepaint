@@ -4,6 +4,7 @@
 
 staload "sys/libc.dats"
 staload "brushes/brush_group.sats"
+staload "ui/widget_drag.sats"
 
 extern fun slot_ui_get(): ptr = "ext#slot_ui_get"
 extern fun slot_ui_set(p: ptr): void = "ext#slot_ui_set"
@@ -24,7 +25,7 @@ typedef UIWidgetsState = @{
   val5= float,
   val6= float,
   val7= float,
-  active_drag= int,
+  active_drag= WidgetDrag,
   active_group= BrushGroup,
   sidebar_visible= int,
   active_brush= int,
@@ -91,7 +92,7 @@ implement ui_state_new() = let
   val () = u->val5 := 3.0f
   val () = u->val6 := 0.0f
   val () = u->val7 := 1.0f
-  val () = u->active_drag := ~1
+  val () = u->active_drag := DragNone()
   val () = u->active_group := GroupClassic()
   val () = u->sidebar_visible := 1
   val () = u->active_brush := ~1
