@@ -236,6 +236,42 @@ fn render_frame(p_st: ptr, app: ptr, canvas_ptr: ptr): void = let
   val _ = usleep(10000u)
 in () end
 
+datatype xev_kind =
+  | XevConfigure
+  | XevClient
+  | XevKeyPress
+  | XevKeyRelease
+  | XevGeneric
+  | XevButtonPress
+  | XevButtonRelease
+  | XevMotion
+  | XevOther
+
+fn xev_kind_of(t: int): xev_kind =
+  if t = ConfigureNotify then XevConfigure()
+  else if t = ClientMessage then XevClient()
+  else if t = KeyPress then XevKeyPress()
+  else if t = KeyRelease then XevKeyRelease()
+  else if t = GenericEvent then XevGeneric()
+  else if t = ButtonPress then XevButtonPress()
+  else if t = ButtonRelease then XevButtonRelease()
+  else if t = MotionNotify then XevMotion()
+  else XevOther()
+
+fn dispatch_xev(k: xev_kind, p_st: ptr, app: ptr, p_xev: ptr, canvas_ptr: ptr): void =
+  case+ k of
+  | XevConfigure() => handle_configure(p_st, p_xev)
+  | XevClient() => handle_client_message(p_st, app, p_xev)
+  | XevKeyPress() => handle_key_press(p_st, p_xev)
+  | XevKeyRelease() => handle_key_release(p_st, app, p_xev)
+  | XevGeneric() => let
+      val _ = xi2_process_raw_event(app_dpy(app), p_xev)
+    in () end
+  | XevButtonPress() => handle_button_press(p_st, canvas_ptr, p_xev)
+  | XevButtonRelease() => handle_button_release(p_st, canvas_ptr, p_xev)
+  | XevMotion() => handle_motion_notify(p_st, canvas_ptr, p_xev)
+  | XevOther() => ()
+
 fun event_loop(p_st: ptr, app: ptr, p_xev: ptr, canvas_ptr: ptr): void = let
   val st = ptr2appstate(p_st)
 in
@@ -243,19 +279,7 @@ in
     fun drain(): void =
       if app_pending(app) > 0 then let
         val () = app_next_event(app, p_xev)
-        val ev_type = mp_xevent_type(p_xev)
-        val () =
-          if ev_type = ConfigureNotify then handle_configure(p_st, p_xev)
-          else if ev_type = ClientMessage then handle_client_message(p_st, app, p_xev)
-          else if ev_type = KeyPress then handle_key_press(p_st, p_xev)
-          else if ev_type = KeyRelease then handle_key_release(p_st, app, p_xev)
-          else if ev_type = GenericEvent then let
-            val _ = xi2_process_raw_event(app_dpy(app), p_xev)
-          in () end
-          else if ev_type = ButtonPress then handle_button_press(p_st, canvas_ptr, p_xev)
-          else if ev_type = ButtonRelease then handle_button_release(p_st, canvas_ptr, p_xev)
-          else if ev_type = MotionNotify then handle_motion_notify(p_st, canvas_ptr, p_xev)
-          else ()
+        val () = dispatch_xev(xev_kind_of(mp_xevent_type(p_xev)), p_st, app, p_xev, canvas_ptr)
       in
         drain()
       end else ()
