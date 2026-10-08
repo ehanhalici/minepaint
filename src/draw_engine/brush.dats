@@ -197,7 +197,7 @@ extern fun minepaint_mapping_set_n(h: int, input: int, n: int): void = "ext#mine
 extern fun minepaint_mapping_get_n(h: int, input: int): int = "ext#minepaint_mapping_get_n"
 extern fun minepaint_mapping_set_point(h: int, input: int, index: int, x: float, y: float): void = "ext#minepaint_mapping_set_point"
 extern fun minepaint_mapping_calculate(h: int, data: &(@[float][MAPPING_INPUTS])): float = "ext#minepaint_mapping_calculate"
-extern fun minepaint_brush_setting_info(id: int): ptr = "ext#minepaint_brush_setting_info"
+extern fun minepaint_brush_setting_info(id: int): MinePaintBrushSettingInfo = "ext#minepaint_brush_setting_info"
 
 fn clear_mapping_curves(m: int): void = let
   fun loop(j: int): void =
@@ -212,12 +212,11 @@ fn is_color_setting(i: int): bool =
   (i = 34) || (i = 35) || (i = 36)
 
 fn reset_setting_default(b: int, i: int): void = let
-  val info_p = minepaint_brush_setting_info(i)
-  val s = ptr2setting_info(info_p)
+  val s = minepaint_brush_setting_info(i)
   val m = mp_brush_get_mapping(b, i)
-  val () = mp_brush_set_base(b, i, s->def)
-  val () = mp_brush_set_val(b, i, s->def)
-  val () = if m != MAPPING_NONE then minepaint_mapping_set_base_value(m, s->def)
+  val () = mp_brush_set_base(b, i, s.def)
+  val () = mp_brush_set_val(b, i, s.def)
+  val () = if m != MAPPING_NONE then minepaint_mapping_set_base_value(m, s.def)
 in
   if m != MAPPING_NONE then clear_mapping_curves(m)
 end
