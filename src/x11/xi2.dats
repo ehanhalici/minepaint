@@ -1,4 +1,3 @@
-#define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
@@ -98,31 +97,20 @@ typedef XI2BackendState = @{
   devs= ptr
 }
 
-extern castfn ptr2backend_state(p: ptr): ref(XI2BackendState) = "mac#"
 extern castfn ptr2dev_info(p: ptr): ref(XI2DevInfo) = "mac#"
 extern castfn addr2str(p: ptr): string = "mac#"
 
-extern fun slot_xi2_get(): ptr = "ext#slot_xi2_get"
-extern fun slot_xi2_set(p: ptr): void = "ext#slot_xi2_set"
+val g_dev_sz = g0int2uint_int_size(XI2_MAX_DEVICES) * sizeof<XI2DevInfo>
+val g_devs = malloc(g_dev_sz)
+val () = assertloc(g_devs > the_null_ptr)
+val _ = memset(g_devs, 0, g_dev_sz)
+val g_xi = ref<XI2BackendState>(@{
+  opcode= 0,
+  active= 0,
+  devs= g_devs
+})
 
-fn xi2_state_ref(): ref(XI2BackendState) = let
-  val p = slot_xi2_get()
-in
-  if p != the_null_ptr then ptr2backend_state(p)
-  else let
-    val np = malloc(sizeof<XI2BackendState>)
-    val st = ptr2backend_state(np)
-    val sz = g0int2uint_int_size(XI2_MAX_DEVICES) * sizeof<XI2DevInfo>
-    val devs_p = malloc(sz)
-    val _ = memset(devs_p, 0, sz)
-    val () = st->opcode := 0
-    val () = st->active := 0
-    val () = st->devs := devs_p
-    val () = slot_xi2_set(np)
-  in
-    st
-  end
-end
+fn xi2_state_ref(): ref(XI2BackendState) = g_xi
 
 fn xi2_dev_ptr(base: ptr, id: int): ptr =
   ptr_add<XI2DevInfo>(base, id)
