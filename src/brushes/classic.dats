@@ -53,7 +53,7 @@ implement classic_brush_name(i) =
       "blur"
     )
   in
-    mp_arr_sget(addr@names, i)
+    table_sget(names, 35, i)
   end
 
 extern fun classic_apply(b: ptr, i: int): void = "ext#classic_apply"
@@ -7635,38 +7635,9 @@ implement classic_apply(b, i) =
       0.00000000f,
       1.00000000f
     )
-    val pb0 = addr@b0
-    val pb1 = addr@b1
-    val psid = addr@sids
-    val pbase = addr@bases
-    val pc0 = addr@c0s
-    val pc1 = addr@c1s
-    val pinp = addr@inps
-    val pp0 = addr@p0s
-    val ppn = addr@pns
-    val pxs = addr@xs
-    val pys = addr@ys
-    fn iget(q: ptr, k: int): int = mp_arr_iget(q, k)
-    fn fget(q: ptr, k: int): float = mp_arr_fget(q, k)
-    fun one(k: int, kend: int): void =
-      if k < kend then let
-        val sid = iget(psid, k)
-        val () = draw_engine_brush_set_base_value(b, sid, fget(pbase, k))
-        val c0 = iget(pc0, k)
-        val c1 = iget(pc1, k)
-        fun curves(c: int): void =
-          if c < c1 then let
-            val inp = iget(pinp, c)
-            val n = iget(ppn, c)
-            val p0 = iget(pp0, c)
-            val () = draw_engine_brush_set_mapping_n(b, sid, inp, n)
-            fun pts(pi: int): void =
-              if pi < n then let
-                val () = draw_engine_brush_set_mapping_point(b, sid, inp, pi, fget(pxs, p0 + pi), fget(pys, p0 + pi))
-              in pts(pi + 1) end else ()
-            val () = pts(0)
-          in curves(c + 1) end else ()
-        val () = curves(c0)
-      in one(k + 1, kend) end else ()
-    val () = one(iget(pb0, i), iget(pb1, i))
+    val () = brush_apply_range(
+      b, table_iget(b0, 35, i), table_iget(b1, 35, i),
+      sids, 1442, bases, c0s, c1s,
+      inps, 209, p0s, pns,
+      xs, 544, ys)
   in () end
