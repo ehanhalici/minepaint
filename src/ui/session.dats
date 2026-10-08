@@ -4,6 +4,7 @@
 
 staload "sys/libc.dats"
 staload "ui/state.dats"
+staload "brushes/brush_group.sats"
 staload "ui/palette.dats"
 
 macdef MODE_0755 = $extval(uint, "0755")
@@ -66,12 +67,18 @@ in
   else false
 end
 
+// Dosyadan okunan geçersiz grup kimliği yerine varsayılan (Classic) kullanılır.
+fn group_or_default(idx: int): BrushGroup =
+  case+ brush_group_of_int(idx) of
+  | Some(g) => g
+  | None() => GroupClassic()
+
 fn parse_group_brush_scroll(line: string): bool = let
   var idx: int = 0
   val u = ui_get()
 in
   if sscanf_i(line, "group %d", idx) = 1 then let
-    val () = u->active_group := (if (idx < 0) || (idx > 7) then 1 else idx)
+    val () = u->active_group := group_or_default(idx)
   in true end
   else if sscanf_i(line, "brush %d", idx) = 1 then let
     val () = u->active_brush := (if idx < ~1 then ~1 else idx)
@@ -161,7 +168,7 @@ fn save_palette_and_state(f: ptr, buf: ptr, cap: size_t): void = let
   val () = swatches(0)
   val _ = mp_snprintf_i(buf, cap, "active_swatch %d\n", u->active_swatch)
   val () = put_line(f, buf)
-  val _ = mp_snprintf_i(buf, cap, "group %d\n", u->active_group)
+  val _ = mp_snprintf_i(buf, cap, "group %d\n", brush_group_to_int(u->active_group))
   val () = put_line(f, buf)
   val _ = mp_snprintf_i(buf, cap, "brush %d\n", u->active_brush)
   val () = put_line(f, buf)
@@ -191,25 +198,50 @@ fn save_slider_values(f: ptr, buf: ptr, cap: size_t): void = let
   val () = put_line(f, buf)
 in () end
 
+// Yazma: önce geçici dosyaya, sonra atomik rename ile hedefe (skill.md: Atomik Kalıcılık).
+fn write_session_file(f: ptr): void = let
+  var buf = @[byte][256]()
+  val p_buf = addr@(buf)
+  val cap = g0int2uint_int_size(256)
+  val () = save_palette_and_state(f, p_buf, cap)
+in
+  save_slider_values(f, p_buf, cap)
+end
+
+fn sync_to_disk(f: ptr): bool = (fflush(f) = 0) andalso (fsync(fileno(f)) = 0)
+
+fn write_session_tmp(p_tmp: ptr): bool = let
+  val f = fopen(addr2str(p_tmp), "w")
+in
+  if f = the_null_ptr then false
+  else let
+    val () = write_session_file(f)
+    val ok = sync_to_disk(f)
+    val _ = fclose(f)
+  in ok end
+end
+
+fn commit_session(p_tmp: ptr, p_path: ptr): void =
+  if rename(addr2str(p_tmp), addr2str(p_path)) = 0 then ()
+  else perror("minepaint: session.conf kalici hale getirilemedi")
+
+fn report_session_error(): void =
+  perror("minepaint: session.conf yazilamadi")
+
+fn save_atomically(p_tmp: ptr, p_path: ptr): void =
+  if write_session_tmp(p_tmp) then commit_session(p_tmp, p_path)
+  else report_session_error()
+
 extern fun session_save(): void = "ext#session_save"
 implement session_save() = let
   val () = ensure_dirs()
   var path_buf = @[byte][512]()
+  var tmp_buf = @[byte][512]()
   val p_path = addr@(path_buf)
-  val ok = build_session_path(p_path, g0int2uint_int_size(512), "/.config/minepaint/session.conf")
+  val p_tmp = addr@(tmp_buf)
+  val ok_path = build_session_path(p_path, g0int2uint_int_size(512), "/.config/minepaint/session.conf")
+  val ok_tmp = build_session_path(p_tmp, g0int2uint_int_size(512), "/.config/minepaint/session.conf.tmp")
 in
-  if not(ok) then ()
-  else let
-    val f = fopen(addr2str(p_path), "w")
-  in
-    if f = the_null_ptr then ()
-    else let
-      var buf = @[byte][256]()
-      val p_buf = addr@(buf)
-      val cap = g0int2uint_int_size(256)
-      val () = save_palette_and_state(f, p_buf, cap)
-      val () = save_slider_values(f, p_buf, cap)
-      val _ = fclose(f)
-    in () end
-  end
+  if ok_path andalso ok_tmp then save_atomically(p_tmp, p_path)
+  else report_session_error()
 end

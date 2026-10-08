@@ -2,6 +2,8 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
+staload "brushes/brush_group.sats"
+
 // Harici Fırça Koleksiyonu İmzaları
 extern fun dieterle_brush_count(): int = "ext#dieterle_brush_count"
 extern fun dieterle_brush_name(i: int): string = "ext#dieterle_brush_name"
@@ -37,19 +39,8 @@ extern fun kaerhon_apply(b: ptr, i: int): void = "ext#kaerhon_apply"
 
 extern fun draw_engine_brush_prepare_load(b: ptr): void = "ext#draw_engine_brush_prepare_load"
 
-// --- Cebirsel Veri Tipi: Fırça Grubu (Zero Magic Numbers, ADT) ---
-datatype BrushGroup =
-  | GroupDieterle of ()
-  | GroupClassic of ()
-  | GroupDeevad of ()
-  | GroupFavorites of ()
-  | GroupRamon of ()
-  | GroupExperimental of ()
-  | GroupTanda of ()
-  | GroupKaerhon of ()
-
-// Parse, Don't Validate Sınır Fonksiyonu
-fn group_from_int(g: int): Option(BrushGroup) =
+// --- Sınır Dönüşümleri (brush_group.sats) ---
+implement brush_group_of_int(g) =
   case+ g of
   | 0 => Some(GroupDieterle())
   | 1 => Some(GroupClassic())
@@ -60,6 +51,17 @@ fn group_from_int(g: int): Option(BrushGroup) =
   | 6 => Some(GroupTanda())
   | 7 => Some(GroupKaerhon())
   | _ => None()
+
+implement brush_group_to_int(grp) =
+  case+ grp of
+  | GroupDieterle() => 0
+  | GroupClassic() => 1
+  | GroupDeevad() => 2
+  | GroupFavorites() => 3
+  | GroupRamon() => 4
+  | GroupExperimental() => 5
+  | GroupTanda() => 6
+  | GroupKaerhon() => 7
 
 // Tüketici Örüntü Eşleme: Grup Adı
 fn group_get_name(grp: BrushGroup): string =
@@ -113,29 +115,18 @@ fn group_apply_item(grp: BrushGroup, b: ptr, i: int): void =
 extern fun brush_group_count(): int = "ext#brush_group_count"
 implement brush_group_count() = 8
 
-extern fun brush_group_name(g: int): string = "ext#brush_group_name"
-implement brush_group_name(g) =
-  case+ group_from_int(g) of
-  | Some(grp) => group_get_name(grp)
-  | None() => ""
+extern fun brush_group_name(g: BrushGroup): string = "ext#brush_group_name"
+implement brush_group_name(g) = group_get_name(g)
 
-extern fun brush_count(g: int): int = "ext#brush_count"
-implement brush_count(g) =
-  case+ group_from_int(g) of
-  | Some(grp) => group_get_count(grp)
-  | None() => 0
+extern fun brush_count(g: BrushGroup): int = "ext#brush_count"
+implement brush_count(g) = group_get_count(g)
 
-extern fun brush_name(g: int, i: int): string = "ext#brush_name"
-implement brush_name(g, i) =
-  case+ group_from_int(g) of
-  | Some(grp) => group_get_brush_name(grp, i)
-  | None() => ""
+extern fun brush_name(g: BrushGroup, i: int): string = "ext#brush_name"
+implement brush_name(g, i) = group_get_brush_name(g, i)
 
-extern fun catalog_apply_brush(b: ptr, g: int, i: int): void = "ext#catalog_apply_brush"
+extern fun catalog_apply_brush(b: ptr, g: BrushGroup, i: int): void = "ext#catalog_apply_brush"
 implement catalog_apply_brush(b, g, i) = let
   val () = draw_engine_brush_prepare_load(b)
 in
-  case+ group_from_int(g) of
-  | Some(grp) => group_apply_item(grp, b, i)
-  | None() => ()
+  group_apply_item(g, b, i)
 end

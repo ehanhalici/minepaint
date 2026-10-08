@@ -7,6 +7,7 @@ staload "ui/color.dats"
 staload "canvas/stroke_queue.dats"
 staload "canvas/gl_surface.dats"
 staload "canvas/layer.dats"
+staload "brushes/brush_group.sats"
 
 typedef canvas_state_record = @{
   brush= ptr,
@@ -72,7 +73,7 @@ extern fun stroke_queue_finish(
 extern fun stroke_queue_free(q_ptr: ptr): void = "ext#stroke_queue_free"
 
 extern fun minepaint_brush_apply_startup(b: ptr): void = "ext#minepaint_brush_apply_startup"
-extern fun catalog_apply_brush(b: ptr, g: int, i: int): void = "ext#catalog_apply_brush"
+extern fun catalog_apply_brush(b: ptr, g: BrushGroup, i: int): void = "ext#catalog_apply_brush"
 
 // --- Render Yardımcıları (SLAP, SRP) ---
 fn setup_canvas_viewport(w: int, h: int): void = {
@@ -239,7 +240,7 @@ in
   if st->brush != the_null_ptr then minepaint_brush_apply_startup(st->brush) else ()
 end
 
-extern fun canvas_apply_catalog_brush(p: ptr, g: int, i: int): void = "ext#canvas_apply_catalog_brush"
+extern fun canvas_apply_catalog_brush(p: ptr, g: BrushGroup, i: int): void = "ext#canvas_apply_catalog_brush"
 implement canvas_apply_catalog_brush(p, g, i) = let
   val st = ptr2canvas(p)
 in

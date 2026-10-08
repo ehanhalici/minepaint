@@ -7,6 +7,7 @@
 staload "gl/gl.dats"
 staload "sys/libc.dats"
 staload "ui/state.dats"
+staload "brushes/brush_group.sats"
 staload "ui/palette.dats"
 staload "ui/color.dats"
 staload "ui/draw2d.dats"
@@ -14,10 +15,20 @@ staload "ui/font.dats"
 staload "ui/sidebar_state.dats"
 
 extern fun canvas_set_brush_color(p: ptr, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
-extern fun canvas_apply_catalog_brush(p: ptr, g: int, i: int): void = "ext#canvas_apply_catalog_brush"
+extern fun canvas_apply_catalog_brush(p: ptr, g: BrushGroup, i: int): void = "ext#canvas_apply_catalog_brush"
 extern fun brush_group_count(): int = "ext#brush_group_count"
-extern fun brush_count(g: int): int = "ext#brush_count"
-extern fun brush_name(g: int, i: int): string = "ext#brush_name"
+extern fun brush_count(g: BrushGroup): int = "ext#brush_count"
+extern fun brush_name(g: BrushGroup, i: int): string = "ext#brush_name"
+
+// Sekme indeksi (0..7) -> fırça grubu; geçersiz indeks için None.
+fn select_group_tab(t: int): bool =
+  case+ brush_group_of_int(t) of
+  | Some(g) => let
+      val u = ui_get()
+      val () = u->active_group := g
+      val () = u->brush_scroll := 0
+    in true end
+  | None() => false
 
 // --- Sidebar State API Declarations ---
 extern fun tab_label(i: int): string = "ext#tab_label"
@@ -190,7 +201,6 @@ in
 end
 
 fn check_tab_click(mx: float, my: float): bool = let
-  val u = ui_get()
   fun loop(t: int): bool =
     if t < 8 then let
       val col = t % 4
@@ -199,10 +209,7 @@ fn check_tab_click(mx: float, my: float): bool = let
       val by = f_add(516.0f, f_mul(g0int2float(row), 26.0f))
       val hit = (mx >= bx) * (mx <= f_add(bx, 50.0f)) * (my >= by) * (my <= f_add(by, 22.0f))
     in
-      if hit then let
-        val () = u->active_group := t
-        val () = u->brush_scroll := 0
-      in true end
+      if hit then select_group_tab(t)
       else loop(t + 1)
     end else false
 in
@@ -410,7 +417,7 @@ fn render_brush_tab(sx: float, t: int): void = let
   val row = t / 4
   val bx = f_add(sx, f_add(16.0f, f_mul(g0int2float(col), 54.0f)))
   val by = f_add(516.0f, f_mul(g0int2float(row), 26.0f))
-  val on = u->active_group = t
+  val on = brush_group_to_int(u->active_group) = t
   val label = tab_label(t)
   val txt_w = f_mul(g0int2float(str_len(label)), 7.0f)
   val tx = f_add(bx, f_div(f_sub(50.0f, txt_w), 2.0f))

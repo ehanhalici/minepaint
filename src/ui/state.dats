@@ -3,6 +3,7 @@
 #include "share/atspre_staload.hats"
 
 staload "sys/libc.dats"
+staload "brushes/brush_group.sats"
 
 extern fun slot_ui_get(): ptr = "ext#slot_ui_get"
 extern fun slot_ui_set(p: ptr): void = "ext#slot_ui_set"
@@ -24,7 +25,7 @@ typedef UIWidgetsState = @{
   val6= float,
   val7= float,
   active_drag= int,
-  active_group= int,
+  active_group= BrushGroup,
   sidebar_visible= int,
   active_brush= int,
   brush_scroll= int,
@@ -91,7 +92,7 @@ implement ui_state_new() = let
   val () = u->val6 := 0.0f
   val () = u->val7 := 1.0f
   val () = u->active_drag := ~1
-  val () = u->active_group := 1
+  val () = u->active_group := GroupClassic()
   val () = u->sidebar_visible := 1
   val () = u->active_brush := ~1
   val () = u->brush_scroll := 0

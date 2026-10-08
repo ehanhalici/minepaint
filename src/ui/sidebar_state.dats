@@ -3,6 +3,7 @@
 #include "share/atspre_staload.hats"
 
 staload "ui/state.dats"
+staload "brushes/brush_group.sats"
 staload "ui/palette.dats"
 staload "ui/session.dats"
 staload "ui/color.dats"
@@ -10,9 +11,9 @@ staload "ui/color.dats"
 extern fun canvas_set_brush_setting(p: ptr, id: int, v: float): void = "ext#canvas_set_brush_setting"
 extern fun canvas_set_brush_color(p: ptr, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
 extern fun canvas_apply_startup(p: ptr): void = "ext#canvas_apply_startup"
-extern fun canvas_apply_catalog_brush(p: ptr, g: int, i: int): void = "ext#canvas_apply_catalog_brush"
+extern fun canvas_apply_catalog_brush(p: ptr, g: BrushGroup, i: int): void = "ext#canvas_apply_catalog_brush"
 extern fun canvas_get_brush_setting(p: ptr, id: int): float = "ext#canvas_get_brush_setting"
-extern fun brush_count(g: int): int = "ext#brush_count"
+extern fun brush_count(g: BrushGroup): int = "ext#brush_count"
 
 fn f_add(a: float, b: float): float = g0float_add_float(a, b)
 fn f_sub(a: float, b: float): float = g0float_sub_float(a, b)
@@ -166,9 +167,7 @@ in () end
 
 fn apply_saved_brush(canvas_ptr: ptr): void = let
   val u = ui_get()
-  val g0 = u->active_group
-  val g = if (g0 >= 0) * (g0 < 8) then g0 else 1
-  val () = u->active_group := g
+  val g = u->active_group
   val n = brush_count(g)
   val b = u->active_brush
 in
