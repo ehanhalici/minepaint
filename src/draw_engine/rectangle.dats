@@ -2,41 +2,11 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
-
-typedef MinePaintRectangle = @{
-  x= int,
-  y= int,
-  width= int,
-  height= int
-}
-
-// --- Saf Çekirdek (pointer yok, yan etki yok) ---
-
-// Eksen genişletme: tek eksende noktayı kapsayan (pos, span) çiftini hesaplar.
-fn expand_axis(pos: int, span: int, pt: int): @(int, int) =
-  if pt < pos then @(pt, span + (pos - pt))
-  else if pt >= pos + span then @(pos, pt - pos + 1)
-  else @(pos, span)
-
-// Noktayı kapsayacak dikdörtgen (değer döndürür, girdiyi değiştirmez).
-fn rect_expand_point(r: MinePaintRectangle, x: int, y: int): MinePaintRectangle =
-  if r.width = 0 then @{ x= x, y= y, width= 1, height= 1 }
-  else let
-    val @(nx, nw) = expand_axis(r.x, r.width, x)
-    val @(ny, nh) = expand_axis(r.y, r.height, y)
-  in
-    @{ x= nx, y= ny, width= nw, height= nh }
-  end
-
-// Başka dikdörtgeni kapsayacak dikdörtgen: iki köşe noktası sırayla eklenir.
-fn rect_expand_rect(r: MinePaintRectangle, o: MinePaintRectangle): MinePaintRectangle = let
-  val r1 = rect_expand_point(r, o.x, o.y)
-in
-  rect_expand_point(r1, o.x + o.width - 1, o.y + o.height - 1)
-end
+#include "./minepaint_types.hats"
+#include "./rectangle_pure.hats"
 
 // --- Sınır (C ABI pointer katmanı) ---
-// Dış API ptr üzerinden çalışır; tüm hesap yukarıdaki saf fonksiyonlarda yapılır.
+// Dış API ptr üzerinden çalışır; hesap rectangle_pure.hats içindedir.
 
 extern castfn ptr2rect(p: ptr): ref(MinePaintRectangle) = "mac#"
 
@@ -100,4 +70,18 @@ extern fun minepaint_rectangle_expand_to_include_rect(
 implement minepaint_rectangle_expand_to_include_rect(r_p, other_p) =
   if (r_p != the_null_ptr) && (other_p != the_null_ptr) then
     rect_store(r_p, rect_expand_rect(rect_load(r_p), rect_load(other_p)))
+  else ()
+
+extern fun minepaint_rectangle_clear(r_p: ptr): void = "ext#minepaint_rectangle_clear"
+implement minepaint_rectangle_clear(r_p) =
+  if r_p != the_null_ptr then
+    rect_store(r_p, @{ x= 0, y= 0, width= 0, height= 0 })
+  else ()
+
+extern fun minepaint_rectangle_expand_to_include_value(
+  r_p: ptr, src: MinePaintRectangle
+): void = "ext#minepaint_rectangle_expand_to_include_value"
+implement minepaint_rectangle_expand_to_include_value(r_p, src) =
+  if r_p != the_null_ptr then
+    rect_store(r_p, rect_expand_rect(rect_load(r_p), src))
   else ()

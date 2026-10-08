@@ -6,6 +6,7 @@
 #include "./engine_safe.hats"
 
 staload "./rectangle.dats"
+staload "./bbox.dats"
 staload "./matrix.dats"
 staload "./symmetry.dats"
 staload "./operationqueue.dats"
@@ -19,7 +20,6 @@ staload "./helpers.dats"
 
 extern castfn ptr2tiled_surface(p: ptr): ref(MinePaintTiledSurface) = "mac#"
 extern castfn ptr2tile_req(p: ptr): ref(MinePaintTileRequest) = "mac#"
-extern castfn ptr2rect(p: ptr): ref(MinePaintRectangle) = "mac#"
 extern castfn ptr2rects(p: ptr): ref(MinePaintRectangles) = "mac#"
 extern castfn u16(x: uint): uint16 = "mac#"
 extern castfn int2uint(x: int): uint = "mac#"
@@ -33,9 +33,6 @@ fn call_tile_request_start(f: ptr, self: ptr, req: ptr): void =
 
 fn call_tile_request_end(f: ptr, self: ptr, req: ptr): void =
   if f != the_null_ptr then ptr2fn{MinePaintTileRequestFunc}(f)(self, req)
-
-fn get_tiled_surface_default_bboxes(self: ptr): ptr =
-  (ptr2tiled_surface(self))->default_bboxes
 
 fn get_tiled_surface_symmetry_data(self: ptr): int =
   (ptr2tiled_surface(self))->symmetry_data
@@ -465,31 +462,30 @@ implement process_tile(self_p, tx, ty) =
     end
   end
 
-fn realloc_bounding_boxes(self: ref(MinePaintTiledSurface), self_p: ptr, num_desired: int): void =
+fn realloc_bounding_boxes(self: ref(MinePaintTiledSurface), num_desired: int): void =
   if g0int_gt(num_desired, self->num_bboxes) then let
     val num_to_alloc = g0int_add(num_desired, 10)
-    val bytes = mul_size_size(int2size(num_to_alloc), sizeof<MinePaintRectangle>)
-    val new_boxes = malloc(bytes)
+    val new_boxes = bbox_buf_new(num_to_alloc)
+    val () = if self->bboxes != self->default_bboxes then bbox_buf_release(self->bboxes)
+    val () = self->bboxes := new_boxes
+    val () = self->num_bboxes := num_to_alloc
   in
-    if new_boxes > the_null_ptr then let
-      val def_boxes = get_tiled_surface_default_bboxes(self_p)
-      val () = if self->bboxes != def_boxes then free(self->bboxes)
-      val _ = memset(new_boxes, 0, bytes)
-      val () = self->bboxes := new_boxes
-      val () = self->num_bboxes := num_to_alloc
-      val () = self->num_bboxes_dirtied := 0
-    in () end
+    self->num_bboxes_dirtied := 0
   end
 
-fun clean_bounding_boxes(bboxes: ptr, i: int, n: int): void =
+fun clean_bounding_boxes(bboxes: int, i: int, n: int): void =
   if i < n then let
-    val r = ptr2rect(ptr_add<byte>(bboxes, int2size(g0int_mul(i, 16))))
-    val () = r->x := 0
-    val () = r->y := 0
-    val () = r->width := 0
-    val () = r->height := 0
+    val () = bbox_clear(bboxes, i)
   in
     clean_bounding_boxes(bboxes, i + 1, n)
+  end
+
+fun clean_roi_rects(rects: ptr, i: int, n: int): void =
+  if i < n then let
+    val dest = ptr_add<byte>(rects, int2size(g0int_mul(i, 16)))
+    val () = minepaint_rectangle_clear(dest)
+  in
+    clean_roi_rects(rects, i + 1, n)
   end
 
 fn prepare_bounding_boxes(self_p: ptr): void =
@@ -500,7 +496,7 @@ fn prepare_bounding_boxes(self_p: ptr): void =
     val nl = minepaint_symmetry_current_lines(h)
     val mult = (if ty = 4 then 2 else 1): int
     val num_desired = g0int_mul(g0float2int_float_int(nl), mult)
-    val () = realloc_bounding_boxes(self, self_p, num_desired)
+    val () = realloc_bounding_boxes(self, num_desired)
     val n_clean = i_min(self->num_bboxes, self->num_bboxes_dirtied)
     val () = clean_bounding_boxes(self->bboxes, 0, n_clean)
   in
@@ -525,7 +521,7 @@ fun process_dirty_tile_list(self_p: ptr, t_ptr: ptr, i: int, n: int): void =
   end
 
 fun export_roi_rects(
-  roi: ref(MinePaintRectangles), bboxes: ptr, i: int, num_dirty: int,
+  roi: ref(MinePaintRectangles), bboxes: int, i: int, num_dirty: int,
   roi_rects: int, factor: float
 ): void =
   if i < num_dirty then let
@@ -534,8 +530,7 @@ fun export_roi_rects(
         i_min(roi_rects - 1, g0float2int_float_int(roundf(f_div(g0int2float_int_float(i), factor))))
       else i
     val dest_p = ptr_add<byte>(roi->rectangles, int2size(g0int_mul(out_idx, 16)))
-    val src_p = ptr_add<byte>(bboxes, int2size(g0int_mul(i, 16)))
-    val () = minepaint_rectangle_expand_to_include_rect(dest_p, src_p)
+    val () = minepaint_rectangle_expand_to_include_value(dest_p, bbox_get(bboxes, i))
   in
     export_roi_rects(roi, bboxes, i + 1, num_dirty, roi_rects, factor)
   end
@@ -552,7 +547,7 @@ implement minepaint_tiled_surface_end_atomic(self_p, roi_p) =
       if roi_p != the_null_ptr then let
         val roi = ptr2rects(roi_p)
         val num_dirty = self->num_bboxes_dirtied
-        val () = clean_bounding_boxes(roi->rectangles, 0, i_min(roi->num_rectangles, num_dirty))
+        val () = clean_roi_rects(roi->rectangles, 0, i_min(roi->num_rectangles, num_dirty))
         val bpo = if roi->num_rectangles > 0 then f_div(g0int2float_int_float(num_dirty), g0int2float_int_float(roi->num_rectangles)) else 1.0f
         val factor = if f_lt(bpo, 1.0f) then 1.0f else bpo
         val () = export_roi_rects(roi, self->bboxes, 0, num_dirty, roi->num_rectangles, factor)
@@ -607,10 +602,9 @@ fn update_dab_bbox(self: ref(MinePaintTiledSurface), bbox_index: int, x: float, 
   val bb_y = g0float2int_float_int(floorf(f_sub(y, rf)))
   val bb_w = g0float2int_float_int(floorf(f_add(x, rf))) - bb_x + 1
   val bb_h = g0float2int_float_int(floorf(f_add(y, rf))) - bb_y + 1
-  val bbox_p = ptr_add<byte>(self->bboxes, int2size(g0int_mul(bbox_index, 16)))
-  val () = minepaint_rectangle_expand_to_include_point(bbox_p, bb_x, bb_y)
+  val () = bbox_expand_point(self->bboxes, bbox_index, bb_x, bb_y)
 in
-  minepaint_rectangle_expand_to_include_point(bbox_p, bb_x + bb_w - 1, bb_y + bb_h - 1)
+  bbox_expand_point(self->bboxes, bbox_index, bb_x + bb_w - 1, bb_y + bb_h - 1)
 end
 
 fn draw_dab_internal(
@@ -896,9 +890,7 @@ implement minepaint_tiled_surface_init(self_p, tile_request_start, tile_request_
     val () = self->threadsafe_tile_requests := 0
     val () = self->num_bboxes := NUM_BBOXES_DEFAULT
     val () = self->num_bboxes_dirtied := 0
-    val sz_boxes = mul_size_size(int2size(NUM_BBOXES_DEFAULT), sizeof<MinePaintRectangle>)
-    val def_boxes = malloc(sz_boxes)
-    val _ = memset(def_boxes, 0, sz_boxes)
+    val def_boxes = bbox_buf_new(NUM_BBOXES_DEFAULT)
     val () = self->default_bboxes := def_boxes
     val () = self->bboxes := def_boxes
     val () = self->symmetry_data := minepaint_symmetry_data_new()
@@ -910,9 +902,9 @@ implement minepaint_tiled_surface_destroy(self_p) =
   if self_p != the_null_ptr then let
     val self = ptr2tiled_surface(self_p)
     val () = operation_queue_free(self->operation_queue)
-    val def_boxes = get_tiled_surface_default_bboxes(self_p)
-    val () = if self->bboxes != def_boxes then free(self->bboxes)
-    val () = if def_boxes != the_null_ptr then free(def_boxes)
+    val def_boxes = self->default_bboxes
+    val () = if self->bboxes != def_boxes then bbox_buf_release(self->bboxes)
+    val () = if def_boxes >= 0 then bbox_buf_release(def_boxes)
     val symm_h = self->symmetry_data
   in
     if symm_h >= 0 then minepaint_symmetry_data_destroy(symm_h)

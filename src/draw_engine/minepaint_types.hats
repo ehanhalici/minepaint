@@ -53,6 +53,7 @@ typedef MinePaintSurface = @{
 #define SYMMETRY_NONE (~1)
 #define FIFO_NONE (~1)
 #define DAB_NONE (~1)
+#define BBOX_NONE (~1)
 #define TILEMAP_NONE (~1)
 #define OQ_NONE (~1)
 
@@ -77,8 +78,8 @@ typedef MinePaintTiledSurface = @{
   operation_queue= int,
   num_bboxes= int,
   num_bboxes_dirtied= int,
-  bboxes= ptr,
-  default_bboxes= ptr,
+  bboxes= int,
+  default_bboxes= int,
   threadsafe_tile_requests= int,
   tile_size= int
 }
