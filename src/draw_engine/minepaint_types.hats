@@ -6,6 +6,11 @@
 #define MINEPAINT_TILE_SIZE 64
 #define NUM_BBOXES_DEFAULT 32
 
+// Dynamics mapping arena. A mapping is an integer handle into mapping.dats.
+#define MAPPING_NONE (~1)
+#define MAPPING_INPUTS 18
+#define MAPPING_CURVE_POINTS 64
+
 typedef MinePaintRectangle = @{
   x= int,
   y= int,

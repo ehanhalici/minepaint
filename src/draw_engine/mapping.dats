@@ -1,177 +1,212 @@
 // src/draw_engine/mapping.dats
-// Native ATS2 implementation of MinePaint Dynamics Mapping (Piecewise Linear Curves)
-#define ATS_DYNLOADFLAG 0
+// Piecewise-linear dynamics curves in a typed structure-of-arrays arena.
+// A mapping is an integer handle. main.dats dynloads this file so the
+// arena exists before the first call. No raw pointers and no casts.
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
-#include "./engine_safe.hats"
+#include "./minepaint_types.hats"
 
-#define MAX_CONTROL_POINTS 64
-#define CONTROL_POINTS_SIZE 520
+#define MAPPING_CAPACITY 512
+#define CURVE_CAPACITY (MAPPING_CAPACITY * MAPPING_INPUTS)
+#define POINT_CAPACITY (CURVE_CAPACITY * MAPPING_CURVE_POINTS)
 
-typedef mp_mapping = @{
-  base_value= float,
-  inputs= int,
-  points= ptr,
-  inputs_used= int
-}
+val g_alive = arrayref_make_elt<bool>(i2sz(MAPPING_CAPACITY), false)
+val g_base = arrayref_make_elt<float>(i2sz(MAPPING_CAPACITY), 0.0f)
+val g_inputs = arrayref_make_elt<int>(i2sz(MAPPING_CAPACITY), 0)
+val g_used = arrayref_make_elt<int>(i2sz(MAPPING_CAPACITY), 0)
+val g_n = arrayref_make_elt<int>(i2sz(CURVE_CAPACITY), 0)
+val g_x = arrayref_make_elt<float>(i2sz(POINT_CAPACITY), 0.0f)
+val g_y = arrayref_make_elt<float>(i2sz(POINT_CAPACITY), 0.0f)
 
-extern castfn ptr2mapping(p: ptr): ref(mp_mapping) = "mac#"
+fn curve_slot(h: int, j: int): int = h * MAPPING_INPUTS + j
+fn point_slot(h: int, j: int, k: int): int =
+  curve_slot(h, j) * MAPPING_CURVE_POINTS + k
 
-extern fun malloc(sz: size_t): ptr = "mac#malloc"
-extern fun free(p: ptr): void = "mac#free"
-extern fun memset(p: ptr, v: int, sz: size_t): ptr = "mac#memset"
-
-fn mp_mapping_get_base(m: ptr): float = (ptr2mapping(m))->base_value
-fn mp_mapping_set_base(m: ptr, v: float): void = (ptr2mapping(m))->base_value := v
-fn mp_mapping_get_inputs(m: ptr): int = (ptr2mapping(m))->inputs
-fn mp_mapping_get_used(m: ptr): int = (ptr2mapping(m))->inputs_used
-fn mp_mapping_set_used(m: ptr, u: int): void = (ptr2mapping(m))->inputs_used := u
-
-fn mp_mapping_get_cp(m: ptr, idx: int): ptr = let
-  val pts = (ptr2mapping(m))->points
+fn alive_get(h: int): bool = let
+  val i = g1ofg0(h)
 in
-  ptr_add<byte>(pts, idx * CONTROL_POINTS_SIZE)
+  if (i >= 0) * (i < MAPPING_CAPACITY) then g_alive[i] else false
 end
 
-fn mp_cp_get_n(cp: ptr): int = let
-  val a = ptr2iarr{1}(ptr_add<int>(cp, 128))
+fn alive_set(h: int, v: bool): void = let
+  val i = g1ofg0(h)
 in
-  a[0]
+  if (i >= 0) * (i < MAPPING_CAPACITY) then g_alive[i] := v else ()
 end
 
-fn mp_cp_set_n(cp: ptr, n: int): void = let
-  val a = ptr2iarr{1}(ptr_add<int>(cp, 128))
+fn base_get(h: int): float = let
+  val i = g1ofg0(h)
 in
-  a[0] := n
+  if (i >= 0) * (i < MAPPING_CAPACITY) then g_base[i] else 0.0f
 end
 
-fn mp_cp_get_x(cp: ptr, i: int): float = let
-  val a = ptr2farr{64}(cp)
-  val idx = g1ofg0(i)
+fn base_set(h: int, v: float): void = let
+  val i = g1ofg0(h)
 in
-  if (idx >= 0) * (idx < 64) then a[idx] else 0.0f
+  if (i >= 0) * (i < MAPPING_CAPACITY) then g_base[i] := v else ()
 end
 
-fn mp_cp_set_x(cp: ptr, i: int, v: float): void = let
-  val a = ptr2farr{64}(cp)
-  val idx = g1ofg0(i)
+fn inputs_get(h: int): int = let
+  val i = g1ofg0(h)
 in
-  if (idx >= 0) * (idx < 64) then a[idx] := v else ()
+  if (i >= 0) * (i < MAPPING_CAPACITY) then g_inputs[i] else 0
 end
 
-fn mp_cp_get_y(cp: ptr, i: int): float = let
-  val a = ptr2farr{64}(ptr_add<float>(cp, 64))
-  val idx = g1ofg0(i)
+fn inputs_set(h: int, v: int): void = let
+  val i = g1ofg0(h)
 in
-  if (idx >= 0) * (idx < 64) then a[idx] else 0.0f
+  if (i >= 0) * (i < MAPPING_CAPACITY) then g_inputs[i] := v else ()
 end
 
-fn mp_cp_set_y(cp: ptr, i: int, v: float): void = let
-  val a = ptr2farr{64}(ptr_add<float>(cp, 64))
-  val idx = g1ofg0(i)
+fn used_get(h: int): int = let
+  val i = g1ofg0(h)
 in
-  if (idx >= 0) * (idx < 64) then a[idx] := v else ()
+  if (i >= 0) * (i < MAPPING_CAPACITY) then g_used[i] else 0
 end
 
-extern fun minepaint_mapping_new(inputs: int): ptr = "ext#minepaint_mapping_new"
-implement minepaint_mapping_new(inputs) = let
-  val p = malloc(sizeof<mp_mapping>)
-  val () = assertloc(p > the_null_ptr)
-  val m = ptr2mapping(p)
-  val n_inputs = if inputs > 0 then inputs else 1
-  val cp_sz = g0int2uint_int_size(n_inputs) * g0int2uint_int_size(CONTROL_POINTS_SIZE)
-  val pts = malloc(cp_sz)
-  val () = assertloc(pts > the_null_ptr)
-  val _ = memset(pts, 0, cp_sz)
-  val () = m->base_value := 0.0f
-  val () = m->inputs := inputs
-  val () = m->points := pts
-  val () = m->inputs_used := 0
+fn used_set(h: int, v: int): void = let
+  val i = g1ofg0(h)
 in
-  p
+  if (i >= 0) * (i < MAPPING_CAPACITY) then g_used[i] := v else ()
 end
 
-extern fun minepaint_mapping_free(self_p: ptr): void = "ext#minepaint_mapping_free"
-implement minepaint_mapping_free(self_p) =
-  if self_p != the_null_ptr then let
-    val m = ptr2mapping(self_p)
-    val pts = m->points
-    val () = if pts != the_null_ptr then free(pts)
+fn n_get(h: int, j: int): int = let
+  val i = g1ofg0(curve_slot(h, j))
+in
+  if (i >= 0) * (i < CURVE_CAPACITY) then g_n[i] else 0
+end
+
+fn n_set(h: int, j: int, v: int): void = let
+  val i = g1ofg0(curve_slot(h, j))
+in
+  if (i >= 0) * (i < CURVE_CAPACITY) then g_n[i] := v else ()
+end
+
+fn x_get(h: int, j: int, k: int): float = let
+  val i = g1ofg0(point_slot(h, j, k))
+in
+  if (i >= 0) * (i < POINT_CAPACITY) then g_x[i] else 0.0f
+end
+
+fn x_set(h: int, j: int, k: int, v: float): void = let
+  val i = g1ofg0(point_slot(h, j, k))
+in
+  if (i >= 0) * (i < POINT_CAPACITY) then g_x[i] := v else ()
+end
+
+fn y_get(h: int, j: int, k: int): float = let
+  val i = g1ofg0(point_slot(h, j, k))
+in
+  if (i >= 0) * (i < POINT_CAPACITY) then g_y[i] else 0.0f
+end
+
+fn y_set(h: int, j: int, k: int, v: float): void = let
+  val i = g1ofg0(point_slot(h, j, k))
+in
+  if (i >= 0) * (i < POINT_CAPACITY) then g_y[i] := v else ()
+end
+
+fun find_free_slot(i: int): int =
+  if i >= MAPPING_CAPACITY then MAPPING_NONE
+  else if alive_get(i) then find_free_slot(i + 1)
+  else i
+
+// A fresh mapping matches malloc+memset: counts and coordinates start at 0.
+// Tail recursion walks one curve, then the next, so a reused slot cannot
+// expose the previous owner's control points.
+fun clear_points(h: int, j: int, k: int): void =
+  if j >= MAPPING_INPUTS then ()
+  else if k >= MAPPING_CURVE_POINTS then clear_points(h, j + 1, 0)
+  else let
+    val () = x_set(h, j, k, 0.0f)
+    val () = y_set(h, j, k, 0.0f)
   in
-    free(self_p)
+    clear_points(h, j, k + 1)
   end
 
-extern fun minepaint_mapping_get_base_value(self_p: ptr): float = "ext#minepaint_mapping_get_base_value"
-implement minepaint_mapping_get_base_value(self_p) =
-  mp_mapping_get_base(self_p)
+fun clear_curves(h: int, j: int): void =
+  if j < MAPPING_INPUTS then let
+    val () = n_set(h, j, 0)
+  in clear_curves(h, j + 1) end
+  else clear_points(h, 0, 0)
 
-extern fun minepaint_mapping_set_base_value(self_p: ptr, value: float): void = "ext#minepaint_mapping_set_base_value"
-implement minepaint_mapping_set_base_value(self_p, value) =
-  mp_mapping_set_base(self_p, value)
+extern fun minepaint_mapping_new(inputs: int): int = "ext#minepaint_mapping_new"
+implement minepaint_mapping_new(inputs) = let
+  val () = assertloc((inputs >= 0) && (inputs <= MAPPING_INPUTS))
+  val h = find_free_slot(0)
+  val () = assertloc(h >= 0)
+  val () = alive_set(h, true)
+  val () = base_set(h, 0.0f)
+  val () = inputs_set(h, inputs)
+  val () = used_set(h, 0)
+  val () = clear_curves(h, 0)
+in
+  h
+end
 
-fn update_used_count(self_p: ptr, old_n: int, new_n: int): void = let
-  val cur_used = mp_mapping_get_used(self_p)
+extern fun minepaint_mapping_free(h: int): void = "ext#minepaint_mapping_free"
+implement minepaint_mapping_free(h) =
+  if h >= 0 then alive_set(h, false)
+
+extern fun minepaint_mapping_get_base_value(h: int): float = "ext#minepaint_mapping_get_base_value"
+implement minepaint_mapping_get_base_value(h) = base_get(h)
+
+extern fun minepaint_mapping_set_base_value(h: int, value: float): void = "ext#minepaint_mapping_set_base_value"
+implement minepaint_mapping_set_base_value(h, value) = base_set(h, value)
+
+fn update_used_count(h: int, old_n: int, new_n: int): void = let
+  val cur_used = used_get(h)
   val updated =
     if (new_n != 0) && (old_n = 0) then cur_used + 1
     else if (new_n = 0) && (old_n != 0) then cur_used - 1
     else cur_used
 in
-  mp_mapping_set_used(self_p, updated)
+  used_set(h, updated)
 end
 
-extern fun minepaint_mapping_set_n(self_p: ptr, input: int, n: int): void = "ext#minepaint_mapping_set_n"
-implement minepaint_mapping_set_n(self_p, input, n) = let
-  val num_inputs = mp_mapping_get_inputs(self_p)
-  val () = assertloc(input >= 0 && input < num_inputs)
-  val () = assertloc(n >= 0 && n <= MAX_CONTROL_POINTS && n != 1)
-  val cp = mp_mapping_get_cp(self_p, input)
-  val old_n = mp_cp_get_n(cp)
-  val () = update_used_count(self_p, old_n, n)
+extern fun minepaint_mapping_set_n(h: int, input: int, n: int): void = "ext#minepaint_mapping_set_n"
+implement minepaint_mapping_set_n(h, input, n) = let
+  val () = assertloc((input >= 0) && (input < inputs_get(h)))
+  val () = assertloc((n >= 0) && (n <= MAPPING_CURVE_POINTS) && (n != 1))
+  val () = update_used_count(h, n_get(h, input), n)
 in
-  mp_cp_set_n(cp, n)
+  n_set(h, input, n)
 end
 
-extern fun minepaint_mapping_get_n(self_p: ptr, input: int): int = "ext#minepaint_mapping_get_n"
-implement minepaint_mapping_get_n(self_p, input) = let
-  val () = assertloc(input >= 0 && input < mp_mapping_get_inputs(self_p))
-  val cp = mp_mapping_get_cp(self_p, input)
+extern fun minepaint_mapping_get_n(h: int, input: int): int = "ext#minepaint_mapping_get_n"
+implement minepaint_mapping_get_n(h, input) = let
+  val () = assertloc((input >= 0) && (input < inputs_get(h)))
 in
-  mp_cp_get_n(cp)
+  n_get(h, input)
 end
 
 extern fun minepaint_mapping_set_point(
-  self_p: ptr, input: int, index: int, x: float, y: float
+  h: int, input: int, index: int, x: float, y: float
 ): void = "ext#minepaint_mapping_set_point"
-implement minepaint_mapping_set_point(self_p, input, index, x, y) = let
-  val () = assertloc(input >= 0 && input < mp_mapping_get_inputs(self_p))
-  val () = assertloc(index >= 0 && index < MAX_CONTROL_POINTS)
-  val cp = mp_mapping_get_cp(self_p, input)
-  val () = assertloc(index < mp_cp_get_n(cp))
-  val () = mp_cp_set_x(cp, index, x)
+implement minepaint_mapping_set_point(h, input, index, x, y) = let
+  val () = assertloc((input >= 0) && (input < inputs_get(h)))
+  val () = assertloc((index >= 0) && (index < n_get(h, input)))
+  val () = x_set(h, input, index, x)
 in
-  mp_cp_set_y(cp, index, y)
+  y_set(h, input, index, y)
 end
 
 extern fun minepaint_mapping_get_point(
-  self_p: ptr, input: int, index: int, x: &float? >> float, y: &float? >> float
+  h: int, input: int, index: int, x: &float? >> float, y: &float? >> float
 ): void = "ext#minepaint_mapping_get_point"
-implement minepaint_mapping_get_point(self_p, input, index, x, y) = let
-  val () = assertloc(input >= 0 && input < mp_mapping_get_inputs(self_p))
-  val () = assertloc(index >= 0 && index < MAX_CONTROL_POINTS)
-  val cp = mp_mapping_get_cp(self_p, input)
-  val () = assertloc(index < mp_cp_get_n(cp))
-  val () = x := mp_cp_get_x(cp, index)
+implement minepaint_mapping_get_point(h, input, index, x, y) = let
+  val () = assertloc((input >= 0) && (input < inputs_get(h)))
+  val () = assertloc((index >= 0) && (index < n_get(h, input)))
+  val () = x := x_get(h, input, index)
 in
-  y := mp_cp_get_y(cp, index)
+  y := y_get(h, input, index)
 end
 
-extern fun minepaint_mapping_is_constant(self_p: ptr): bool = "ext#minepaint_mapping_is_constant"
-implement minepaint_mapping_is_constant(self_p) =
-  mp_mapping_get_used(self_p) = 0
+extern fun minepaint_mapping_is_constant(h: int): bool = "ext#minepaint_mapping_is_constant"
+implement minepaint_mapping_is_constant(h) = used_get(h) = 0
 
-extern fun minepaint_mapping_get_inputs_used_n(self_p: ptr): int = "ext#minepaint_mapping_get_inputs_used_n"
-implement minepaint_mapping_get_inputs_used_n(self_p) =
-  mp_mapping_get_used(self_p)
+extern fun minepaint_mapping_get_inputs_used_n(h: int): int = "ext#minepaint_mapping_get_inputs_used_n"
+implement minepaint_mapping_get_inputs_used_n(h) = used_get(h)
 
 fn eval_segment(x: float, x0: float, y0: float, x1: float, y1: float): float =
   if (x0 = x1) || (y0 = y1) then y0
@@ -183,51 +218,54 @@ fn eval_segment(x: float, x0: float, y0: float, x1: float, y1: float): float =
   end
 
 fun find_seg(
-  cp: ptr, n: int, x: float, i: int,
+  h: int, j: int, n: int, x: float, i: int,
   x0: float, y0: float, x1: float, y1: float
 ): @(float, float, float, float) =
   if (i < n) && (x > x1) then
-    find_seg(cp, n, x, i + 1, x1, y1, mp_cp_get_x(cp, i), mp_cp_get_y(cp, i))
+    find_seg(h, j, n, x, i + 1, x1, y1, x_get(h, j, i), y_get(h, j, i))
   else
     @(x0, y0, x1, y1)
 
-fn eval_input_curve(cp: ptr, x: float): float = let
-  val n = mp_cp_get_n(cp)
+fn eval_curve(h: int, j: int, x: float): float = let
+  val n = n_get(h, j)
 in
   if n <= 0 then 0.0f
   else let
-    val x0_init = mp_cp_get_x(cp, 0)
-    val y0_init = mp_cp_get_y(cp, 0)
-    val x1_init = mp_cp_get_x(cp, 1)
-    val y1_init = mp_cp_get_y(cp, 1)
-    val @(x0, y0, x1, y1) = find_seg(cp, n, x, 2, x0_init, y0_init, x1_init, y1_init)
+    val @(x0, y0, x1, y1) = find_seg(h, j, n, x, 2, x_get(h, j, 0), y_get(h, j, 0), x_get(h, j, 1), y_get(h, j, 1))
   in
     eval_segment(x, x0, y0, x1, y1)
   end
 end
 
-fun loop_mapping_inputs(
-  self_p: ptr, data: ptr, j: int, num_in: int, acc: float
-): float =
-  if j < num_in then let
-    val cp = mp_mapping_get_cp(self_p, j)
-    val x = mp_arr_fget(data, j)
-    val y = eval_input_curve(cp, x)
-  in
-    loop_mapping_inputs(self_p, data, j + 1, num_in, g0float_add(acc, y))
-  end else acc
-
-extern fun minepaint_mapping_calculate(self_p: ptr, data: ptr): float = "ext#minepaint_mapping_calculate"
-implement minepaint_mapping_calculate(self_p, data) = let
-  val base = mp_mapping_get_base(self_p)
+fn input_at(data: &(@[float][MAPPING_INPUTS]), j: int): float = let
+  val idx = g1ofg0(j)
 in
-  if mp_mapping_get_used(self_p) = 0 then base
-  else loop_mapping_inputs(self_p, data, 0, mp_mapping_get_inputs(self_p), base)
+  if (idx >= 0) * (idx < MAPPING_INPUTS) then data[idx] else 0.0f
 end
 
-extern fun minepaint_mapping_calculate_single_input(self_p: ptr, input: float): float = "ext#minepaint_mapping_calculate_single_input"
-implement minepaint_mapping_calculate_single_input(self_p, input) = let
-  var v: float = input
+fun sum_inputs(
+  h: int, data: &(@[float][MAPPING_INPUTS]), j: int, num_in: int, acc: float
+): float =
+  if j < num_in then let
+    val y = eval_curve(h, j, input_at(data, j))
+  in
+    sum_inputs(h, data, j + 1, num_in, g0float_add(acc, y))
+  end else acc
+
+extern fun minepaint_mapping_calculate(
+  h: int, data: &(@[float][MAPPING_INPUTS])
+): float = "ext#minepaint_mapping_calculate"
+implement minepaint_mapping_calculate(h, data) = let
+  val base = base_get(h)
 in
-  minepaint_mapping_calculate(self_p, addr@(v))
+  if used_get(h) = 0 then base
+  else sum_inputs(h, data, 0, inputs_get(h), base)
+end
+
+extern fun minepaint_mapping_calculate_single_input(h: int, input: float): float = "ext#minepaint_mapping_calculate_single_input"
+implement minepaint_mapping_calculate_single_input(h, input) = let
+  var buf: @[float][MAPPING_INPUTS] = @[float][MAPPING_INPUTS](0.0f)
+  val () = buf[0] := input
+in
+  minepaint_mapping_calculate(h, buf)
 end

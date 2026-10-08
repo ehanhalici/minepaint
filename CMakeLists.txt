@@ -74,6 +74,7 @@ foreach(ATS_FILE ${ATS_SOURCES})
   endif()
   list(APPEND SEEN_BASE ${BASE_NAME})
 
+  file(RELATIVE_PATH REL_ATS "${CMAKE_SOURCE_DIR}" "${ATS_FILE}")
   set(C_OUT "${CMAKE_CURRENT_BINARY_DIR}/${BASE_NAME}_dats.c")
   add_custom_command(
     OUTPUT ${C_OUT}
@@ -83,9 +84,10 @@ foreach(ATS_FILE ${ATS_SOURCES})
       -IATS $ENV{PATSHOME}
       -IATS $ENV{PATSHOME}/share
       -o ${C_OUT}
-      -d ${ATS_FILE}
+      -d ${REL_ATS}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     DEPENDS ${ATS_FILE}
-    COMMENT "[ATS] ${ATS_FILE} -> ${BASE_NAME}_dats.c"
+    COMMENT "[ATS] ${REL_ATS} -> ${BASE_NAME}_dats.c"
   )
   list(APPEND GENERATED_C_SOURCES ${C_OUT})
 endforeach()

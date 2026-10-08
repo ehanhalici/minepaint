@@ -3,6 +3,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 #include "./engine_safe.hats"
+#include "./minepaint_types.hats"
 
 staload "./settings.dats"
 staload "./helpers.dats"
@@ -81,15 +82,15 @@ in
   a[0] := v
 end
 
-fn mp_brush_get_mapping(b: ptr, i: int): ptr = let
-  val a = ptr2parr{65}(ptr_add<byte>(b, 704))
+fn mp_brush_get_mapping(b: ptr, i: int): int = let
+  val a = ptr2iarr{65}(ptr_add<byte>(b, 704))
   val idx = g1ofg0(i)
 in
-  if (idx >= 0) * (idx < 65) then a[idx] else the_null_ptr
+  if (idx >= 0) * (idx < 65) then a[idx] else MAPPING_NONE
 end
 
-fn mp_brush_set_mapping(b: ptr, i: int, m: ptr): void = let
-  val a = ptr2parr{65}(ptr_add<byte>(b, 704))
+fn mp_brush_set_mapping(b: ptr, i: int, m: int): void = let
+  val a = ptr2iarr{65}(ptr_add<byte>(b, 704))
   val idx = g1ofg0(i)
 in
   if (idx >= 0) * (idx < 65) then a[idx] := m else ()
@@ -129,18 +130,18 @@ extern fun rng_double_next(rng: ptr): double = "ext#rng_double_next"
 extern fun rng_double_free(rng: ptr): void = "ext#rng_double_free"
 extern fun rand_gauss(rng: ptr): float = "ext#rand_gauss"
 
-extern fun minepaint_mapping_new(inputs: int): ptr = "ext#minepaint_mapping_new"
-extern fun minepaint_mapping_free(self_p: ptr): void = "ext#minepaint_mapping_free"
-extern fun minepaint_mapping_set_base_value(self_p: ptr, value: float): void = "ext#minepaint_mapping_set_base_value"
-extern fun minepaint_mapping_set_n(self_p: ptr, input: int, n: int): void = "ext#minepaint_mapping_set_n"
-extern fun minepaint_mapping_get_n(self_p: ptr, input: int): int = "ext#minepaint_mapping_get_n"
-extern fun minepaint_mapping_set_point(self_p: ptr, input: int, index: int, x: float, y: float): void = "ext#minepaint_mapping_set_point"
-extern fun minepaint_mapping_calculate(self_p: ptr, data: ptr): float = "ext#minepaint_mapping_calculate"
+extern fun minepaint_mapping_new(inputs: int): int = "ext#minepaint_mapping_new"
+extern fun minepaint_mapping_free(h: int): void = "ext#minepaint_mapping_free"
+extern fun minepaint_mapping_set_base_value(h: int, value: float): void = "ext#minepaint_mapping_set_base_value"
+extern fun minepaint_mapping_set_n(h: int, input: int, n: int): void = "ext#minepaint_mapping_set_n"
+extern fun minepaint_mapping_get_n(h: int, input: int): int = "ext#minepaint_mapping_get_n"
+extern fun minepaint_mapping_set_point(h: int, input: int, index: int, x: float, y: float): void = "ext#minepaint_mapping_set_point"
+extern fun minepaint_mapping_calculate(h: int, data: &(@[float][MAPPING_INPUTS])): float = "ext#minepaint_mapping_calculate"
 extern fun minepaint_brush_setting_info(id: int): ptr = "ext#minepaint_brush_setting_info"
 
-fn clear_mapping_curves(m: ptr): void = let
+fn clear_mapping_curves(m: int): void = let
   fun loop(j: int): void =
-    if j < 18 then let
+    if j < MAPPING_INPUTS then let
       val () = minepaint_mapping_set_n(m, j, 0)
     in loop(j + 1) end else ()
 in
@@ -156,9 +157,9 @@ fn reset_setting_default(b: ptr, i: int): void = let
   val m = mp_brush_get_mapping(b, i)
   val () = mp_brush_set_base(b, i, s->def)
   val () = mp_brush_set_val(b, i, s->def)
-  val () = if m != the_null_ptr then minepaint_mapping_set_base_value(m, s->def)
+  val () = if m != MAPPING_NONE then minepaint_mapping_set_base_value(m, s->def)
 in
-  if m != the_null_ptr then clear_mapping_curves(m)
+  if m != MAPPING_NONE then clear_mapping_curves(m)
 end
 
 fn reset_settings(b: ptr, keep_color: int): void = let
@@ -174,7 +175,7 @@ end
 fn alloc_mappings(b: ptr): void = let
   fun loop(i: int): void =
     if i < MINEPAINT_BRUSH_SETTINGS_COUNT then let
-      val m = minepaint_mapping_new(18)
+      val m = minepaint_mapping_new(MAPPING_INPUTS)
       val () = mp_brush_set_mapping(b, i, m)
     in loop(i + 1) end else ()
 in
@@ -185,8 +186,8 @@ fn free_mappings(b: ptr): void = let
   fun loop(i: int): void =
     if i < MINEPAINT_BRUSH_SETTINGS_COUNT then let
       val m = mp_brush_get_mapping(b, i)
-      val () = if m != the_null_ptr then minepaint_mapping_free(m)
-      val () = mp_brush_set_mapping(b, i, the_null_ptr)
+      val () = if m != MAPPING_NONE then minepaint_mapping_free(m)
+      val () = mp_brush_set_mapping(b, i, MAPPING_NONE)
     in loop(i + 1) end else ()
 in
   loop(0)
@@ -228,7 +229,7 @@ implement draw_engine_brush_set_base_value(b, id, v) =
       val () = mp_brush_set_base(b, id, v)
       val () = mp_brush_set_val(b, id, v)
     in
-      if m != the_null_ptr then minepaint_mapping_set_base_value(m, v)
+      if m != MAPPING_NONE then minepaint_mapping_set_base_value(m, v)
     end
 
 extern fun draw_engine_brush_set_mapping_n(
@@ -395,34 +396,42 @@ in
   if pos < 0.0f then f_sub(256.0f, v) else v
 end
 
+fn in_set(arr: &(@[float][MAPPING_INPUTS]), k: int, v: float): void = let
+  val idx = g1ofg0(k)
+in
+  if (idx >= 0) * (idx < MAPPING_INPUTS) then arr[idx] := v else ()
+end
+
 fn populate_input_buffer(
-  b: ptr, in_p: ptr, cur_p: float, viewzoom: float, base_radius_log: float
+  b: ptr, in_p: &(@[float][MAPPING_INPUTS]), cur_p: float, viewzoom: float, base_radius_log: float
 ): void = let
   val gain = expf(mp_brush_get_base(b, BRUSH_SETTING_PRESSURE_GAIN_LOG))
   val zoom_lin = if viewzoom < 0.01f then 0.01f else viewzoom
   val gscale = expf(mp_brush_get_val(b, BRUSH_SETTING_GRIDMAP_SCALE))
-  val () = mp_arr_fset(in_p, 0, f_mul(cur_p, gain))
-  val () = mp_arr_fset(in_p, 1, g0float2float_double_float(rng_double_next(jitter_rng(b))))
-  val () = mp_arr_fset(in_p, 2, mp_brush_get_state(b, BRUSH_STATE_STROKE))
-  val () = mp_arr_fset(in_p, 6, speed_input(mp_brush_get_base(b, BRUSH_SETTING_SPEED1_GAMMA), mp_brush_get_state(b, BRUSH_STATE_NORM_SPEED1_SLOW)))
-  val () = mp_arr_fset(in_p, 7, speed_input(mp_brush_get_base(b, BRUSH_SETTING_SPEED2_GAMMA), mp_brush_get_state(b, BRUSH_STATE_NORM_SPEED2_SLOW)))
-  val () = mp_arr_fset(in_p, 13, grid_coord(mp_brush_get_state(b, BRUSH_STATE_ACTUAL_X), gscale, mp_brush_get_val(b, BRUSH_SETTING_GRIDMAP_SCALE_X)))
-  val () = mp_arr_fset(in_p, 14, grid_coord(mp_brush_get_state(b, BRUSH_STATE_ACTUAL_Y), gscale, mp_brush_get_val(b, BRUSH_SETTING_GRIDMAP_SCALE_Y)))
-  val () = mp_arr_fset(in_p, 15, viewzoom_input(base_radius_log, zoom_lin))
+  val () = in_set(in_p, 0, f_mul(cur_p, gain))
+  val () = in_set(in_p, 1, g0float2float_double_float(rng_double_next(jitter_rng(b))))
+  val () = in_set(in_p, 2, mp_brush_get_state(b, BRUSH_STATE_STROKE))
+  val () = in_set(in_p, 6, speed_input(mp_brush_get_base(b, BRUSH_SETTING_SPEED1_GAMMA), mp_brush_get_state(b, BRUSH_STATE_NORM_SPEED1_SLOW)))
+  val () = in_set(in_p, 7, speed_input(mp_brush_get_base(b, BRUSH_SETTING_SPEED2_GAMMA), mp_brush_get_state(b, BRUSH_STATE_NORM_SPEED2_SLOW)))
+  val () = in_set(in_p, 13, grid_coord(mp_brush_get_state(b, BRUSH_STATE_ACTUAL_X), gscale, mp_brush_get_val(b, BRUSH_SETTING_GRIDMAP_SCALE_X)))
+  val () = in_set(in_p, 14, grid_coord(mp_brush_get_state(b, BRUSH_STATE_ACTUAL_Y), gscale, mp_brush_get_val(b, BRUSH_SETTING_GRIDMAP_SCALE_Y)))
+  val () = in_set(in_p, 15, viewzoom_input(base_radius_log, zoom_lin))
 in
-  mp_arr_fset(in_p, 16, base_radius_log)
+  in_set(in_p, 16, base_radius_log)
 end
 
-fn eval_mappings(b: ptr, in_p: ptr): void = let
-  fun loop(i: int): void =
-    if i < 65 then let
-      val m = mp_brush_get_mapping(b, i)
-      val v = if m != the_null_ptr then minepaint_mapping_calculate(m, in_p) else mp_brush_get_base(b, i)
-      val () = mp_brush_set_val(b, i, v)
-    in loop(i + 1) end else ()
-in
-  loop(0)
-end
+fun eval_mapping_slot(
+  b: ptr, in_p: &(@[float][MAPPING_INPUTS]), i: int
+): void =
+  if i < MINEPAINT_BRUSH_SETTINGS_COUNT then let
+    val m = mp_brush_get_mapping(b, i)
+    val v = if m != MAPPING_NONE then minepaint_mapping_calculate(m, in_p) else mp_brush_get_base(b, i)
+    val () = mp_brush_set_val(b, i, v)
+  in eval_mapping_slot(b, in_p, i + 1) end
+  else ()
+
+fn eval_mappings(b: ptr, in_p: &(@[float][MAPPING_INPUTS])): void =
+  eval_mapping_slot(b, in_p, 0)
 
 fn update_tracking_speed(
   b: ptr, cur_x: float, cur_y: float, norm_speed: float, step_ddab: float, dt: float
@@ -476,10 +485,9 @@ fun update_states(
   val norm_dy = f_mul(f_div(step_dy, dt), viewzoom)
   val norm_speed = hypotf(norm_dx, norm_dy)
 
-  var inbuf = @[float][18](0.0f)
-  val in_p = addr@inbuf
-  val () = populate_input_buffer(b, in_p, cur_p, viewzoom, base_radius_log)
-  val () = eval_mappings(b, in_p)
+  var inbuf = @[float][MAPPING_INPUTS](0.0f)
+  val () = populate_input_buffer(b, inbuf, cur_p, viewzoom, base_radius_log)
+  val () = eval_mappings(b, inbuf)
 
   val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_BASIC_RADIUS, mp_brush_get_val(b, BRUSH_SETTING_DABS_PER_BASIC_RADIUS))
   val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_ACTUAL_RADIUS, mp_brush_get_val(b, BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS))
