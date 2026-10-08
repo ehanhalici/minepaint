@@ -25,7 +25,7 @@ extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
 
 extern fun tile_map_new(sz: int): int = "ext#tile_map_new"
-extern fun tile_map_free(h: int, free_items: bool, user_free: (ptr) -> void): void = "ext#tile_map_free"
+extern fun tile_map_free(h: int, free_items: bool, user_free: (int) -> void): void = "ext#tile_map_free"
 extern fun tile_map_contains(h: int, x: int, y: int): bool = "ext#tile_map_contains"
 extern fun tile_map_size(h: int): int = "ext#tile_map_size"
 extern fun tile_map_get_fifo(h: int, x: int, y: int): int = "ext#tile_map_get_fifo"
@@ -33,11 +33,12 @@ extern fun tile_map_set_fifo(h: int, x: int, y: int, fh: int): void = "ext#tile_
 extern fun tile_map_copy_to(src: int, dst: int): void = "ext#tile_map_copy_to"
 
 extern fun fifo_new(): int = "ext#fifo_new"
-extern fun fifo_free(h: int, user_free: (ptr) -> void): void = "ext#fifo_free"
-extern fun fifo_push(h: int, data: ptr): void = "ext#fifo_push"
-extern fun fifo_pop(h: int): ptr = "ext#fifo_pop"
-extern fun fifo_peek_first(h: int): ptr = "ext#fifo_peek_first"
-extern fun fifo_peek_last(h: int): ptr = "ext#fifo_peek_last"
+extern fun fifo_free(h: int, user_free: (int) -> void): void = "ext#fifo_free"
+extern fun fifo_push(h: int, data: int): void = "ext#fifo_push"
+extern fun fifo_pop(h: int): int = "ext#fifo_pop"
+extern fun fifo_peek_first(h: int): int = "ext#fifo_peek_first"
+extern fun fifo_peek_last(h: int): int = "ext#fifo_peek_last"
+extern fun dab_release(h: int): void = "ext#dab_release"
 
 fn alive_get(h: int): bool = let
   val i = g1ofg0(h)
@@ -107,8 +108,8 @@ fn recycle_oq(h: int): void = let
   val () = if (g1ofg0(h) >= 0) * (g1ofg0(h) < OQ_CAP) then !g_nfree := n + 1
 in () end
 
-fn free_op_func(item: ptr): void =
-  if item != the_null_ptr then free(item)
+fn free_op_func(item: int): void =
+  if item >= 0 then dab_release(item)
 
 fn get_dirty_tile(p: ptr, idx: int): @(int, int) =
   @(mp_arr_iget(p, idx * 2), mp_arr_iget(p, idx * 2 + 1))
@@ -264,65 +265,65 @@ in
   end else cur
 end
 
-extern fun operation_queue_add(h: int, ix: int, iy: int, op_item: ptr): void = "ext#operation_queue_add"
+extern fun operation_queue_add(h: int, ix: int, iy: int, op_item: int): void = "ext#operation_queue_add"
 implement operation_queue_add(h, ix, iy, op_item) =
   if alive_get(h) then let
     val tm = ensure_tilemap_bounds(h, ix, iy)
     val op_queue = get_or_create_fifo(tm, ix, iy)
-    val is_first = fifo_peek_first(op_queue) = the_null_ptr
+    val is_first = fifo_peek_first(op_queue) < 0
     val () = if is_first then add_dirty_tile(h, tm, ix, iy)
   in
     fifo_push(op_queue, op_item)
   end else ()
 
-extern fun operation_queue_pop(h: int, ix: int, iy: int): ptr = "ext#operation_queue_pop"
+extern fun operation_queue_pop(h: int, ix: int, iy: int): int = "ext#operation_queue_pop"
 implement operation_queue_pop(h, ix, iy) =
-  if not(alive_get(h)) then the_null_ptr
+  if not(alive_get(h)) then DAB_NONE
   else let
     val tm = tm_get(h)
   in
-    if not(tile_map_contains(tm, ix, iy)) then the_null_ptr
+    if not(tile_map_contains(tm, ix, iy)) then DAB_NONE
     else let
       val op_queue = tile_map_get_fifo(tm, ix, iy)
     in
-      if op_queue < 0 then the_null_ptr
+      if op_queue < 0 then DAB_NONE
       else let
         val op_res = fifo_pop(op_queue)
       in
-        if op_res = the_null_ptr then let
+        if op_res < 0 then let
           val () = fifo_free(op_queue, free_op_func)
           val () = tile_map_set_fifo(tm, ix, iy, FIFO_NONE)
         in
-          the_null_ptr
+          DAB_NONE
         end else op_res
       end
     end
   end
 
-extern fun operation_queue_peek_first(h: int, ix: int, iy: int): ptr = "ext#operation_queue_peek_first"
+extern fun operation_queue_peek_first(h: int, ix: int, iy: int): int = "ext#operation_queue_peek_first"
 implement operation_queue_peek_first(h, ix, iy) =
-  if not(alive_get(h)) then the_null_ptr
+  if not(alive_get(h)) then DAB_NONE
   else let
     val tm = tm_get(h)
   in
-    if not(tile_map_contains(tm, ix, iy)) then the_null_ptr
+    if not(tile_map_contains(tm, ix, iy)) then DAB_NONE
     else let
       val op_queue = tile_map_get_fifo(tm, ix, iy)
     in
-      if op_queue < 0 then the_null_ptr else fifo_peek_first(op_queue)
+      if op_queue < 0 then DAB_NONE else fifo_peek_first(op_queue)
     end
   end
 
-extern fun operation_queue_peek_last(h: int, ix: int, iy: int): ptr = "ext#operation_queue_peek_last"
+extern fun operation_queue_peek_last(h: int, ix: int, iy: int): int = "ext#operation_queue_peek_last"
 implement operation_queue_peek_last(h, ix, iy) =
-  if not(alive_get(h)) then the_null_ptr
+  if not(alive_get(h)) then DAB_NONE
   else let
     val tm = tm_get(h)
   in
-    if not(tile_map_contains(tm, ix, iy)) then the_null_ptr
+    if not(tile_map_contains(tm, ix, iy)) then DAB_NONE
     else let
       val op_queue = tile_map_get_fifo(tm, ix, iy)
     in
-      if op_queue < 0 then the_null_ptr else fifo_peek_last(op_queue)
+      if op_queue < 0 then DAB_NONE else fifo_peek_last(op_queue)
     end
   end

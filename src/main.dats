@@ -7,6 +7,7 @@ staload "app/ui.dats"
 // file's dynload calls mapping's dynload. The path must match patsopt -d.
 #dynload "src/draw_engine/mapping.dats"
 #dynload "src/draw_engine/symmetry.dats"
+#dynload "src/draw_engine/dab.dats"
 #dynload "src/draw_engine/fifo.dats"
 #dynload "src/draw_engine/tilemap.dats"
 #dynload "src/draw_engine/operationqueue.dats"

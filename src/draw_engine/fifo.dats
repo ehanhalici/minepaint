@@ -1,5 +1,5 @@
-// Integer-handle FIFO. Payloads stay pointers because the queued dabs are
-// malloc'd operation records. main.dats dynloads this file.
+// Integer-handle FIFO. Each payload is an integer dab handle.
+// main.dats dynloads this file.
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 #include "./minepaint_types.hats"
@@ -17,7 +17,7 @@ val g_qfree = arrayref_make_elt<int>(i2sz(FIFO_CAP), 0)
 
 val g_ialive = arrayref_make_elt<bool>(i2sz(ITEM_CAP), false)
 val g_inext = arrayref_make_elt<int>(i2sz(ITEM_CAP), FIFO_NONE)
-val g_ipay = arrayref_make_elt<ptr>(i2sz(ITEM_CAP), the_null_ptr)
+val g_ipay = arrayref_make_elt<int>(i2sz(ITEM_CAP), FIFO_NONE)
 val g_ifresh = ref<int>(0)
 val g_infree = ref<int>(0)
 val g_ifree = arrayref_make_elt<int>(i2sz(ITEM_CAP), 0)
@@ -88,13 +88,13 @@ in
   if (i >= 0) * (i < ITEM_CAP) then g_inext[i] := v else ()
 end
 
-fn ipay_get(it: int): ptr = let
+fn ipay_get(it: int): int = let
   val i = g1ofg0(it)
 in
-  if (i >= 0) * (i < ITEM_CAP) then g_ipay[i] else the_null_ptr
+  if (i >= 0) * (i < ITEM_CAP) then g_ipay[i] else FIFO_NONE
 end
 
-fn ipay_set(it: int, v: ptr): void = let
+fn ipay_set(it: int, v: int): void = let
   val i = g1ofg0(it)
 in
   if (i >= 0) * (i < ITEM_CAP) then g_ipay[i] := v else ()
@@ -171,7 +171,7 @@ in
   h
 end
 
-extern fun fifo_push(h: int, data: ptr): void = "ext#fifo_push"
+extern fun fifo_push(h: int, data: int): void = "ext#fifo_push"
 implement fifo_push(h, data) =
   if qalive_get(h) then let
     val it = alloc_item()
@@ -186,13 +186,13 @@ implement fifo_push(h, data) =
     qcount_set(h, qcount_get(h) + 1)
   end else ()
 
-extern fun fifo_pop(h: int): ptr = "ext#fifo_pop"
+extern fun fifo_pop(h: int): int = "ext#fifo_pop"
 implement fifo_pop(h) =
-  if not(qalive_get(h)) then the_null_ptr
+  if not(qalive_get(h)) then FIFO_NONE
   else let
     val it = qfirst_get(h)
   in
-    if it < 0 then the_null_ptr
+    if it < 0 then FIFO_NONE
     else let
       val data = ipay_get(it)
       val nxt = inext_get(it)
@@ -200,38 +200,38 @@ implement fifo_pop(h) =
       val () = if nxt < 0 then qlast_set(h, FIFO_NONE)
       val () = qcount_set(h, qcount_get(h) - 1)
       val () = ialive_set(it, false)
-      val () = ipay_set(it, the_null_ptr)
+      val () = ipay_set(it, FIFO_NONE)
       val () = recycle_item(it)
     in
       data
     end
   end
 
-extern fun fifo_peek_first(h: int): ptr = "ext#fifo_peek_first"
+extern fun fifo_peek_first(h: int): int = "ext#fifo_peek_first"
 implement fifo_peek_first(h) =
-  if not(qalive_get(h)) then the_null_ptr
+  if not(qalive_get(h)) then FIFO_NONE
   else let
     val it = qfirst_get(h)
   in
-    if it < 0 then the_null_ptr else ipay_get(it)
+    if it < 0 then FIFO_NONE else ipay_get(it)
   end
 
-extern fun fifo_peek_last(h: int): ptr = "ext#fifo_peek_last"
+extern fun fifo_peek_last(h: int): int = "ext#fifo_peek_last"
 implement fifo_peek_last(h) =
-  if not(qalive_get(h)) then the_null_ptr
+  if not(qalive_get(h)) then FIFO_NONE
   else let
     val it = qlast_get(h)
   in
-    if it < 0 then the_null_ptr else ipay_get(it)
+    if it < 0 then FIFO_NONE else ipay_get(it)
   end
 
-extern fun fifo_free(h: int, user_free: (ptr) -> void): void = "ext#fifo_free"
+extern fun fifo_free(h: int, user_free: (int) -> void): void = "ext#fifo_free"
 implement fifo_free(h, user_free) =
   if qalive_get(h) then let
     fun drain(): void =
       if qfirst_get(h) >= 0 then let
         val data = fifo_pop(h)
-        val () = if data != the_null_ptr then user_free(data)
+        val () = if data >= 0 then user_free(data)
       in
         drain()
       end else ()

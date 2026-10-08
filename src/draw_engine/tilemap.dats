@@ -16,7 +16,7 @@ val g_fresh = ref<int>(0)
 val g_nfree = ref<int>(0)
 val g_free = arrayref_make_elt<int>(i2sz(TM_CAP), 0)
 
-extern fun fifo_free(h: int, user_free: (ptr) -> void): void = "ext#fifo_free"
+extern fun fifo_free(h: int, user_free: (int) -> void): void = "ext#fifo_free"
 
 fn alive_get(h: int): bool = let
   val i = g1ofg0(h)
@@ -134,7 +134,7 @@ in
   slot_set(slot_index(h, off), fh)
 end
 
-extern fun tile_map_free(h: int, free_items: bool, user_free: (ptr) -> void): void = "ext#tile_map_free"
+extern fun tile_map_free(h: int, free_items: bool, user_free: (int) -> void): void = "ext#tile_map_free"
 implement tile_map_free(h, free_items, user_free) =
   if alive_get(h) then let
     val n = entries_of(size_get(h))

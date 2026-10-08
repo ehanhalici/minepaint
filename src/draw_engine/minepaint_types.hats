@@ -52,6 +52,7 @@ typedef MinePaintSurface = @{
 // and it is not a pointer.
 #define SYMMETRY_NONE (~1)
 #define FIFO_NONE (~1)
+#define DAB_NONE (~1)
 #define TILEMAP_NONE (~1)
 #define OQ_NONE (~1)
 
@@ -86,9 +87,9 @@ typedef OperationDataDrawDab = @{
   x= float,
   y= float,
   radius= float,
-  color_r= uint16,
-  color_g= uint16,
-  color_b= uint16,
+  color_r= int,
+  color_g= int,
+  color_b= int,
   color_a= float,
   opaque= float,
   hardness= float,

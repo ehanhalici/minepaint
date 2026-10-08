@@ -9,6 +9,7 @@ staload "./rectangle.dats"
 staload "./matrix.dats"
 staload "./symmetry.dats"
 staload "./operationqueue.dats"
+staload "./dab.dats"
 staload "./brushmodes.dats"
 staload "./surface.dats"
 staload "./helpers.dats"
@@ -18,11 +19,12 @@ staload "./helpers.dats"
 
 extern castfn ptr2tiled_surface(p: ptr): ref(MinePaintTiledSurface) = "mac#"
 extern castfn ptr2tile_req(p: ptr): ref(MinePaintTileRequest) = "mac#"
-extern castfn ptr2dab_op(p: ptr): ref(OperationDataDrawDab) = "mac#"
 extern castfn ptr2rect(p: ptr): ref(MinePaintRectangle) = "mac#"
 extern castfn ptr2rects(p: ptr): ref(MinePaintRectangles) = "mac#"
 extern castfn u16(x: uint): uint16 = "mac#"
 extern castfn int2uint(x: int): uint = "mac#"
+
+fn i2u16(x: int): uint16 = u16(int2uint(x))
 
 typedef MinePaintTileRequestFunc = (ptr, ptr) -> void
 
@@ -52,7 +54,6 @@ fn int2size(x: int): size_t = g0int2uint_int_size(x)
 extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
 extern fun memset(p: ptr, v: int, sz: size_t): ptr = "mac#memset"
-extern fun memcpy(dest: ptr, src: ptr, sz: size_t): ptr = "mac#memcpy"
 extern fun cosf(x: float): float = "mac#cosf"
 extern fun sinf(x: float): float = "mac#sinf"
 extern fun sqrtf(x: float): float = "mac#sqrtf"
@@ -326,94 +327,94 @@ in
 end
 
 fn apply_non_paint_normal(
-  mask: ptr, rgba_p: ptr, op_rec: ref(OperationDataDrawDab), paint: float
+  mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab, paint: float
 ): void =
-  if f_gt(op_rec->normal, 0.0f) then let
-    val opaq_norm = f_mul(f_mul(op_rec->normal, op_rec->opaque), f_mul(f_sub(1.0f, paint), 32768.0f))
+  if f_gt(op_rec.normal, 0.0f) then let
+    val opaq_norm = f_mul(f_mul(op_rec.normal, op_rec.opaque), f_mul(f_sub(1.0f, paint), 32768.0f))
     val opaq_u16 = u16(int2uint(g0float2int_float_int(opaq_norm)))
-    val cr = op_rec->color_r
-    val cg = op_rec->color_g
-    val cb = op_rec->color_b
+    val cr = i2u16(op_rec.color_r)
+    val cg = i2u16(op_rec.color_g)
+    val cb = i2u16(op_rec.color_b)
   in
-    if f_gte(op_rec->color_a, 1.0f) then
+    if f_gte(op_rec.color_a, 1.0f) then
       draw_dab_pixels_BlendMode_Normal(mask, rgba_p, cr, cg, cb, opaq_u16)
     else let
-      val ca_u16 = u16(int2uint(g0float2int_float_int(f_mul(op_rec->color_a, 32768.0f))))
+      val ca_u16 = u16(int2uint(g0float2int_float_int(f_mul(op_rec.color_a, 32768.0f))))
     in
       draw_dab_pixels_BlendMode_Normal_and_Eraser(mask, rgba_p, cr, cg, cb, ca_u16, opaq_u16)
     end
   end
 
 fn apply_non_paint_lock_alpha(
-  mask: ptr, rgba_p: ptr, op_rec: ref(OperationDataDrawDab), paint: float
+  mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab, paint: float
 ): void =
-  if (f_gt(op_rec->lock_alpha, 0.0f)) * (op_rec->color_a != 0.0f) then let
-    val la_fac = f_mul(f_mul(op_rec->lock_alpha, op_rec->opaque), f_mul(f_sub(1.0f, op_rec->colorize), f_sub(1.0f, op_rec->posterize)))
+  if (f_gt(op_rec.lock_alpha, 0.0f)) * (op_rec.color_a != 0.0f) then let
+    val la_fac = f_mul(f_mul(op_rec.lock_alpha, op_rec.opaque), f_mul(f_sub(1.0f, op_rec.colorize), f_sub(1.0f, op_rec.posterize)))
     val la_norm = f_mul(f_mul(la_fac, f_sub(1.0f, paint)), 32768.0f)
     val la_u16 = u16(int2uint(g0float2int_float_int(la_norm)))
   in
-    draw_dab_pixels_BlendMode_LockAlpha(mask, rgba_p, op_rec->color_r, op_rec->color_g, op_rec->color_b, la_u16)
+    draw_dab_pixels_BlendMode_LockAlpha(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
   end
 
 fn apply_paint_normal(
-  mask: ptr, rgba_p: ptr, op_rec: ref(OperationDataDrawDab), paint: float
+  mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab, paint: float
 ): void =
-  if f_gt(op_rec->normal, 0.0f) then let
-    val opaq_norm = f_mul(f_mul(op_rec->normal, op_rec->opaque), f_mul(paint, 32768.0f))
+  if f_gt(op_rec.normal, 0.0f) then let
+    val opaq_norm = f_mul(f_mul(op_rec.normal, op_rec.opaque), f_mul(paint, 32768.0f))
     val opaq_u16 = u16(int2uint(g0float2int_float_int(opaq_norm)))
-    val cr = op_rec->color_r
-    val cg = op_rec->color_g
-    val cb = op_rec->color_b
+    val cr = i2u16(op_rec.color_r)
+    val cg = i2u16(op_rec.color_g)
+    val cb = i2u16(op_rec.color_b)
   in
-    if f_gte(op_rec->color_a, 1.0f) then
+    if f_gte(op_rec.color_a, 1.0f) then
       draw_dab_pixels_BlendMode_Normal_Paint(mask, rgba_p, cr, cg, cb, opaq_u16)
     else let
-      val ca_u16 = u16(int2uint(g0float2int_float_int(f_mul(op_rec->color_a, 32768.0f))))
+      val ca_u16 = u16(int2uint(g0float2int_float_int(f_mul(op_rec.color_a, 32768.0f))))
     in
       draw_dab_pixels_BlendMode_Normal_and_Eraser_Paint(mask, rgba_p, cr, cg, cb, ca_u16, opaq_u16)
     end
   end
 
 fn apply_paint_lock_alpha(
-  mask: ptr, rgba_p: ptr, op_rec: ref(OperationDataDrawDab), paint: float
+  mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab, paint: float
 ): void =
-  if (f_gt(op_rec->lock_alpha, 0.0f)) * (op_rec->color_a != 0.0f) then let
-    val la_fac = f_mul(f_mul(op_rec->lock_alpha, op_rec->opaque), f_mul(f_sub(1.0f, op_rec->colorize), f_sub(1.0f, op_rec->posterize)))
+  if (f_gt(op_rec.lock_alpha, 0.0f)) * (op_rec.color_a != 0.0f) then let
+    val la_fac = f_mul(f_mul(op_rec.lock_alpha, op_rec.opaque), f_mul(f_sub(1.0f, op_rec.colorize), f_sub(1.0f, op_rec.posterize)))
     val la_norm = f_mul(f_mul(la_fac, paint), 32768.0f)
     val la_u16 = u16(int2uint(g0float2int_float_int(la_norm)))
   in
-    draw_dab_pixels_BlendMode_LockAlpha_Paint(mask, rgba_p, op_rec->color_r, op_rec->color_g, op_rec->color_b, la_u16)
+    draw_dab_pixels_BlendMode_LockAlpha_Paint(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
   end
 
-fn apply_colorize_posterize(mask: ptr, rgba_p: ptr, op_rec: ref(OperationDataDrawDab)): void = let
+fn apply_colorize_posterize(mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab): void = let
   val () =
-    if f_gt(op_rec->colorize, 0.0f) then let
-      val c_norm = f_mul(f_mul(op_rec->colorize, op_rec->opaque), 32768.0f)
+    if f_gt(op_rec.colorize, 0.0f) then let
+      val c_norm = f_mul(f_mul(op_rec.colorize, op_rec.opaque), 32768.0f)
       val c_u16 = u16(int2uint(g0float2int_float_int(c_norm)))
     in
-      draw_dab_pixels_BlendMode_Color(mask, rgba_p, op_rec->color_r, op_rec->color_g, op_rec->color_b, c_u16)
+      draw_dab_pixels_BlendMode_Color(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), c_u16)
     end
   val () =
-    if f_gt(op_rec->posterize, 0.0f) then let
-      val p_norm = f_mul(f_mul(op_rec->posterize, op_rec->opaque), 32768.0f)
+    if f_gt(op_rec.posterize, 0.0f) then let
+      val p_norm = f_mul(f_mul(op_rec.posterize, op_rec.opaque), 32768.0f)
       val p_u16 = u16(int2uint(g0float2int_float_int(p_norm)))
-      val pnum_u16 = u16(int2uint(g0float2int_float_int(op_rec->posterize_num)))
+      val pnum_u16 = u16(int2uint(g0float2int_float_int(op_rec.posterize_num)))
     in
       draw_dab_pixels_BlendMode_Posterize(mask, rgba_p, p_u16, pnum_u16)
     end
 in () end
 
-extern fun process_op(rgba_p: ptr, mask: ptr, tx: int, ty: int, op_ptr: ptr): void = "ext#process_op"
-implement process_op(rgba_p, mask, tx, ty, op_ptr) =
-  if (rgba_p != the_null_ptr) * (op_ptr != the_null_ptr) then let
-    val op_rec = ptr2dab_op(op_ptr)
-    val ox = f_sub(op_rec->x, g0int2float_int_float(tx * MINEPAINT_TILE_SIZE))
-    val oy = f_sub(op_rec->y, g0int2float_int_float(ty * MINEPAINT_TILE_SIZE))
+extern fun process_op(rgba_p: ptr, mask: ptr, tx: int, ty: int, op_h: int): void = "ext#process_op"
+implement process_op(rgba_p, mask, tx, ty, op_h) =
+  if (rgba_p != the_null_ptr) * (op_h >= 0) then let
+    val op_rec = dab_get(op_h)
+    val ox = f_sub(op_rec.x, g0int2float_int_float(tx * MINEPAINT_TILE_SIZE))
+    val oy = f_sub(op_rec.y, g0int2float_int_float(ty * MINEPAINT_TILE_SIZE))
     val () = render_dab_mask(
-      mask, ox, oy, op_rec->radius, op_rec->hardness, op_rec->softness,
-      op_rec->aspect_ratio, op_rec->angle
+      mask, ox, oy, op_rec.radius, op_rec.hardness, op_rec.softness,
+      op_rec.aspect_ratio, op_rec.angle
     )
-    val paint = op_rec->paint
+    val paint = op_rec.paint
     val () = if f_lt(paint, 1.0f) then {
       val () = apply_non_paint_normal(mask, rgba_p, op_rec, paint)
       val () = apply_non_paint_lock_alpha(mask, rgba_p, op_rec, paint)
@@ -426,10 +427,10 @@ implement process_op(rgba_p, mask, tx, ty, op_ptr) =
     apply_colorize_posterize(mask, rgba_p, op_rec)
   end
 
-fun drain_op_queue(q: int, rgba_p: ptr, mask: ptr, tx: int, ty: int, cur_op: ptr): void =
-  if cur_op != the_null_ptr then let
+fun drain_op_queue(q: int, rgba_p: ptr, mask: ptr, tx: int, ty: int, cur_op: int): void =
+  if cur_op >= 0 then let
     val () = process_op(rgba_p, mask, tx, ty, cur_op)
-    val () = free(cur_op)
+    val () = dab_release(cur_op)
     val next_op = operation_queue_pop(q, tx, ty)
   in
     drain_op_queue(q, rgba_p, mask, tx, ty, next_op)
@@ -441,7 +442,7 @@ implement process_tile(self_p, tx, ty) =
     val self = ptr2tiled_surface(self_p)
     val op_first = operation_queue_pop(self->operation_queue, tx, ty)
   in
-    if op_first != the_null_ptr then let
+    if op_first >= 0 then let
       val req_mem = malloc(sizeof<MinePaintTileRequest>)
       val () = assertloc(req_mem > the_null_ptr)
       val () = minepaint_tile_request_init(req_mem, 0, tx, ty, false)
@@ -449,7 +450,7 @@ implement process_tile(self_p, tx, ty) =
       val rgba_p = (ptr2tile_req(req_mem))->buffer
     in
       if rgba_p = the_null_ptr then {
-        val () = free(op_first)
+        val () = dab_release(op_first)
         val () = free(req_mem)
       } else let
         val mask_sz = (MINEPAINT_TILE_SIZE * MINEPAINT_TILE_SIZE + 2 * MINEPAINT_TILE_SIZE) * 2
@@ -560,40 +561,45 @@ implement minepaint_tiled_surface_end_atomic(self_p, roi_p) =
       end
   in () end
 
-fn init_dab_data(
-  op_data: ref(OperationDataDrawDab), x: float, y: float, radius: float,
+fn make_dab(
+  x: float, y: float, radius: float,
   ar: float, angle: float, opaque: float, hardness: float, softness: float,
-  lock_alpha: float, colorize: float, posterize: float, p_num: float, paint: float
-): void = let
-  val () = op_data->x := x
-  val () = op_data->y := y
-  val () = op_data->radius := radius
-  val () = op_data->aspect_ratio := (if f_lt(ar, 1.0f) then 1.0f else ar)
-  val () = op_data->angle := angle
-  val () = op_data->opaque := f_clamp(opaque, 0.0f, 1.0f)
-  val () = op_data->hardness := f_clamp(hardness, 0.0f, 1.0f)
-  val () = op_data->softness := f_clamp(softness, 0.0f, 1.0f)
-  val () = op_data->lock_alpha := f_clamp(lock_alpha, 0.0f, 1.0f)
-  val () = op_data->colorize := f_clamp(colorize, 0.0f, 1.0f)
-  val () = op_data->posterize := f_clamp(posterize, 0.0f, 1.0f)
-  val () = op_data->posterize_num := f_clamp(roundf(f_mul(p_num, 100.0f)), 1.0f, 128.0f)
-  val () = op_data->paint := f_clamp(paint, 0.0f, 1.0f)
-in () end
+  lock_alpha: float, colorize: float, posterize: float, p_num: float, paint: float,
+  color_r: float, color_g: float, color_b: float, color_a: float
+): OperationDataDrawDab = let
+  val lock_a = f_clamp(lock_alpha, 0.0f, 1.0f)
+  val col = f_clamp(colorize, 0.0f, 1.0f)
+  val post = f_clamp(posterize, 0.0f, 1.0f)
+in @{
+  x= x, y= y, radius= radius,
+  color_r= g0float2int_float_int(f_mul(f_clamp(color_r, 0.0f, 1.0f), 32768.0f)),
+  color_g= g0float2int_float_int(f_mul(f_clamp(color_g, 0.0f, 1.0f), 32768.0f)),
+  color_b= g0float2int_float_int(f_mul(f_clamp(color_b, 0.0f, 1.0f), 32768.0f)),
+  color_a= f_clamp(color_a, 0.0f, 1.0f),
+  opaque= f_clamp(opaque, 0.0f, 1.0f),
+  hardness= f_clamp(hardness, 0.0f, 1.0f),
+  softness= f_clamp(softness, 0.0f, 1.0f),
+  aspect_ratio= (if f_lt(ar, 1.0f) then 1.0f else ar),
+  angle= angle,
+  normal= f_mul(f_mul(f_sub(1.0f, lock_a), f_sub(1.0f, col)), f_sub(1.0f, post)),
+  lock_alpha= lock_a,
+  colorize= col,
+  posterize= post,
+  posterize_num= f_clamp(roundf(f_mul(p_num, 100.0f)), 1.0f, 128.0f),
+  paint= f_clamp(paint, 0.0f, 1.0f)
+} end
 
 fun queue_dab_tiles(
-  q: int, op_p: ptr, op_sz: size_t, ty: int, ty2: int, tx1: int, tx2: int
+  q: int, src: int, ty: int, ty2: int, tx1: int, tx2: int
 ): void =
   if ty <= ty2 then let
     fun loop_tx(tx: int): void =
       if tx <= tx2 then let
-        val copy_p = malloc(op_sz)
-        val () = assertloc(copy_p > the_null_ptr)
-        val _ = memcpy(copy_p, op_p, op_sz)
-        val () = operation_queue_add(q, tx, ty, copy_p)
+        val () = operation_queue_add(q, tx, ty, dab_clone(src))
       in loop_tx(tx + 1) end
     val () = loop_tx(tx1)
   in
-    queue_dab_tiles(q, op_p, op_sz, ty + 1, ty2, tx1, tx2)
+    queue_dab_tiles(q, src, ty + 1, ty2, tx1, tx2)
   end
 
 fn update_dab_bbox(self: ref(MinePaintTiledSurface), bbox_index: int, x: float, y: float, rf: float): void = let
@@ -618,25 +624,21 @@ fn draw_dab_internal(
   if f_lt(radius, 0.1f) || f_lte(hardness, 0.0f) || f_gte(softness, 1.0f) || f_lte(opaque, 0.0f) then false
   else let
     val self = ptr2tiled_surface(self_p)
-    val op_sz = sizeof<OperationDataDrawDab>
-    val op_p = malloc(op_sz)
-    val () = assertloc(op_p > the_null_ptr)
-    val op_data = ptr2dab_op(op_p)
-    val () = init_dab_data(op_data, x, y, radius, aspect_ratio, angle, opaque, hardness, softness, lock_alpha, colorize, posterize, posterize_num, paint)
-    val () = op_data->color_r := u16(int2uint(g0float2int_float_int(f_mul(f_clamp(color_r, 0.0f, 1.0f), 32768.0f))))
-    val () = op_data->color_g := u16(int2uint(g0float2int_float_int(f_mul(f_clamp(color_g, 0.0f, 1.0f), 32768.0f))))
-    val () = op_data->color_b := u16(int2uint(g0float2int_float_int(f_mul(f_clamp(color_b, 0.0f, 1.0f), 32768.0f))))
-    val () = op_data->color_a := f_clamp(color_a, 0.0f, 1.0f)
-    val () = op_data->normal := f_mul(f_mul(f_sub(1.0f, op_data->lock_alpha), f_sub(1.0f, op_data->colorize)), f_sub(1.0f, op_data->posterize))
+    val src = dab_new(make_dab(
+      x, y, radius, aspect_ratio, angle, opaque, hardness, softness,
+      lock_alpha, colorize, posterize, posterize_num, paint,
+      color_r, color_g, color_b, color_a
+    ))
     val rf = f_add(radius, 1.0f)
     val tx1 = g0float2int_float_int(floorf(f_div(floorf(f_sub(x, rf)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
     val tx2 = g0float2int_float_int(floorf(f_div(floorf(f_add(x, rf)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
     val ty1 = g0float2int_float_int(floorf(f_div(floorf(f_sub(y, rf)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
     val ty2 = g0float2int_float_int(floorf(f_div(floorf(f_add(y, rf)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
-    val () = queue_dab_tiles(self->operation_queue, op_p, op_sz, ty1, ty2, tx1, tx2)
+    val () = queue_dab_tiles(self->operation_queue, src, ty1, ty2, tx1, tx2)
     val () = update_dab_bbox(self, bbox_index, x, y, rf)
+    val () = dab_release(src)
   in
-    free(op_p); true
+    true
   end
 
 fn transform_and_draw(
