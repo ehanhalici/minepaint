@@ -18,4 +18,8 @@
 
 typedef struct timeval mp_timeval;
 
+static inline float mp_uint_to_float(unsigned int x) { return (float)x; }
+static inline unsigned int mp_float_to_uint(float x) { return (unsigned int)x; }
+static inline unsigned short mp_uint_to_u16(unsigned int x) { return (unsigned short)x; }
+
 #endif

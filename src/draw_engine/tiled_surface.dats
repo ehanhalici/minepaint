@@ -21,10 +21,8 @@ staload "./helpers.dats"
 extern castfn ptr2tiled_surface(p: ptr): ref(MinePaintTiledSurface) = "mac#"
 extern castfn ptr2tile_req(p: ptr): ref(MinePaintTileRequest) = "mac#"
 extern castfn ptr2rects(p: ptr): ref(MinePaintRectangles) = "mac#"
-extern castfn u16(x: uint): uint16 = "mac#"
-extern castfn int2uint(x: int): uint = "mac#"
 
-fn i2u16(x: int): uint16 = u16(int2uint(x))
+fn i2u16(x: int): uint16 = u16(g0int2uint_int_uint(x))
 
 typedef MinePaintTileRequestFunc = (ptr, ptr) -> void
 
@@ -247,7 +245,7 @@ end
 fn write_rle_skip(mask: ptr, o_idx: int, s_acc: int): int =
   if s_acc > 0 then let
     val () = mp_arr_u16set(mask, o_idx, u16(0U))
-    val () = mp_arr_u16set(mask, o_idx + 1, u16(int2uint(s_acc * 4)))
+    val () = mp_arr_u16set(mask, o_idx + 1, u16(g0int2uint_int_uint(s_acc * 4)))
   in
     o_idx + 2
   end
@@ -267,7 +265,7 @@ fun encode_rle_row(
       encode_rle_row(mask, rr_mask, yp, xp + 1, x1, h, s1_off, s1_sl, s2_off, s2_sl, s_acc + 1, o_idx)
     else let
       val next_o = write_rle_skip(mask, o_idx, s_acc)
-      val () = mp_arr_u16set(mask, next_o, u16(int2uint(opa_i)))
+      val () = mp_arr_u16set(mask, next_o, u16(g0int2uint_int_uint(opa_i)))
     in
       encode_rle_row(mask, rr_mask, yp, xp + 1, x1, h, s1_off, s1_sl, s2_off, s2_sl, 0, next_o + 1)
     end
@@ -328,7 +326,7 @@ fn apply_non_paint_normal(
 ): void =
   if f_gt(op_rec.normal, 0.0f) then let
     val opaq_norm = f_mul(f_mul(op_rec.normal, op_rec.opaque), f_mul(f_sub(1.0f, paint), 32768.0f))
-    val opaq_u16 = u16(int2uint(g0float2int_float_int(opaq_norm)))
+    val opaq_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(opaq_norm)))
     val cr = i2u16(op_rec.color_r)
     val cg = i2u16(op_rec.color_g)
     val cb = i2u16(op_rec.color_b)
@@ -336,7 +334,7 @@ fn apply_non_paint_normal(
     if f_gte(op_rec.color_a, 1.0f) then
       draw_dab_pixels_BlendMode_Normal(mask, rgba_p, cr, cg, cb, opaq_u16)
     else let
-      val ca_u16 = u16(int2uint(g0float2int_float_int(f_mul(op_rec.color_a, 32768.0f))))
+      val ca_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(f_mul(op_rec.color_a, 32768.0f))))
     in
       draw_dab_pixels_BlendMode_Normal_and_Eraser(mask, rgba_p, cr, cg, cb, ca_u16, opaq_u16)
     end
@@ -348,7 +346,7 @@ fn apply_non_paint_lock_alpha(
   if (f_gt(op_rec.lock_alpha, 0.0f)) * (op_rec.color_a != 0.0f) then let
     val la_fac = f_mul(f_mul(op_rec.lock_alpha, op_rec.opaque), f_mul(f_sub(1.0f, op_rec.colorize), f_sub(1.0f, op_rec.posterize)))
     val la_norm = f_mul(f_mul(la_fac, f_sub(1.0f, paint)), 32768.0f)
-    val la_u16 = u16(int2uint(g0float2int_float_int(la_norm)))
+    val la_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(la_norm)))
   in
     draw_dab_pixels_BlendMode_LockAlpha(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
   end
@@ -358,7 +356,7 @@ fn apply_paint_normal(
 ): void =
   if f_gt(op_rec.normal, 0.0f) then let
     val opaq_norm = f_mul(f_mul(op_rec.normal, op_rec.opaque), f_mul(paint, 32768.0f))
-    val opaq_u16 = u16(int2uint(g0float2int_float_int(opaq_norm)))
+    val opaq_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(opaq_norm)))
     val cr = i2u16(op_rec.color_r)
     val cg = i2u16(op_rec.color_g)
     val cb = i2u16(op_rec.color_b)
@@ -366,7 +364,7 @@ fn apply_paint_normal(
     if f_gte(op_rec.color_a, 1.0f) then
       draw_dab_pixels_BlendMode_Normal_Paint(mask, rgba_p, cr, cg, cb, opaq_u16)
     else let
-      val ca_u16 = u16(int2uint(g0float2int_float_int(f_mul(op_rec.color_a, 32768.0f))))
+      val ca_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(f_mul(op_rec.color_a, 32768.0f))))
     in
       draw_dab_pixels_BlendMode_Normal_and_Eraser_Paint(mask, rgba_p, cr, cg, cb, ca_u16, opaq_u16)
     end
@@ -378,7 +376,7 @@ fn apply_paint_lock_alpha(
   if (f_gt(op_rec.lock_alpha, 0.0f)) * (op_rec.color_a != 0.0f) then let
     val la_fac = f_mul(f_mul(op_rec.lock_alpha, op_rec.opaque), f_mul(f_sub(1.0f, op_rec.colorize), f_sub(1.0f, op_rec.posterize)))
     val la_norm = f_mul(f_mul(la_fac, paint), 32768.0f)
-    val la_u16 = u16(int2uint(g0float2int_float_int(la_norm)))
+    val la_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(la_norm)))
   in
     draw_dab_pixels_BlendMode_LockAlpha_Paint(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
   end
@@ -387,15 +385,15 @@ fn apply_colorize_posterize(mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab
   val () =
     if f_gt(op_rec.colorize, 0.0f) then let
       val c_norm = f_mul(f_mul(op_rec.colorize, op_rec.opaque), 32768.0f)
-      val c_u16 = u16(int2uint(g0float2int_float_int(c_norm)))
+      val c_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(c_norm)))
     in
       draw_dab_pixels_BlendMode_Color(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), c_u16)
     end
   val () =
     if f_gt(op_rec.posterize, 0.0f) then let
       val p_norm = f_mul(f_mul(op_rec.posterize, op_rec.opaque), 32768.0f)
-      val p_u16 = u16(int2uint(g0float2int_float_int(p_norm)))
-      val pnum_u16 = u16(int2uint(g0float2int_float_int(op_rec.posterize_num)))
+      val p_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(p_norm)))
+      val pnum_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(op_rec.posterize_num)))
     in
       draw_dab_pixels_BlendMode_Posterize(mask, rgba_p, p_u16, pnum_u16)
     end
@@ -853,7 +851,7 @@ implement tiled_surface_get_color(surface, x, y, radius, color_r, color_g, color
   val pa = ptr_add<float>(acc_mem, int2size(4))
 
   val s_int = if f_lte(rad, 2.0f) then 1 else g0float2int_float_int(f_mul(rad, 7.0f))
-  val s_u16 = u16(int2uint(s_int))
+  val s_u16 = u16(g0int2uint_int_uint(s_int))
   val rate = f_div(1.0f, f_mul(7.0f, rad))
   val rf = f_add(rad, 1.0f)
   val tx1 = g0float2int_float_int(floorf(f_div(floorf(f_sub(x, rf)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))

@@ -2,7 +2,7 @@
 #ifndef ENGINE_SAFE_HATS
 #define ENGINE_SAFE_HATS
 
-extern castfn u16(x: uint): uint16 = "mac#"
+extern fun u16(x: uint): uint16 = "mac#mp_uint_to_u16"
 extern castfn ptr2farr{n:int}(p: ptr): arrayref(float, n) = "mac#"
 extern castfn ptr2iarr{n:int}(p: ptr): arrayref(int, n) = "mac#"
 extern castfn ptr2u16arr{n:int}(p: ptr): arrayref(uint16, n) = "mac#"

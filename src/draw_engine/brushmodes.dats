@@ -13,9 +13,8 @@ fn i_div(a: int, b: int): int = g0int_div(a, b)
 fn i_gt(a: int, b: int): bool = a > b
 fn i_lt(a: int, b: int): bool = a < b
 
-extern castfn u16(x: uint): uint16 = "mac#"
-extern castfn u2f(x: uint): float = "mac#"
-extern castfn f2u(x: float): uint = "mac#"
+extern fun u2f(x: uint): float = "mac#mp_uint_to_float"
+extern fun f2u(x: float): uint = "mac#mp_float_to_uint"
 
 fn f_add(a: float, b: float): float = g0float_add(a, b)
 fn f_sub(a: float, b: float): float = g0float_sub(a, b)
