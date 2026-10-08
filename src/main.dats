@@ -10,6 +10,7 @@ staload "app/ui.dats"
 #dynload "src/draw_engine/fifo.dats"
 #dynload "src/draw_engine/tilemap.dats"
 #dynload "src/draw_engine/operationqueue.dats"
+#dynload "src/canvas/stroke_queue.dats"
 
 val g_slot_settings = ref<ptr>(the_null_ptr)
 val g_slot_inputs = ref<ptr>(the_null_ptr)

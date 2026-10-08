@@ -19,7 +19,7 @@ typedef canvas_state_record = @{
   last_mouse_x= float,
   last_mouse_y= float,
   last_time= double,
-  q= ptr
+  q= int
 }
 
 extern castfn ptr2canvas(p: ptr): ref(canvas_state_record)
@@ -62,15 +62,15 @@ fn f_div(a: float, b: float): float = g0float_div_float(a, b)
 
 // Stroke Queue API
 extern fun stroke_queue_teleport(brush: ptr, surf: ptr, x: float, y: float): void = "ext#stroke_queue_teleport"
-extern fun stroke_queue_start(wx: float, wy: float, pressure: float): ptr = "ext#stroke_queue_start"
+extern fun stroke_queue_start(wx: float, wy: float, pressure: float): int = "ext#stroke_queue_start"
 extern fun stroke_queue_step(
   layer: ptr, brush: ptr, surf: ptr, zoom: float,
-  q_ptr: ptr, wx: float, wy: float, pressure: float, elapsed: double
-): ptr = "ext#stroke_queue_step"
+  qh: int, wx: float, wy: float, pressure: float, elapsed: double
+): int = "ext#stroke_queue_step"
 extern fun stroke_queue_finish(
-  layer: ptr, brush: ptr, surf: ptr, zoom: float, q_ptr: ptr
+  layer: ptr, brush: ptr, surf: ptr, zoom: float, qh: int
 ): void = "ext#stroke_queue_finish"
-extern fun stroke_queue_free(q_ptr: ptr): void = "ext#stroke_queue_free"
+extern fun stroke_queue_free(qh: int): void = "ext#stroke_queue_free"
 
 extern fun minepaint_brush_apply_startup(b: ptr): void = "ext#minepaint_brush_apply_startup"
 extern fun catalog_apply_brush(b: ptr, g: BrushGroup, i: int): void = "ext#catalog_apply_brush"
@@ -200,7 +200,7 @@ end
 
 fn canvas_finish_stroke(s: ref(canvas_state_record)): void = {
   val () = stroke_queue_finish(s->layer, s->brush, s->surf, s->zoom, s->q)
-  val () = s->q := the_null_ptr
+  val () = s->q := ~1
   val () = minepaint_brush_reset(s->brush)
   val () = glsurface_set_erasing(s->surf, 0)
 }
@@ -270,7 +270,7 @@ implement canvas_state_create(brush) = let
   val () = state->last_mouse_x := 0.0f
   val () = state->last_mouse_y := 0.0f
   val () = state->last_time := 0.0
-  val () = state->q := the_null_ptr
+  val () = state->q := ~1
 in
   canvas2ptr(state)
 end
