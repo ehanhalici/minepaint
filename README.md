@@ -68,3 +68,12 @@ The resulting executable will be created at:
 ```bash
 ./build/minepaint
 ```
+
+### Verification
+
+Before committing, run the static type check and build gate:
+
+```bash
+bash scripts/verify.sh            # patsopt -tc on every .sats/.dats, then CMake build
+bash scripts/verify.sh --no-build # type check only
+```
