@@ -6,6 +6,7 @@
 staload "x11/event.sats"
 staload "x11/display_box.sats"
 staload "window/app_box.sats"
+staload "x11/xevent_box.sats"
 staload "x11/visual_box.sats"
 staload "gl/glctx_box.sats"
 staload "x11/xi2.sats"
@@ -145,7 +146,7 @@ in
   XPending(a->dpy)
 end
 
-extern fun app_next_event(app: MpApp, ev: ptr): void = "ext#app_next_event"
+extern fun app_next_event(app: MpApp, ev: MpXEvent): void = "ext#app_next_event"
 implement app_next_event(app, ev) = let
   val a = app_ref(app)
   val _ = XNextEvent(a->dpy, ev)

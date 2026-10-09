@@ -3,6 +3,7 @@
 #include "share/atspre_staload.hats"
 
 staload "x11/event.sats"
+staload "x11/xevent_box.sats"
 staload "x11/display_box.sats"
 staload "window/app_box.sats"
 staload "x11/xi2.sats"
@@ -33,7 +34,7 @@ extern fun app_create(w: int, h: int, title: string): MpApp = "ext#app_create"
 extern fun app_destroy(app: MpApp): void = "ext#app_destroy"
 extern fun app_wm_delete(app: MpApp): ulint = "ext#app_wm_delete"
 extern fun app_pending(app: MpApp): int = "ext#app_pending"
-extern fun app_next_event(app: MpApp, ev: ptr): void = "ext#app_next_event"
+extern fun app_next_event(app: MpApp, ev: MpXEvent): void = "ext#app_next_event"
 extern fun app_swap(app: MpApp): void = "ext#app_swap"
 extern fun app_dpy(app: MpApp): MpDisplay = "ext#app_dpy"
 
@@ -69,11 +70,11 @@ extern fun view_appstate(p: ptr): ref(AppState) = "mac#mp_id_ptr"
 extern fun mp_id_ptr(p: ptr): ptr = "mac#mp_id_ptr"
 
 // Boşluk Tuşu Otomatik Tekrar Kontrolü (Sıfır Heap Tahsisi, Stack Tabanlı)
-fn is_space_autorepeat(dpy: MpDisplay, ev: ptr): int =
+fn is_space_autorepeat(dpy: MpDisplay, ev: MpXEvent): int =
   if XEventsQueued(dpy, QueuedAfterReading) <= 0 then 0
   else let
     var nev: @[byte][256]
-    val nev_p = mp_id_ptr(addr@(nev))
+    val nev_p = xev_of(mp_id_ptr(addr@(nev)))
     val _ = XPeekEvent(dpy, nev_p)
     val same =
       (mp_xevent_type(nev_p) = KeyPress) &&
@@ -84,19 +85,19 @@ fn is_space_autorepeat(dpy: MpDisplay, ev: ptr): int =
     if same then 1 else 0
   end
 
-fn handle_configure(st: ref(AppState), p_xev: ptr): void = let
+fn handle_configure(st: ref(AppState), p_xev: MpXEvent): void = let
   val () = st->win_w := mp_xevent_config_w(p_xev)
   val () = st->win_h := mp_xevent_config_h(p_xev)
 in () end
 
-fn handle_client_message(st: ref(AppState), app: MpApp, p_xev: ptr): void = let
+fn handle_client_message(st: ref(AppState), app: MpApp, p_xev: MpXEvent): void = let
   val d0 = mp_xevent_client_data0(p_xev)
   val wm_del = ulint2lint(app_wm_delete(app))
 in
   if g0int_eq(d0, wm_del) then st->running := 0 else ()
 end
 
-fn handle_key_press(st: ref(AppState), p_xev: ptr): void = let
+fn handle_key_press(st: ref(AppState), p_xev: MpXEvent): void = let
   val ks = mp_xevent_keysym(p_xev)
 in
   if ks = XK_Escape then st->running := 0
@@ -104,7 +105,7 @@ in
   else ()
 end
 
-fn handle_key_release(st: ref(AppState), app: MpApp, p_xev: ptr): void = let
+fn handle_key_release(st: ref(AppState), app: MpApp, p_xev: MpXEvent): void = let
   val ks = mp_xevent_keysym(p_xev)
 in
   if ks = XK_space then let
@@ -127,7 +128,7 @@ in
   end else canvas_on_wheel(canvas_ptr, bx, by, dy)
 end
 
-fn handle_button_press(st: ref(AppState), canvas_ptr: int, p_xev: ptr): void = let
+fn handle_button_press(st: ref(AppState), canvas_ptr: int, p_xev: MpXEvent): void = let
   val bx = mp_xevent_btn_x(p_xev)
   val by = mp_xevent_btn_y(p_xev)
   val raw_btn = mp_xevent_btn_button(p_xev)
@@ -160,7 +161,7 @@ in
   end
 end
 
-fn handle_button_release(st: ref(AppState), canvas_ptr: int, p_xev: ptr): void = let
+fn handle_button_release(st: ref(AppState), canvas_ptr: int, p_xev: MpXEvent): void = let
   val bx = mp_xevent_btn_x(p_xev)
   val by = mp_xevent_btn_y(p_xev)
   val raw_btn = mp_xevent_btn_button(p_xev)
@@ -179,7 +180,7 @@ in
   in () end else ()
 end
 
-fn handle_motion_notify(st: ref(AppState), canvas_ptr: int, p_xev: ptr): void = let
+fn handle_motion_notify(st: ref(AppState), canvas_ptr: int, p_xev: MpXEvent): void = let
   val mx = mp_xevent_motion_x(p_xev)
   val my = mp_xevent_motion_y(p_xev)
   val cur_time = get_time_seconds()
@@ -251,7 +252,7 @@ fn xev_kind_of(t: int): xev_kind =
   else if t = MotionNotify then XevMotion()
   else XevOther()
 
-fn dispatch_xev(k: xev_kind, st: ref(AppState), app: MpApp, p_xev: ptr, canvas_ptr: int): void =
+fn dispatch_xev(k: xev_kind, st: ref(AppState), app: MpApp, p_xev: MpXEvent, canvas_ptr: int): void =
   case+ k of
   | XevConfigure() => handle_configure(st, p_xev)
   | XevClient() => handle_client_message(st, app, p_xev)
@@ -265,7 +266,7 @@ fn dispatch_xev(k: xev_kind, st: ref(AppState), app: MpApp, p_xev: ptr, canvas_p
   | XevMotion() => handle_motion_notify(st, canvas_ptr, p_xev)
   | XevOther() => ()
 
-fun event_loop(st: ref(AppState), app: MpApp, p_xev: ptr, canvas_ptr: int): void = let
+fun event_loop(st: ref(AppState), app: MpApp, p_xev: MpXEvent, canvas_ptr: int): void = let
 in
   if st->running > 0 then let
     fun drain(): void =
@@ -289,7 +290,7 @@ in
   if app_is_null(app) != 0 then 1
   else let
     var xev_buf: @[byte][256]
-    val p_xev = mp_id_ptr(addr@(xev_buf))
+    val p_xev = xev_of(mp_id_ptr(addr@(xev_buf)))
     var st: AppState
     val () = st.win_w := 1000
     val () = st.win_h := 600

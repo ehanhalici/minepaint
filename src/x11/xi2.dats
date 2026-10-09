@@ -6,6 +6,7 @@ staload "window/input.dats"
 staload "x11/xi2.sats"
 staload "x11/devtab.sats"
 staload "x11/display_box.sats"
+staload "x11/xevent_box.sats"
 
 %{#
 #include "x11/xi2_raw.cats"
@@ -26,11 +27,11 @@ extern fun c_xi2_device_class_val_axis(devs: ptr, dev_idx: int, class_idx: int):
 extern fun c_xi2_device_class_val_min(devs: ptr, dev_idx: int, class_idx: int): double = "mac#xi2_device_class_val_min"
 extern fun c_xi2_device_class_val_max(devs: ptr, dev_idx: int, class_idx: int): double = "mac#xi2_device_class_val_max"
 extern fun c_xi2_device_class_val_label(dpy: MpDisplay, devs: ptr, dev_idx: int, class_idx: int, buf: ptr, bufsz: int): int = "mac#xi2_device_class_val_label"
-extern fun c_xi2_cookie_extension(ev: ptr): int = "mac#xi2_cookie_extension"
-extern fun c_xi2_cookie_get_data(dpy: MpDisplay, ev: ptr): int = "mac#xi2_cookie_get_data"
-extern fun c_xi2_cookie_free_data(dpy: MpDisplay, ev: ptr): void = "mac#xi2_cookie_free_data"
-extern fun c_xi2_cookie_evtype(ev: ptr): int = "mac#xi2_cookie_evtype"
-extern fun c_xi2_cookie_data(ev: ptr): ptr = "mac#xi2_cookie_data"
+extern fun c_xi2_cookie_extension(ev: MpXEvent): int = "mac#xi2_cookie_extension"
+extern fun c_xi2_cookie_get_data(dpy: MpDisplay, ev: MpXEvent): int = "mac#xi2_cookie_get_data"
+extern fun c_xi2_cookie_free_data(dpy: MpDisplay, ev: MpXEvent): void = "mac#xi2_cookie_free_data"
+extern fun c_xi2_cookie_evtype(ev: MpXEvent): int = "mac#xi2_cookie_evtype"
+extern fun c_xi2_cookie_data(ev: MpXEvent): ptr = "mac#xi2_cookie_data"
 extern fun c_xi2_raw_deviceid(data: ptr): int = "mac#xi2_raw_deviceid"
 extern fun c_xi2_raw_has_axis(data: ptr, axis: int): int = "mac#xi2_raw_has_axis"
 extern fun c_xi2_raw_read_axis(data: ptr, axis: int): double = "mac#xi2_raw_read_axis"
@@ -302,7 +303,7 @@ fn xi2_handle_motion_event(
   end
 
 fn xi2_dispatch_event_type(
-  dpy: MpDisplay, st: ref(XI2BackendState), p_xev: ptr, evtype: int
+  dpy: MpDisplay, st: ref(XI2BackendState), p_xev: MpXEvent, evtype: int
 ): void =
   if (evtype = XI2_HIERARCHY_CHANGED) || (evtype = XI2_DEVICE_CHANGED) then
     xi2_refresh_devices_internal(dpy, st->devs)
@@ -311,7 +312,7 @@ fn xi2_dispatch_event_type(
   else ()
 
 implement xi2_process_raw_event(dpy, p_xev) =
-  if (dpy_is_null(dpy) != 0) || (p_xev = the_null_ptr) then 0
+  if (dpy_is_null(dpy) != 0) || (xev_is_null(p_xev) != 0) then 0
   else let
     val st = xi2_state_ref()
   in
