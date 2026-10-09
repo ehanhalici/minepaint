@@ -3,6 +3,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 #include "draw_engine/engine_safe.hats"
+staload "canvas/layer_box.sats"
 
 typedef GLuint = uint
 
@@ -14,13 +15,13 @@ typedef CanvasTile = @{
   ty= int,
   texture= uint,
   fbo= uint,
-  next_in_bucket= ptr,
-  next_in_layer= ptr
+  next_in_bucket= MpTile,
+  next_in_layer= MpTile
 }
 
 typedef Layer_Record = @{
   buckets= ptr,
-  tiles= ptr,
+  tiles= MpTile,
   tile_count= int
 }
 
@@ -82,22 +83,21 @@ extern fun malloc(n: size_t): ptr = "mac#"
 extern fun free(p: ptr): void = "mac#"
 
 // --- Sonsuz Kanvas / Tile Yönetim API'si ---
-extern fun layer_create(w: int, h: int): ptr = "ext#layer_create"
-extern fun layer_create_c(w: int, h: int): ptr = "ext#layer_create_c"
-extern fun layer_find_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_find_tile"
-extern fun layer_get_or_create_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_get_or_create_tile"
-extern fun layer_bind_tile(tile: ptr): void = "ext#layer_bind_tile"
+extern fun layer_create(w: int, h: int): MpLayer = "ext#layer_create"
+extern fun layer_create_c(w: int, h: int): MpLayer = "ext#layer_create_c"
+extern fun layer_find_tile(layer: MpLayer, tx: int, ty: int): MpTile = "ext#layer_find_tile"
+extern fun layer_get_or_create_tile(layer: MpLayer, tx: int, ty: int): MpTile = "ext#layer_get_or_create_tile"
+extern fun layer_bind_tile(tile: MpTile): void = "ext#layer_bind_tile"
 extern fun layer_unbind_tile(): void = "ext#layer_unbind_tile"
-extern fun layer_draw_tiles(layer: ptr, view_l: float, view_t: float, view_r: float, view_b: float, zoom: float): void = "ext#layer_draw_tiles"
-extern fun layer_clear(layer: ptr): void = "ext#layer_clear"
-extern fun layer_destroy(layer: ptr): void = "ext#layer_destroy"
+extern fun layer_draw_tiles(layer: MpLayer, view_l: float, view_t: float, view_r: float, view_b: float, zoom: float): void = "ext#layer_draw_tiles"
+extern fun layer_clear(layer: MpLayer): void = "ext#layer_clear"
+extern fun layer_destroy(layer: MpLayer): void = "ext#layer_destroy"
 
-// Geriye dönük uyumluluk imzaları
-extern fun layer_drawOnScreen(layer: ptr, w: int, h: int): void = "ext#layer_drawOnScreen"
-extern fun layer_bind(l: ptr): void = "ext#layer_bind"
-extern fun layer_unbind(l: ptr): void = "ext#layer_unbind"
-extern fun layer_bind_c(l: ptr): void = "ext#layer_bind_c"
-extern fun layer_unbind_c(l: ptr): void = "ext#layer_unbind_c"
+extern fun layer_drawOnScreen(layer: MpLayer, w: int, h: int): void = "ext#layer_drawOnScreen"
+extern fun layer_bind(l: MpLayer): void = "ext#layer_bind"
+extern fun layer_unbind(l: MpLayer): void = "ext#layer_unbind"
+extern fun layer_bind_c(l: MpLayer): void = "ext#layer_bind_c"
+extern fun layer_unbind_c(l: MpLayer): void = "ext#layer_unbind_c"
 
 // 2D Karo Koordinat Hash Fonksiyonu - Saf ATS2
 fn tile_hash(tx: int, ty: int): int = let
@@ -126,29 +126,29 @@ implement layer_create(w, h) = let
 
   val () = init_buckets(0)
   val () = r->buckets := buckets_mem
-  val () = r->tiles := the_null_ptr
+  val () = r->tiles := tile_none()
   val () = r->tile_count := 0
 in
-  p
+  layer_of(p)
 end
 
 implement layer_create_c(w, h) = layer_create(w, h)
 
 // --- O(1) Hash Tablosu ile Tile Arama ---
-fun find_tile_in_bucket(cur: ptr, tx: int, ty: int): ptr =
-  if cur = the_null_ptr then the_null_ptr
+fun find_tile_in_bucket(cur: MpTile, tx: int, ty: int): MpTile =
+  if tile_is_null(cur) != 0 then tile_none()
   else let
-    val t = view_tile(cur)
+    val t = view_tile(tile_ptr(cur))
   in
     if (t->tx = tx) && (t->ty = ty) then cur
     else find_tile_in_bucket(t->next_in_bucket, tx, ty)
   end
 
 implement layer_find_tile(layer, tx, ty) = let
-  val () = assertloc(layer != the_null_ptr)
-  val lr = view_layer(layer)
+  val () = assertloc(layer_is_null(layer) = 0)
+  val lr = view_layer(layer_ptr(layer))
   val idx = tile_hash(tx, ty)
-  val head = mp_slot_get(ptr_add<ptr>(lr->buckets, idx))
+  val head = tile_of(mp_slot_get(ptr_add<ptr>(lr->buckets, idx)))
 in
   find_tile_in_bucket(head, tx, ty)
 end
@@ -175,7 +175,7 @@ in
   @(tex_id, fbo_id)
 end
 
-fun alloc_tile(tx: int, ty: int, next_bucket: ptr, next_layer: ptr): ptr = let
+fun alloc_tile(tx: int, ty: int, next_bucket: MpTile, next_layer: MpTile): MpTile = let
   val p = malloc(sizeof<CanvasTile>)
   val t = view_tile(p)
   val @(tex_id, fbo_id) = init_tile_texture_and_fbo()
@@ -186,20 +186,20 @@ fun alloc_tile(tx: int, ty: int, next_bucket: ptr, next_layer: ptr): ptr = let
   val () = t->next_in_bucket := next_bucket
   val () = t->next_in_layer := next_layer
 in
-  p
+  tile_of(p)
 end
 
 implement layer_get_or_create_tile(layer, tx, ty) = let
-  val lr = view_layer(layer)
+  val lr = view_layer(layer_ptr(layer))
   val found = layer_find_tile(layer, tx, ty)
 in
-  if found != the_null_ptr then found
+  if tile_is_null(found) = 0 then found
   else let
     val idx = tile_hash(tx, ty)
     val slot = ptr_add<ptr>(lr->buckets, idx)
-    val old_head = mp_slot_get(slot)
+    val old_head = tile_of(mp_slot_get(slot))
     val nt = alloc_tile(tx, ty, old_head, lr->tiles)
-    val () = mp_slot_set(slot, nt)
+    val () = mp_slot_set(slot, tile_ptr(nt))
     val () = lr->tiles := nt
     val () = lr->tile_count := lr->tile_count + 1
   in
@@ -209,7 +209,7 @@ end
 
 // --- Tile Çizim Bağlantısı (FBO + Projeksiyon) ---
 implement layer_bind_tile(tile) = let
-  val t = view_tile(tile)
+  val t = view_tile(tile_ptr(tile))
   val () = glBindFramebuffer(GL_FRAMEBUFFER, t->fbo)
   val () = glViewport(0, 0, 1024, 1024)
   val tx_f = g0int2float(t->tx) * 1024.0f
@@ -257,10 +257,10 @@ fn render_tile_quad(
   val () = glEnd()
 in () end
 
-fun draw_tiles_rec(cur: ptr, vl: float, vt: float, vr: float, vb: float, zoom: float): void =
-  if cur = the_null_ptr then ()
+fun draw_tiles_rec(cur: MpTile, vl: float, vt: float, vr: float, vb: float, zoom: float): void =
+  if tile_is_null(cur) != 0 then ()
   else let
-    val t = view_tile(cur)
+    val t = view_tile(tile_ptr(cur))
     val x0 = g0int2float(t->tx) * 1024.0f
     val y0 = g0int2float(t->ty) * 1024.0f
     val bleed = g0float_div_float(0.5f, zoom)
@@ -278,9 +278,9 @@ fun draw_tiles_rec(cur: ptr, vl: float, vt: float, vr: float, vb: float, zoom: f
   end
 
 implement layer_draw_tiles(layer, vl, vt, vr, vb, zoom) = let
-  val lr = view_layer(layer)
+  val lr = view_layer(layer_ptr(layer))
 in
-  if lr->tiles != the_null_ptr then let
+  if tile_is_null(lr->tiles) = 0 then let
     val () = glEnable(GL_TEXTURE_2D)
     val () = glEnable(GL_BLEND)
     val () = glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -291,24 +291,24 @@ in
 end
 
 // --- Tile Belleğini Boşaltma ---
-fun free_tiles_rec(cur: ptr): void =
-  if cur = the_null_ptr then ()
+fun free_tiles_rec(cur: MpTile): void =
+  if tile_is_null(cur) != 0 then ()
   else let
-    val t = view_tile(cur)
+    val t = view_tile(tile_ptr(cur))
     val next = t->next_in_layer
     var tex: GLuint = t->texture
     var fbo: GLuint = t->fbo
     val () = glDeleteTextures(1, tex)
     val () = glDeleteFramebuffers(1, fbo)
-    val () = free(cur)
+    val () = free(tile_ptr(cur))
   in
     free_tiles_rec(next)
   end
 
 implement layer_clear(layer) = let
-  val lr = view_layer(layer)
+  val lr = view_layer(layer_ptr(layer))
   val () = free_tiles_rec(lr->tiles)
-  val () = lr->tiles := the_null_ptr
+  val () = lr->tiles := tile_none()
   val () = lr->tile_count := 0
   fun clear_buckets(i: int): void =
     if i < TILE_HASH_SIZE then let
@@ -319,10 +319,10 @@ in
 end
 
 implement layer_destroy(layer) = let
-  val lr = view_layer(layer)
+  val lr = view_layer(layer_ptr(layer))
   val () = layer_clear(layer)
   val () = free(lr->buckets)
-  val () = free(layer)
+  val () = free(layer_ptr(layer))
 in () end
 
 // Geriye dönük uyumluluk fonksiyonları

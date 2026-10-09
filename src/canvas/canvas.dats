@@ -7,6 +7,7 @@ staload "ui/color.dats"
 staload "canvas/stroke_queue.dats"
 staload "canvas/gl_surface.dats"
 staload "canvas/layer.dats"
+staload "canvas/layer_box.sats"
 staload "brushes/brush_group.sats"
 staload "draw_engine/setting_id.sats"
 staload "draw_engine/surface_box.sats"
@@ -14,7 +15,7 @@ staload "draw_engine/surface_box.sats"
 typedef canvas_state_record = @{
   brush= int,
   surf= MpSurface,
-  layer= ptr,
+  layer= MpLayer,
   cam_x= float,
   cam_y= float,
   zoom= float,
@@ -27,7 +28,7 @@ typedef canvas_state_record = @{
 #define CANVAS_CAP 4
 
 val g_blank = @{
-  brush= ~1, surf= mp_surface_none(), layer= the_null_ptr,
+  brush= ~1, surf= mp_surface_none(), layer= layer_none(),
   cam_x= 0.0f, cam_y= 0.0f, zoom= 1.0f,
   last_mouse_x= 0.0f, last_mouse_y= 0.0f,
   last_time= 0.0, q= ~1
@@ -100,11 +101,11 @@ fn f_div(a: float, b: float): float = g0float_div_float(a, b)
 extern fun stroke_queue_teleport(brush: int, surf: MpSurface, x: float, y: float): void = "ext#stroke_queue_teleport"
 extern fun stroke_queue_start(wx: float, wy: float, pressure: float): int = "ext#stroke_queue_start"
 extern fun stroke_queue_step(
-  layer: ptr, brush: int, surf: MpSurface, zoom: float,
+  layer: MpLayer, brush: int, surf: MpSurface, zoom: float,
   qh: int, wx: float, wy: float, pressure: float, elapsed: double
 ): int = "ext#stroke_queue_step"
 extern fun stroke_queue_finish(
-  layer: ptr, brush: int, surf: MpSurface, zoom: float, qh: int
+  layer: MpLayer, brush: int, surf: MpSurface, zoom: float, qh: int
 ): void = "ext#stroke_queue_finish"
 extern fun stroke_queue_free(qh: int): void = "ext#stroke_queue_free"
 
@@ -123,7 +124,7 @@ fn setup_canvas_viewport(w: int, h: int): void = {
   val () = glClear(GL_COLOR_BUFFER_BIT)
 }
 
-fn put_layer(h: int, layer: ptr): void = let
+fn put_layer(h: int, layer: MpLayer): void = let
   val s = cget(h)
 in
   cput(h, @{
@@ -136,10 +137,10 @@ end
 
 fn draw_layer_content(h: int, canvas_w: int, canvas_h: int): void = let
   val s0 = cget(h)
-  val () = if s0.layer = the_null_ptr then put_layer(h, layer_create(0, 0))
+  val () = if layer_is_null(s0.layer) != 0 then put_layer(h, layer_create(0, 0))
   val s = cget(h)
 in
-  if s.layer != the_null_ptr then let
+  if layer_is_null(s.layer) = 0 then let
     val cur_zoom = s.zoom
     val vl = f_div(f_sub(0.0f, s.cam_x), cur_zoom)
     val vt = f_div(f_sub(0.0f, s.cam_y), cur_zoom)
@@ -330,7 +331,7 @@ implement canvas_state_create(brush) = let
   val surf = glsurface_create()
 in
   canvas_alloc(@{
-    brush= brush, surf= surf, layer= the_null_ptr,
+    brush= brush, surf= surf, layer= layer_none(),
     cam_x= 0.0f, cam_y= 0.0f, zoom= 1.0f,
     last_mouse_x= 0.0f, last_mouse_y= 0.0f,
     last_time= 0.0, q= ~1

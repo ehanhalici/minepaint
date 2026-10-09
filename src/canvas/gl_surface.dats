@@ -4,6 +4,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 staload "draw_engine/surface_box.sats"
+staload "canvas/layer_box.sats"
 
 // OpenGL Sabitleri
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
@@ -45,9 +46,9 @@ extern fun malloc(size: size_t): ptr = "mac#"
 extern fun free(p: ptr): void = "mac#"
 
 // Layer / Tile FFI Fonksiyonları
-extern fun layer_find_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_find_tile"
-extern fun layer_get_or_create_tile(layer: ptr, tx: int, ty: int): ptr = "ext#layer_get_or_create_tile"
-extern fun layer_bind_tile(tile: ptr): void = "ext#layer_bind_tile"
+extern fun layer_find_tile(layer: MpLayer, tx: int, ty: int): MpTile = "ext#layer_find_tile"
+extern fun layer_get_or_create_tile(layer: MpLayer, tx: int, ty: int): MpTile = "ext#layer_get_or_create_tile"
+extern fun layer_bind_tile(tile: MpTile): void = "ext#layer_bind_tile"
 extern fun layer_unbind_tile(): void = "ext#layer_unbind_tile"
 
 // LibMinePaint Tipleri
@@ -70,7 +71,7 @@ typedef MinePaintSurface_Record = @{
 typedef MyGLSurface_Record = @{
   parent= MinePaintSurface_Record,
   is_erasing= int,
-  layer= ptr
+  layer= MpLayer
 }
 
 extern fun view_glsurf(p: ptr): ref(MyGLSurface_Record) = "mac#mp_id_ptr"
@@ -81,7 +82,7 @@ extern fun draw_dab_callback : MinePaintDrawDabFunc = "ext#draw_dab_callback"
 extern fun glsurface_create(): glsurface_vtype = "ext#glsurface_create"
 extern fun glsurface_destroy(s: glsurface_vtype): void = "ext#glsurface_destroy"
 extern fun glsurface_set_erasing(s: glsurface_vtype, v: int): void = "ext#glsurface_set_erasing"
-extern fun mygl_surface_set_layer(s: glsurface_vtype, layer: ptr): void = "ext#mygl_surface_set_layer"
+extern fun mygl_surface_set_layer(s: glsurface_vtype, layer: MpLayer): void = "ext#mygl_surface_set_layer"
 extern fun mygl_surface_flush_batch(s: ptr): void = "ext#mygl_surface_flush_batch"
 implement mygl_surface_flush_batch(s) = ()
 
@@ -135,11 +136,11 @@ fn apply_dab_transform(x: float, y: float, angle: float, aspect: float): void = 
 in () end
 
 fn render_tile_dab(
-  tile: ptr, is_erasing: int, x: float, y: float,
+  tile: MpTile, is_erasing: int, x: float, y: float,
   radius: float, r: float, g: float, b: float,
   opaque: float, hardness: float, aspect: float, angle: float
 ): void =
-  if tile != the_null_ptr then let
+  if tile_is_null(tile) = 0 then let
     val () = layer_bind_tile(tile)
     val () = glDisable(GL_TEXTURE_2D)
     val () = glDisable(GL_DEPTH_TEST)
@@ -165,7 +166,7 @@ implement draw_dab_callback(self, x, y, radius, r, g, b, opaque, hardness, softn
   val layer = surf->layer
   val is_erasing = surf->is_erasing
 in
-  if (layer != the_null_ptr) && (radius > 0.00001f) then let
+  if (layer_is_null(layer) = 0) && (radius > 0.00001f) then let
     val actual_radius = if is_erasing > 0 then f_mul(radius, 4.0f) else radius
     val @(min_tx, max_tx, min_ty, max_ty) = calc_tile_bounds(x, y, actual_radius)
     fun loop_y(tx: int, ty: int): void =
@@ -190,7 +191,7 @@ implement glsurface_create() = let
   val () = p1->parent.draw_dab := draw_dab_callback
   val () = p1->parent.refcount := 1
   val () = p1->is_erasing := 0
-  val () = p1->layer := the_null_ptr
+  val () = p1->layer := layer_none()
 in
   mp_surface_of_ptr(p)
 end
