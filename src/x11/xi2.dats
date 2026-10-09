@@ -4,6 +4,7 @@
 staload "sys/libc.dats"
 staload "window/input.dats"
 staload "x11/xi2.sats"
+staload "x11/devtab.sats"
 
 %{#
 #include "x11/xi2_raw.cats"
@@ -94,16 +95,17 @@ typedef XI2DevInfo = @{
 typedef XI2BackendState = @{
   opcode= int,
   active= int,
-  devs= ptr
+  devs= MpDevTab
 }
 
 extern fun view_dev(p: ptr): ref(XI2DevInfo) = "mac#mp_id_ptr"
 extern fun addr2str(p: ptr): string = "mac#mp_id_ptr"
 
 val g_dev_sz = g0int2uint_int_size(XI2_MAX_DEVICES) * sizeof<XI2DevInfo>
-val g_devs = malloc(g_dev_sz)
-val () = assertloc(g_devs > the_null_ptr)
-val _ = memset(g_devs, 0, g_dev_sz)
+val g_devs_raw = malloc(g_dev_sz)
+val () = assertloc(g_devs_raw > the_null_ptr)
+val _ = memset(g_devs_raw, 0, g_dev_sz)
+val g_devs = devtab_of(g_devs_raw)
 val g_xi = ref<XI2BackendState>(@{
   opcode= 0,
   active= 0,
@@ -112,13 +114,13 @@ val g_xi = ref<XI2BackendState>(@{
 
 fn xi2_state_ref(): ref(XI2BackendState) = g_xi
 
-fn xi2_dev_ptr(base: ptr, id: int): ptr =
-  ptr_add<XI2DevInfo>(base, id)
+fn xi2_dev_ptr(base: MpDevTab, id: int): ptr =
+  ptr_add<XI2DevInfo>(devtab_ptr(base), id)
 
-fn xi2_dev_ref(base: ptr, id: int): ref(XI2DevInfo) =
+fn xi2_dev_ref(base: MpDevTab, id: int): ref(XI2DevInfo) =
   view_dev(xi2_dev_ptr(base, id))
 
-fn xi2_clear_device(base: ptr, id: int): void = let
+fn xi2_clear_device(base: MpDevTab, id: int): void = let
   val dev = xi2_dev_ref(base, id)
   val () = dev->deviceid := ~1
   val () = dev->is_stylus := 0
@@ -130,7 +132,7 @@ fn xi2_clear_device(base: ptr, id: int): void = let
   val () = dev->last_pressure := 0.8
 in () end
 
-fn xi2_clear_all_devices(base: ptr): void = let
+fn xi2_clear_all_devices(base: MpDevTab): void = let
   fun loop(i: int): void =
     if i < XI2_MAX_DEVICES then (xi2_clear_device(base, i); loop(i + 1)) else ()
 in
@@ -172,7 +174,7 @@ in
   loop(0)
 end
 
-fn xi2_inspect_single_device(dpy: ptr, devs: ptr, idx: int, base: ptr): void = let
+fn xi2_inspect_single_device(dpy: ptr, devs: ptr, idx: int, base: MpDevTab): void = let
   val did = c_xi2_device_id(devs, idx)
 in
   if (did < 0) || (did >= XI2_MAX_DEVICES) then ()
@@ -194,7 +196,7 @@ in
   end
 end
 
-fn xi2_refresh_devices_internal(dpy: ptr, base: ptr): void = let
+fn xi2_refresh_devices_internal(dpy: ptr, base: MpDevTab): void = let
   val () = xi2_clear_all_devices(base)
   var ndevs: int = 0
   val devs = c_xi2_query_devices(dpy, addr@ndevs)
