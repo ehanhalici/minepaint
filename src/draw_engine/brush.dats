@@ -7,6 +7,7 @@
 staload "./settings.dats"
 staload "draw_engine/setting_id.sats"
 staload "draw_engine/state_id.sats"
+staload "draw_engine/rng_box.sats"
 staload "draw_engine/surface_box.sats"
 staload "./helpers.dats"
 staload "./surface.dats"
@@ -21,7 +22,7 @@ staload "./surface.dats"
 
 val g_alive = arrayref_make_elt<bool>(i2sz(BRUSH_CAP), false)
 val g_reset = arrayref_make_elt<int>(i2sz(BRUSH_CAP), 0)
-val g_rng = arrayref_make_elt<ptr>(i2sz(BRUSH_CAP), the_null_ptr)
+val g_rng = arrayref_make_elt<MpRng>(i2sz(BRUSH_CAP), rng_none())
 val g_state = arrayref_make_elt<float>(i2sz(ST_SLOTS), 0.0f)
 val g_base = arrayref_make_elt<float>(i2sz(BV_SLOTS), 0.0f)
 val g_val = arrayref_make_elt<float>(i2sz(BV_SLOTS), 0.0f)
@@ -118,13 +119,13 @@ in
   if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_reset[i] := v else ()
 end
 
-fn rng_get(h: int): ptr = let
+fn rng_get(h: int): MpRng = let
   val i = g1ofg0(h)
 in
-  if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_rng[i] else the_null_ptr
+  if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_rng[i] else rng_none()
 end
 
-fn rng_set(h: int, r: ptr): void = let
+fn rng_set(h: int, r: MpRng): void = let
   val i = g1ofg0(h)
 in
   if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_rng[i] := r else ()
@@ -148,7 +149,7 @@ fn mp_brush_alloc(): int = let
   val i = g1ofg0(h)
   val () = if (i >= 0) * (i < BRUSH_CAP) then g_alive[i] := true
   val () = reset_set(h, 0)
-  val () = rng_set(h, the_null_ptr)
+  val () = rng_set(h, rng_none())
   val () = zero_state(h, 0)
   val () = zero_base(h, 0)
   val () = st_set(h, state_ix(StFlip()), ~1.0f)
@@ -183,8 +184,8 @@ fn mp_brush_get_reset(b: int): int = reset_get(b)
 fn mp_brush_set_reset(b: int, v: int): void = reset_set(b, v)
 fn mp_brush_get_mapping(b: int, i: int): int = map_get(b, i)
 fn mp_brush_set_mapping(b: int, i: int, m: int): void = map_set(b, i, m)
-fn mp_brush_get_rng(b: int): ptr = rng_get(b)
-fn mp_brush_set_rng(b: int, r: ptr): void = rng_set(b, r)
+fn mp_brush_get_rng(b: int): MpRng = rng_get(b)
+fn mp_brush_set_rng(b: int, r: MpRng): void = rng_set(b, r)
 
 fn mp_brush_clear_states(b: int): void = let
   val () = zero_state(b, 0)
@@ -203,10 +204,10 @@ extern fun fabsf(x: float): float = "mac#fabsf"
 extern fun fmodf(x: float, y: float): float = "mac#fmodf"
 extern fun powf(x: float, y: float): float = "mac#powf"
 extern fun hypotf(x: float, y: float): float = "mac#hypotf"
-extern fun rng_double_new(seed: lint): ptr = "ext#rng_double_new"
-extern fun rng_double_next(rng: ptr): double = "ext#rng_double_next"
-extern fun rng_double_free(rng: ptr): void = "ext#rng_double_free"
-extern fun rand_gauss(rng: ptr): float = "ext#rand_gauss"
+extern fun rng_double_new(seed: lint): MpRng = "ext#rng_double_new"
+extern fun rng_double_next(rng: MpRng): double = "ext#rng_double_next"
+extern fun rng_double_free(rng: MpRng): void = "ext#rng_double_free"
+extern fun rand_gauss(rng: MpRng): float = "ext#rand_gauss"
 
 extern fun minepaint_mapping_new(inputs: int): int = "ext#minepaint_mapping_new"
 extern fun minepaint_mapping_free(h: int): void = "ext#minepaint_mapping_free"
@@ -285,7 +286,7 @@ extern fun draw_engine_brush_free(b: int): void = "ext#draw_engine_brush_free"
 implement draw_engine_brush_free(b) =
   if b >= 0 then let
     val rng = mp_brush_get_rng(b)
-    val () = if rng != the_null_ptr then rng_double_free(rng)
+    val () = if rng_is_null(rng) = 0 then rng_double_free(rng)
     val () = free_mappings(b)
   in
     mp_brush_destroy(b)
@@ -443,10 +444,10 @@ in
   if total < 0.0f then 0.0f else total
 end
 
-fn jitter_rng(b: int): ptr = let
+fn jitter_rng(b: int): MpRng = let
   val p = mp_brush_get_rng(b)
 in
-  if p = the_null_ptr then let
+  if rng_is_null(p) != 0 then let
     val n = rng_double_new(1L)
     val () = mp_brush_set_rng(b, n)
   in n end else p

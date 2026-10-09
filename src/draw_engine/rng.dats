@@ -5,6 +5,7 @@
 #include "share/atspre_staload.hats"
 
 #include "./engine_safe.hats"
+staload "draw_engine/rng_box.sats"
 
 #define KK 10
 #define LL 7
@@ -21,33 +22,32 @@
 extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
 
-fn mp_rng_get_u(s: ptr, i: int): double =
-  if (i >= 0) * (i < 10) then mp_c_dget(s, i) else 0.0
+fn mp_rng_get_u(s: MpRng, i: int): double =
+  if (i >= 0) * (i < 10) then mp_c_dget(rng_ptr(s), i) else 0.0
 
-fn mp_rng_set_u(s: ptr, i: int, v: double): void =
-  if (i >= 0) * (i < 10) then mp_c_dset(s, i, v) else ()
+fn mp_rng_set_u(s: MpRng, i: int, v: double): void =
+  if (i >= 0) * (i < 10) then mp_c_dset(rng_ptr(s), i, v) else ()
 
-fn mp_rng_get_buf(s: ptr, i: int): double = let
-  val base = ptr_add<double>(s, 10)
+fn mp_rng_get_buf(s: MpRng, i: int): double = let
+  val base = rng_ptr(rng_add_dbl(s, 10))
 in
   if (i >= 0) * (i < 19) then mp_c_dget(base, i) else 0.0
 end
 
-fn mp_rng_set_buf(s: ptr, i: int, v: double): void = let
-  val base = ptr_add<double>(s, 10)
+fn mp_rng_set_buf(s: MpRng, i: int, v: double): void = let
+  val base = rng_ptr(rng_add_dbl(s, 10))
 in
   if (i >= 0) * (i < 19) then mp_c_dset(base, i, v) else ()
 end
 
-fn mp_rng_get_buf_ptr(s: ptr, i: int): ptr =
-  ptr_add<double>(s, 10 + i)
+fn mp_rng_get_buf_ptr(s: MpRng, i: int): ptr =
+  rng_ptr(rng_add_dbl(s, 10 + i))
 
-// Okuma konumu: buf içinde indeks; RNG_ARR_NONE ise tampon henüz hazır değil.
-fn mp_rng_get_arr_pos(s: ptr): int =
-  mp_c_iget(ptr_add<byte>(s, RNG_ARR_POS_BYTE_OFFSET), 0)
+fn mp_rng_get_arr_pos(s: MpRng): int =
+  mp_c_iget(rng_ptr(rng_add_byte(s, RNG_ARR_POS_BYTE_OFFSET)), 0)
 
-fn mp_rng_set_arr_pos(s: ptr, v: int): void =
-  mp_c_iset(ptr_add<byte>(s, RNG_ARR_POS_BYTE_OFFSET), 0, v)
+fn mp_rng_set_arr_pos(s: MpRng, v: int): void =
+  mp_c_iset(rng_ptr(rng_add_byte(s, RNG_ARR_POS_BYTE_OFFSET)), 0, v)
 
 fn mod_sum(x: double, y: double): double = let
   val s = x + y
@@ -59,7 +59,7 @@ end
 fn is_odd(s: lint): bool =
   g0int_mod_lint(s, 2L) != 0L
 
-extern fun rng_double_get_array(self: ptr, aa: ptr, n: int): void = "ext#rng_double_get_array"
+extern fun rng_double_get_array(self: MpRng, aa: ptr, n: int): void = "ext#rng_double_get_array"
 implement rng_double_get_array(self, aa, n) = let
   fun loop1(j: int): void =
     if j < KK then (mp_arr_dset(aa, j, mp_rng_get_u(self, j)); loop1(j + 1)) else ()
@@ -136,7 +136,7 @@ fun seed_outer_loop(u_ptr: ptr, s: lint, t: int): void =
     val @(s_next, t_next) = seed_outer_step(u_ptr, s, t)
   in seed_outer_loop(u_ptr, s_next, t_next) end else ()
 
-fn seed_copy_to_ran_u(self: ptr, u_ptr: ptr): void = let
+fn seed_copy_to_ran_u(self: MpRng, u_ptr: ptr): void = let
   fun loop1(j: int): void =
     if j < LL then (mp_rng_set_u(self, j + KK - LL, mp_arr_dget(u_ptr, j)); loop1(j + 1)) else ()
   val () = loop1(0)
@@ -148,7 +148,7 @@ fn seed_copy_to_ran_u(self: ptr, u_ptr: ptr): void = let
   val () = loop_warm(0)
 in () end
 
-extern fun rng_double_set_seed(self: ptr, seed: lint): void = "ext#rng_double_set_seed"
+extern fun rng_double_set_seed(self: MpRng, seed: lint): void = "ext#rng_double_set_seed"
 implement rng_double_set_seed(self, seed) = let
   var u_buf: @[double][19]
   val u_ptr = addr@(u_buf)
@@ -163,7 +163,7 @@ implement rng_double_set_seed(self, seed) = let
   val () = mp_rng_set_arr_pos(self, RNG_ARR_NONE)
 in () end
 
-extern fun rng_double_cycle(self: ptr): double = "ext#rng_double_cycle"
+extern fun rng_double_cycle(self: MpRng): double = "ext#rng_double_cycle"
 implement rng_double_cycle(self) = let
   val buf_ptr = mp_rng_get_buf_ptr(self, 0)
   val () = rng_double_get_array(self, buf_ptr, QUALITY)
@@ -173,7 +173,7 @@ in
   mp_rng_get_buf(self, 0)
 end
 
-extern fun rng_double_next(self: ptr): double = "ext#rng_double_next"
+extern fun rng_double_next(self: MpRng): double = "ext#rng_double_next"
 implement rng_double_next(self) = let
   val pos = mp_rng_get_arr_pos(self)
 in
@@ -188,22 +188,23 @@ in
   end
 end
 
-extern fun rng_double_new(seed: lint): ptr = "ext#rng_double_new"
+extern fun rng_double_new(seed: lint): MpRng = "ext#rng_double_new"
 implement rng_double_new(seed) = let
   val sz = g0int2uint_int_size(RNG_DOUBLE_SIZE)
   val p = malloc(sz)
   val () = assertloc(p > the_null_ptr)
-  val () = mp_rng_set_arr_pos(p, RNG_ARR_NONE)
-  val () = rng_double_set_seed(p, seed)
+  val r = rng_of(p)
+  val () = mp_rng_set_arr_pos(r, RNG_ARR_NONE)
+  val () = rng_double_set_seed(r, seed)
 in
-  p
+  r
 end
 
-extern fun rng_double_free(self: ptr): void = "ext#rng_double_free"
+extern fun rng_double_free(self: MpRng): void = "ext#rng_double_free"
 implement rng_double_free(self) =
-  if self != the_null_ptr then free(self) else ()
+  if rng_is_null(self) = 0 then free(rng_ptr(self)) else ()
 
-extern fun rand_gauss(rng: ptr): float = "ext#rand_gauss"
+extern fun rand_gauss(rng: MpRng): float = "ext#rand_gauss"
 implement rand_gauss(rng) = let
   val s1 = rng_double_next(rng)
   val s2 = rng_double_next(rng)
