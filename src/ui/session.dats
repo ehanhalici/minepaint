@@ -3,6 +3,7 @@
 #include "share/atspre_staload.hats"
 
 staload "sys/libc.dats"
+staload "sys/io_box.sats"
 staload "ui/state.dats"
 staload "brushes/brush_group.sats"
 staload "ui/palette.dats"
@@ -12,7 +13,7 @@ extern fun addr2str(p: ptr): string = "mac#mp_id_ptr"
 
 fn f2d(v: float): double = g0float2float_float_double(v)
 
-fn build_session_path(buf: ptr, cap: size_t, suffix: string): bool = let
+fn build_session_path(buf: MpText, cap: size_t, suffix: string): bool = let
   val home = getenv("HOME")
 in
   if home = the_null_ptr then false
@@ -29,15 +30,15 @@ end
 
 fn ensure_dirs(): void = let
   var buf = @[byte][512]()
-  val p_buf = addr@(buf)
+  val p_buf = text_of(addr@(buf))
   val cap = g0int2uint_int_size(512)
   val ok1 = build_session_path(p_buf, cap, "/.config")
   val () = if ok1 then let
-    val _ = mkdir(addr2str(p_buf), MODE_0755)
+    val _ = mkdir(addr2str(text_ptr(p_buf)), MODE_0755)
   in () end
   val ok2 = build_session_path(p_buf, cap, "/.config/minepaint")
   val () = if ok2 then let
-    val _ = mkdir(addr2str(p_buf), MODE_0755)
+    val _ = mkdir(addr2str(text_ptr(p_buf)), MODE_0755)
   in () end
 in () end
 
@@ -130,20 +131,20 @@ fn apply_line(line: string): void =
 extern fun session_load(): int = "ext#session_load"
 implement session_load() = let
   var path_buf = @[byte][512]()
-  val p_path = addr@(path_buf)
+  val p_path = text_of(addr@(path_buf))
   val ok = build_session_path(p_path, g0int2uint_int_size(512), "/.config/minepaint/session.conf")
 in
   if not(ok) then 0
   else let
-    val f = fopen(addr2str(p_path), "r")
+    val f = fopen(addr2str(text_ptr(p_path)), "r")
   in
-    if f = the_null_ptr then 0
+    if file_is_null(f) != 0 then 0
     else let
       var line_buf = @[byte][256]()
-      val p_line = addr@(line_buf)
+      val p_line = text_of(addr@(line_buf))
       fun loop(): void =
-        if fgets(p_line, 256, f) != the_null_ptr then let
-          val () = apply_line(addr2str(p_line))
+        if text_is_null(fgets(p_line, 256, f)) = 0 then let
+          val () = apply_line(addr2str(text_ptr(p_line)))
         in loop() end else ()
       val () = loop()
       val _ = fclose(f)
@@ -151,11 +152,11 @@ in
   end
 end
 
-fn put_line(f: ptr, buf: ptr): void = let
-  val _ = fputs(addr2str(buf), f)
+fn put_line(f: MpFile, buf: MpText): void = let
+  val _ = fputs(addr2str(text_ptr(buf)), f)
 in () end
 
-fn save_palette_and_state(f: ptr, buf: ptr, cap: size_t): void = let
+fn save_palette_and_state(f: MpFile, buf: MpText, cap: size_t): void = let
   val u = ui_get()
   fun swatches(i: int): void =
     if i < 12 then let
@@ -178,7 +179,7 @@ fn save_palette_and_state(f: ptr, buf: ptr, cap: size_t): void = let
   val () = put_line(f, buf)
 in () end
 
-fn save_slider_values(f: ptr, buf: ptr, cap: size_t): void = let
+fn save_slider_values(f: MpFile, buf: MpText, cap: size_t): void = let
   val u = ui_get()
   val _ = mp_snprintf_f(buf, cap, "size %.6f\n", f2d(u->val0))
   val () = put_line(f, buf)
@@ -199,21 +200,21 @@ fn save_slider_values(f: ptr, buf: ptr, cap: size_t): void = let
 in () end
 
 // Yazma: önce geçici dosyaya, sonra atomik rename ile hedefe (skill.md: Atomik Kalıcılık).
-fn write_session_file(f: ptr): void = let
+fn write_session_file(f: MpFile): void = let
   var buf = @[byte][256]()
-  val p_buf = addr@(buf)
+  val p_buf = text_of(addr@(buf))
   val cap = g0int2uint_int_size(256)
   val () = save_palette_and_state(f, p_buf, cap)
 in
   save_slider_values(f, p_buf, cap)
 end
 
-fn sync_to_disk(f: ptr): bool = (fflush(f) = 0) andalso (fsync(fileno(f)) = 0)
+fn sync_to_disk(f: MpFile): bool = (fflush(f) = 0) andalso (fsync(fileno(f)) = 0)
 
-fn write_session_tmp(p_tmp: ptr): bool = let
-  val f = fopen(addr2str(p_tmp), "w")
+fn write_session_tmp(p_tmp: MpText): bool = let
+  val f = fopen(addr2str(text_ptr(p_tmp)), "w")
 in
-  if f = the_null_ptr then false
+  if file_is_null(f) != 0 then false
   else let
     val () = write_session_file(f)
     val ok = sync_to_disk(f)
@@ -221,14 +222,14 @@ in
   in ok end
 end
 
-fn commit_session(p_tmp: ptr, p_path: ptr): void =
-  if rename(addr2str(p_tmp), addr2str(p_path)) = 0 then ()
+fn commit_session(p_tmp: MpText, p_path: MpText): void =
+  if rename(addr2str(text_ptr(p_tmp)), addr2str(text_ptr(p_path))) = 0 then ()
   else perror("minepaint: session.conf kalici hale getirilemedi")
 
 fn report_session_error(): void =
   perror("minepaint: session.conf yazilamadi")
 
-fn save_atomically(p_tmp: ptr, p_path: ptr): void =
+fn save_atomically(p_tmp: MpText, p_path: MpText): void =
   if write_session_tmp(p_tmp) then commit_session(p_tmp, p_path)
   else report_session_error()
 
@@ -237,8 +238,8 @@ implement session_save() = let
   val () = ensure_dirs()
   var path_buf = @[byte][512]()
   var tmp_buf = @[byte][512]()
-  val p_path = addr@(path_buf)
-  val p_tmp = addr@(tmp_buf)
+  val p_path = text_of(addr@(path_buf))
+  val p_tmp = text_of(addr@(tmp_buf))
   val ok_path = build_session_path(p_path, g0int2uint_int_size(512), "/.config/minepaint/session.conf")
   val ok_tmp = build_session_path(p_tmp, g0int2uint_int_size(512), "/.config/minepaint/session.conf.tmp")
 in

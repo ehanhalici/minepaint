@@ -1,6 +1,7 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+staload "sys/io_box.sats"
 
 typedef mp_timeval = $extype_struct "mp_timeval" of {
   tv_sec= lint,
@@ -13,12 +14,12 @@ extern fun realloc(p: ptr, sz: size_t): ptr = "mac#"
 extern fun memset(p: ptr, v: int, sz: size_t): ptr = "mac#"
 extern fun memcpy(dst: ptr, src: ptr, sz: size_t): ptr = "mac#"
 
-extern fun fopen(path: string, mode: string): ptr = "mac#"
-extern fun fclose(f: ptr): int = "mac#"
-extern fun fgets(buf: ptr, n: int, f: ptr): ptr = "mac#"
-extern fun fputs(s: string, f: ptr): int = "mac#"
-extern fun fflush(f: ptr): int = "mac#"
-extern fun fileno(f: ptr): int = "mac#"
+extern fun fopen(path: string, mode: string): MpFile = "mac#"
+extern fun fclose(f: MpFile): int = "mac#"
+extern fun fgets(buf: MpText, n: int, f: MpFile): MpText = "mac#"
+extern fun fputs(s: string, f: MpFile): int = "mac#"
+extern fun fflush(f: MpFile): int = "mac#"
+extern fun fileno(f: MpFile): int = "mac#"
 extern fun fsync(fd: int): int = "mac#"
 extern fun rename(old: string, new: string): int = "mac#"
 extern fun perror(msg: string): void = "mac#"
@@ -41,12 +42,12 @@ extern fun roundf(x: float): float = "mac#"
 extern fun ceilf(x: float): float = "mac#"
 extern fun rand(): int = "mac#"
 
-extern fun mp_snprintf_f(buf: ptr, n: size_t, fmt: string, v: double): int = "mac#snprintf"
-extern fun mp_snprintf_i(buf: ptr, n: size_t, fmt: string, v: int): int = "mac#snprintf"
-extern fun mp_snprintf_fff(buf: ptr, n: size_t, fmt: string, a: double, b: double, c: double): int = "mac#snprintf"
-extern fun mp_snprintf_ifff(buf: ptr, n: size_t, fmt: string, i: int, a: double, b: double, c: double): int = "mac#snprintf"
-extern fun mp_snprintf_ss(buf: ptr, n: size_t, fmt: string, s1: string, s2: string): int = "mac#snprintf"
-extern fun mp_format_path(buf: ptr, n: size_t, s1: string, s2: string): int = "ext#mp_format_path"
+extern fun mp_snprintf_f(buf: MpText, n: size_t, fmt: string, v: double): int = "mac#snprintf"
+extern fun mp_snprintf_i(buf: MpText, n: size_t, fmt: string, v: int): int = "mac#snprintf"
+extern fun mp_snprintf_fff(buf: MpText, n: size_t, fmt: string, a: double, b: double, c: double): int = "mac#snprintf"
+extern fun mp_snprintf_ifff(buf: MpText, n: size_t, fmt: string, i: int, a: double, b: double, c: double): int = "mac#snprintf"
+extern fun mp_snprintf_ss(buf: MpText, n: size_t, fmt: string, s1: string, s2: string): int = "mac#snprintf"
+extern fun mp_format_path(buf: MpText, n: size_t, s1: string, s2: string): int = "ext#mp_format_path"
 implement mp_format_path(buf, n, s1, s2) =
   mp_snprintf_ss(buf, n, "%s%s", s1, s2)
 

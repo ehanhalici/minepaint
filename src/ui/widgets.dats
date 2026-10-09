@@ -6,6 +6,7 @@
 
 staload "gl/gl.dats"
 staload "sys/libc.dats"
+staload "sys/io_box.sats"
 staload "ui/state.dats"
 staload "brushes/brush_group.sats"
 staload "ui/widget_drag.sats"
@@ -45,7 +46,7 @@ extern fun slider_get_pct(i: int): float = "ext#slider_get_pct"
 
 extern fun addr2str(p: ptr): string = "mac#mp_id_ptr"
 
-fn format_slider_val(buf: ptr, sz: int, v: float): void = let
+fn format_slider_val(buf: MpText, sz: int, v: float): void = let
   val _ = mp_snprintf_f(buf, g0int2uint_int_size(sz), "%.2f", g0float2float_float_double(v))
 in () end
 
@@ -371,7 +372,7 @@ fn render_sv_box(sx: float, bar_w: float): void = let
   val () = gl_draw_rect(f_add(sx, 20.0f), 235.0f, bar_w, 1.0f, 0.2f, 0.2f, 0.22f, 1.0f)
 in () end
 
-fn render_single_slider(sx: float, sw: float, bar_w: float, i: int, buf: ptr): void = let
+fn render_single_slider(sx: float, sw: float, bar_w: float, i: int, buf: MpText): void = let
   val sy_pos = f_add(242.0f, f_mul(g0int2float(i), 30.0f))
   val lbl = slider_get_label(i)
   val v = slider_get_val(i)
@@ -379,7 +380,7 @@ fn render_single_slider(sx: float, sw: float, bar_w: float, i: int, buf: ptr): v
   val () = glPointSize(1.2f)
   val () = gl_draw_string(f_add(sx, 20.0f), sy_pos, 1.0f, lbl, 0.85f, 0.85f, 0.85f)
   val () = format_slider_val(buf, 16, v)
-  val () = gl_draw_string(f_sub(f_add(sx, sw), 60.0f), sy_pos, 1.0f, addr2str(buf), 0.6f, 0.6f, 0.65f)
+  val () = gl_draw_string(f_sub(f_add(sx, sw), 60.0f), sy_pos, 1.0f, addr2str(text_ptr(buf)), 0.6f, 0.6f, 0.65f)
   val track_y = f_add(sy_pos, 12.0f)
   val () = gl_draw_rect(f_add(sx, 20.0f), track_y, bar_w, 4.0f, 0.18f, 0.18f, 0.20f, 1.0f)
   val () = gl_draw_rect(f_add(sx, 20.0f), track_y, f_mul(pct, bar_w), 4.0f, 0.0f, 0.48f, 0.80f, 1.0f)
@@ -391,7 +392,7 @@ in () end
 
 fn render_sliders_section(sx: float, sw: float, bar_w: float): void = let
   var val_buf = @[byte][16]()
-  val p_buf = addr@(val_buf)
+  val p_buf = text_of(addr@(val_buf))
   fun loop(i: int): void =
     if i < 8 then let
       val () = render_single_slider(sx, sw, bar_w, i, p_buf)
