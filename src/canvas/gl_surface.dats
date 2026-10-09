@@ -3,6 +3,7 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+staload "draw_engine/surface_box.sats"
 
 // OpenGL Sabitleri
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
@@ -74,7 +75,7 @@ typedef MyGLSurface_Record = @{
 
 extern fun view_glsurf(p: ptr): ref(MyGLSurface_Record) = "mac#mp_id_ptr"
 
-typedef glsurface_vtype = ptr
+typedef glsurface_vtype = MpSurface
 
 extern fun draw_dab_callback : MinePaintDrawDabFunc = "ext#draw_dab_callback"
 extern fun glsurface_create(): glsurface_vtype = "ext#glsurface_create"
@@ -191,19 +192,19 @@ implement glsurface_create() = let
   val () = p1->is_erasing := 0
   val () = p1->layer := the_null_ptr
 in
-  p
+  mp_surface_of_ptr(p)
 end
 
-implement glsurface_destroy(s) = free(s)
+implement glsurface_destroy(s) = free(mp_surface_to_ptr(s))
 
 implement glsurface_set_erasing(s, v) = let
-  val surf = view_glsurf(s)
+  val surf = view_glsurf(mp_surface_to_ptr(s))
 in
   surf->is_erasing := v
 end
 
 implement mygl_surface_set_layer(s, layer) = let
-  val surf = view_glsurf(s)
+  val surf = view_glsurf(mp_surface_to_ptr(s))
 in
   surf->layer := layer
 end

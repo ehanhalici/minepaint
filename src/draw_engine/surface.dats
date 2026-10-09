@@ -4,12 +4,14 @@
 #include "share/atspre_staload.hats"
 
 staload "./rectangle.dats"
+staload "draw_engine/surface_box.sats"
 #include "./minepaint_types.hats"
 #include "./engine_safe.hats"
 
 typedef MinePaintSurface_struct = MinePaintSurface
 
 extern fun view_surface(p: ptr): ref(MinePaintSurface_struct) = "mac#mp_id_ptr"
+extern fun view_mpsurf(s: MpSurface): ref(MinePaintSurface_struct) = "mac#mp_id_ptr"
 extern fun load_destroy(p: ptr): MinePaintSurfaceDestroyFunction = "mac#mp_id_ptr"
 extern fun load_draw_dab(p: ptr): MinePaintSurfaceDrawDabFunction = "mac#mp_id_ptr"
 extern fun load_get_color(p: ptr): MinePaintSurfaceGetColorFunction = "mac#mp_id_ptr"
@@ -78,7 +80,7 @@ implement minepaint_surface_unref(self) =
   in () end
 
 extern fun minepaint_surface_draw_dab(
-    self: ptr,
+    self: MpSurface,
     x: float, y: float,
     radius: float,
     r: float, g: float, b: float,
@@ -98,13 +100,13 @@ implement minepaint_surface_draw_dab(
     aspect_ratio, angle, lock_alpha,
     colorize, posterize, posterize_num, paint
 ) =
-  if self != the_null_ptr then let
-    val s = view_surface(self)
+  if mp_surface_is_null(self) = 0 then let
+    val s = view_mpsurf(self)
     val f = s->draw_dab
   in
     if f != the_null_ptr then
       call_surface_draw_dab(
-        f, self, x, y, radius, r, g, b,
+        f, mp_surface_to_ptr(self), x, y, radius, r, g, b,
         opaque, hardness, softness, alpha_eraser,
         aspect_ratio, angle, lock_alpha,
         colorize, posterize, posterize_num, paint
@@ -114,7 +116,7 @@ implement minepaint_surface_draw_dab(
   else 0
 
 extern fun draw_engine_surface_draw_dab(
-    self: ptr,
+    self: MpSurface,
     x: float, y: float,
     radius: float,
     r: float, g: float, b: float,

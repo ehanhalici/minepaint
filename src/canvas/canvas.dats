@@ -9,10 +9,11 @@ staload "canvas/gl_surface.dats"
 staload "canvas/layer.dats"
 staload "brushes/brush_group.sats"
 staload "draw_engine/setting_id.sats"
+staload "draw_engine/surface_box.sats"
 
 typedef canvas_state_record = @{
   brush= int,
-  surf= ptr,
+  surf= MpSurface,
   layer= ptr,
   cam_x= float,
   cam_y= float,
@@ -26,7 +27,7 @@ typedef canvas_state_record = @{
 #define CANVAS_CAP 4
 
 val g_blank = @{
-  brush= ~1, surf= the_null_ptr, layer= the_null_ptr,
+  brush= ~1, surf= mp_surface_none(), layer= the_null_ptr,
   cam_x= 0.0f, cam_y= 0.0f, zoom= 1.0f,
   last_mouse_x= 0.0f, last_mouse_y= 0.0f,
   last_time= 0.0, q= ~1
@@ -96,14 +97,14 @@ fn f_mul(a: float, b: float): float = g0float_mul_float(a, b)
 fn f_div(a: float, b: float): float = g0float_div_float(a, b)
 
 // Stroke Queue API
-extern fun stroke_queue_teleport(brush: int, surf: ptr, x: float, y: float): void = "ext#stroke_queue_teleport"
+extern fun stroke_queue_teleport(brush: int, surf: MpSurface, x: float, y: float): void = "ext#stroke_queue_teleport"
 extern fun stroke_queue_start(wx: float, wy: float, pressure: float): int = "ext#stroke_queue_start"
 extern fun stroke_queue_step(
-  layer: ptr, brush: int, surf: ptr, zoom: float,
+  layer: ptr, brush: int, surf: MpSurface, zoom: float,
   qh: int, wx: float, wy: float, pressure: float, elapsed: double
 ): int = "ext#stroke_queue_step"
 extern fun stroke_queue_finish(
-  layer: ptr, brush: int, surf: ptr, zoom: float, qh: int
+  layer: ptr, brush: int, surf: MpSurface, zoom: float, qh: int
 ): void = "ext#stroke_queue_finish"
 extern fun stroke_queue_free(qh: int): void = "ext#stroke_queue_free"
 

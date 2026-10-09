@@ -6,6 +6,7 @@
 
 staload "./settings.dats"
 staload "draw_engine/setting_id.sats"
+staload "draw_engine/surface_box.sats"
 staload "./helpers.dats"
 staload "./surface.dats"
 #include "./brushsettings_gen.hats"
@@ -606,7 +607,7 @@ in
   else @(radius_raw, hardness)
 end
 
-fun prepare_and_draw_dab(b: int, surf: ptr): int = let
+fun prepare_and_draw_dab(b: int, surf: MpSurface): int = let
   val opaque_final = compute_opaque_final(b)
   val jitter = mp_brush_get_val(b, setting_ix(SetOffsetByRandom()))
   val amp = if g0float_gt(jitter, 0.0f) then jitter else 0.0f
@@ -669,7 +670,7 @@ in
 end
 
 fun dab_loop(
-  b: int, surf: ptr, target_x: float, target_y: float, p_clean: float,
+  b: int, surf: MpSurface, target_x: float, target_y: float, p_clean: float,
   dtime_left: double, dabs_moved: float, dabs_todo: float, viewzoom: float
 ): @(double, float, float) =
   if f_add(dabs_moved, dabs_todo) >= 1.0f then let
@@ -698,7 +699,7 @@ fun dab_loop(
   else @(dtime_left, dabs_moved, dabs_todo)
 
 extern fun draw_engine_brush_stroke_to(
-    b: int, surf: ptr,
+    b: int, surf: MpSurface,
     x: float, y: float, pressure: float,
     xtilt: float, ytilt: float, dtime: double,
     viewzoom: float, viewrotation: float, barrel_rotation: float, linear: int

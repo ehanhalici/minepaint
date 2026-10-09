@@ -6,9 +6,10 @@
 
 staload "canvas/gl_surface.dats"
 staload "draw_engine/setting_id.sats"
+staload "draw_engine/surface_box.sats"
 
 extern fun minepaint_brush_stroke_to(
-  brush: int, surf: ptr,
+  brush: int, surf: MpSurface,
   x: float, y: float, pressure: float,
   xtilt: float, ytilt: float, dtime: double,
   viewzoom: float, viewrotation: float, barrel_rotation: float, dir: int
@@ -161,7 +162,7 @@ fun push_queue(h: int, pt: input_point): int =
 
 // --- Motora Çizim Gönderme ---
 fun send_stroke_to_engine(
-  layer: ptr, brush: int, surf: ptr, zoom: float,
+  layer: ptr, brush: int, surf: MpSurface, zoom: float,
   x: float, y: float, pressure: float, dtime: double
 ): void = let
   val () = if layer != the_null_ptr then let
@@ -184,7 +185,7 @@ in
 end
 
 fun emit_spline_steps(
-  layer: ptr, brush: int, surf: ptr, zoom: float,
+  layer: ptr, brush: int, surf: MpSurface, zoom: float,
   p0: input_point, p1: input_point, p2: input_point, p3: input_point,
   steps: int, sub_dtime: double, i: int
 ): void =
@@ -198,7 +199,7 @@ fun emit_spline_steps(
 
 // --- Spline Kuyruğunu İşleme ---
 fun process_queue(
-  layer: ptr, brush: int, surf: ptr, zoom: float,
+  layer: ptr, brush: int, surf: MpSurface, zoom: float,
   h: int, force_finish: bool
 ): int = let
   val p1 = next_get(h)
@@ -222,7 +223,7 @@ in
 end
 
 // --- Dışa Aktarılan Stroke Queue API'si ---
-extern fun stroke_queue_teleport(brush: int, surf: ptr, x: float, y: float): void = "ext#stroke_queue_teleport"
+extern fun stroke_queue_teleport(brush: int, surf: MpSurface, x: float, y: float): void = "ext#stroke_queue_teleport"
 implement stroke_queue_teleport(brush, surf, x, y) = let
   val saved_tracking = minepaint_brush_get_base_value(brush, SetSlowTracking())
   val () = minepaint_brush_set_base_value(brush, SetSlowTracking(), 0.0f)
@@ -237,7 +238,7 @@ implement stroke_queue_start(wx, wy, pressure) =
   make_node(@{ x= wx, y= wy, pressure= pressure, time= 0.0 }, STROKE_NONE)
 
 extern fun stroke_queue_step(
-  layer: ptr, brush: int, surf: ptr, zoom: float,
+  layer: ptr, brush: int, surf: MpSurface, zoom: float,
   qh: int, wx: float, wy: float, pressure: float, elapsed: double
 ): int = "ext#stroke_queue_step"
 implement stroke_queue_step(layer, brush, surf, zoom, qh, wx, wy, pressure, elapsed) = let
@@ -248,7 +249,7 @@ in
 end
 
 extern fun stroke_queue_finish(
-  layer: ptr, brush: int, surf: ptr, zoom: float, qh: int
+  layer: ptr, brush: int, surf: MpSurface, zoom: float, qh: int
 ): void = "ext#stroke_queue_finish"
 implement stroke_queue_finish(layer, brush, surf, zoom, qh) = let
   val q1 = process_queue(layer, brush, surf, zoom, qh, true)

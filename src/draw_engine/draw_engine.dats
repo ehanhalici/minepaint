@@ -8,6 +8,7 @@ staload "./helpers.dats"
 staload "./surface.dats"
 staload "./brush.dats"
 staload "draw_engine/setting_id.sats"
+staload "draw_engine/surface_box.sats"
 
 // --- Fırça Motoru Fonksiyon Bildirimleri ---
 extern fun draw_engine_brush_new(): int = "ext#draw_engine_brush_new"
@@ -18,7 +19,7 @@ extern fun draw_engine_brush_set_base_value(b: int, id: SettingId, v: float): vo
 extern fun draw_engine_brush_get_base_value(b: int, id: SettingId): float = "ext#draw_engine_brush_get_base_value"
 extern fun draw_engine_brush_apply_startup(b: int): void = "ext#draw_engine_brush_apply_startup"
 extern fun draw_engine_brush_stroke_to(
-    b: int, surf: ptr,
+    b: int, surf: MpSurface,
     x: float, y: float, pressure: float,
     xtilt: float, ytilt: float, dtime: double,
     viewzoom: float, viewrotation: float, barrel_rotation: float, linear: int
@@ -50,7 +51,7 @@ extern fun minepaint_brush_apply_startup(b: int): void = "ext#minepaint_brush_ap
 implement minepaint_brush_apply_startup(b) = draw_engine_brush_apply_startup(b)
 
 extern fun minepaint_brush_stroke_to(
-    b: int, surf: ptr,
+    b: int, surf: MpSurface,
     x: float, y: float, pressure: float,
     xtilt: float, ytilt: float, dtime: double,
     viewzoom: float, viewrotation: float, barrel_rotation: float, linear: int
