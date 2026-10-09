@@ -5,6 +5,7 @@
 #include "./engine_safe.hats"
 #include "./minepaint_types.hats"
 staload "draw_engine/intbuf.sats"
+staload "sys/libc.dats"
 
 #define OQ_CAP 8
 #define TM_MAX 256
@@ -22,9 +23,6 @@ val g_n = air_arena(OQ_CAP, airlock_esz_int())
 val g_fresh = ref<int>(0)
 val g_nfree = ref<int>(0)
 val g_free = air_arena(OQ_CAP, airlock_esz_int())
-
-extern fun malloc(sz: size_t): ptr = "mac#malloc"
-extern fun free(p: ptr): void = "mac#free"
 
 extern fun tile_map_new(sz: int): int = "ext#tile_map_new"
 extern fun tile_map_free(h: int, free_items: bool, user_free: (int) -> void): void = "ext#tile_map_free"

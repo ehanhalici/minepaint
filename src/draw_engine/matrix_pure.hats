@@ -1,8 +1,7 @@
 // Value-level 3x3 affine transforms. Included by symmetry.dats and tiled_surface.dats.
 // One definition of the arithmetic, no pointers.
 
-extern fun cosf(x: float): float = "mac#cosf"
-extern fun sinf(x: float): float = "mac#sinf"
+staload "sys/libc.dats"
 
 typedef MinePaintTransform = @{
   r0= float, r1= float, r2= float,

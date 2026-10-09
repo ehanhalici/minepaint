@@ -4,6 +4,7 @@
 #include "share/atspre_staload.hats"
 #include "draw_engine/engine_safe.hats"
 staload "canvas/layer_box.sats"
+staload "sys/libc.dats"
 
 typedef GLuint = uint
 
@@ -81,9 +82,6 @@ extern fun glLoadIdentity(): void = "mac#"
 extern fun glPushMatrix(): void = "mac#"
 extern fun glPopMatrix(): void = "mac#"
 extern fun glOrtho(l: double, r: double, b: double, t: double, n: double, f: double): void = "mac#"
-
-extern fun malloc(n: size_t): ptr = "mac#"
-extern fun free(p: ptr): void = "mac#"
 
 // --- Sonsuz Kanvas / Tile Yönetim API'si ---
 extern fun layer_create(w: int, h: int): MpLayer = "ext#layer_create"

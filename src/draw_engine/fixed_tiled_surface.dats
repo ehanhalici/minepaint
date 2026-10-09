@@ -11,6 +11,7 @@ staload "draw_engine/surface_box.sats"
 staload "draw_engine/req_box.sats"
 staload "draw_engine/bytebuf.sats"
 #include "./minepaint_types.hats"
+staload "sys/libc.dats"
 
 typedef MinePaintFixedTiledSurface_struct = @{
   parent= MinePaintTiledSurface,
@@ -28,10 +29,6 @@ extern fun view_tile_req(p: ptr): ref(MinePaintTileRequest) = "mac#mp_id_ptr"
 extern fun req_fn2ptr(f: (MpSurface, MpReq) -> void): ptr = "mac#mp_id_ptr"
 extern fun destroy_fn2ptr(f: (MpSurface) -> void): ptr = "mac#mp_id_ptr"
 
-extern fun malloc(sz: size_t): ptr = "mac#malloc"
-extern fun free(p: ptr): void = "mac#free"
-extern fun memset(p: ptr, v: int, sz: size_t): ptr = "mac#memset"
-extern fun ceilf(x: float): float = "mac#ceilf"
 
 fn f_div(a: float, b: float): float = g0float_div(a, b)
 fn int2size(x: int): size_t = g0int2uint_int_size(x)

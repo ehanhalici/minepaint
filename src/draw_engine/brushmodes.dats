@@ -7,6 +7,7 @@
 #include "./engine_safe.hats"
 staload "draw_engine/pixel_buf.sats"
 staload "draw_engine/fcell.sats"
+staload "sys/libc.dats"
 
 fn pix(p: U16Buf): ptr = u16buf_ptr(p)
 fn step(p: U16Buf, n: int): U16Buf = u16buf_add(p, n)
@@ -25,11 +26,6 @@ fn f_add(a: float, b: float): float = g0float_add(a, b)
 fn f_sub(a: float, b: float): float = g0float_sub(a, b)
 fn f_mul(a: float, b: float): float = g0float_mul(a, b)
 fn f_div(a: float, b: float): float = g0float_div(a, b)
-
-extern fun powf(x: float, y: float): float = "mac#"
-extern fun roundf(x: float): float = "mac#"
-extern fun fabsf(x: float): float = "mac#"
-extern fun rand(): int = "mac#"
 
 extern fun rgb_to_spectral(r: float, g: float, b: float, spectral: ptr): void = "ext#rgb_to_spectral"
 extern fun spectral_to_rgb(spectral: ptr, rgb: ptr): void = "ext#spectral_to_rgb"

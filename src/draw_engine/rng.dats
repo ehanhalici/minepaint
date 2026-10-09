@@ -6,6 +6,7 @@
 
 #include "./engine_safe.hats"
 staload "draw_engine/rng_box.sats"
+staload "sys/libc.dats"
 
 #define KK 10
 #define LL 7
@@ -18,9 +19,6 @@ staload "draw_engine/rng_box.sats"
 // Öz-referanslı pointer yerine buf içindeki konum indeks olarak tutulur.
 #define RNG_ARR_POS_BYTE_OFFSET 232
 #define RNG_ARR_NONE (~1)
-
-extern fun malloc(sz: size_t): ptr = "mac#malloc"
-extern fun free(p: ptr): void = "mac#free"
 
 fn mp_rng_get_u(s: MpRng, i: int): double =
   airlock_dget_n(rng_ptr(s), i, 10)

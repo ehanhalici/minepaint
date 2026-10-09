@@ -5,12 +5,8 @@
 #include "./minepaint_types.hats"
 #include "./rectangle_pure.hats"
 staload "draw_engine/rect_box.sats"
+staload "sys/libc.dats"
 
-// --- Sınır (C ABI pointer katmanı) ---
-// Dış API ptr üzerinden çalışır; hesap rectangle_pure.hats içindedir.
-
-extern fun malloc(sz: size_t): ptr = "mac#malloc"
-extern fun free(p: ptr): void = "mac#free"
 extern fun rect_get_x(p: ptr): int = "mac#mp_rect_get_x"
 extern fun rect_get_y(p: ptr): int = "mac#mp_rect_get_y"
 extern fun rect_get_w(p: ptr): int = "mac#mp_rect_get_w"

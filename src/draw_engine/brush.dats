@@ -12,6 +12,7 @@ staload "draw_engine/input_id.sats"
 staload "draw_engine/rng_box.sats"
 staload "draw_engine/surface_box.sats"
 staload "./helpers.dats"
+staload "sys/libc.dats"
 staload "./surface.dats"
 #include "./brushsettings_gen.hats"
 
@@ -149,12 +150,6 @@ fn f_sub(a: float, b: float): float = g0float_sub(a, b)
 fn f_mul(a: float, b: float): float = g0float_mul(a, b)
 fn f_div(a: float, b: float): float = g0float_div(a, b)
 
-extern fun expf(x: float): float = "mac#expf"
-extern fun logf(x: float): float = "mac#logf"
-extern fun fabsf(x: float): float = "mac#fabsf"
-extern fun fmodf(x: float, y: float): float = "mac#fmodf"
-extern fun powf(x: float, y: float): float = "mac#powf"
-extern fun hypotf(x: float, y: float): float = "mac#hypotf"
 extern fun rng_double_new(seed: lint): MpRng = "ext#rng_double_new"
 extern fun rng_double_next(rng: MpRng): double = "ext#rng_double_next"
 extern fun rng_double_free(rng: MpRng): void = "ext#rng_double_free"

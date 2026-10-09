@@ -9,6 +9,7 @@ staload "canvas/gl_surface.dats"
 staload "draw_engine/setting_id.sats"
 staload "draw_engine/surface_box.sats"
 staload "canvas/layer_box.sats"
+staload "sys/libc.dats"
 
 extern fun minepaint_brush_stroke_to(
   brush: int, surf: MpSurface,
@@ -20,9 +21,6 @@ extern fun minepaint_brush_reset(brush: int): void = "ext#minepaint_brush_reset"
 extern fun minepaint_brush_new_stroke(brush: int): void = "ext#minepaint_brush_new_stroke"
 extern fun minepaint_brush_set_base_value(brush: int, setting: SettingId, value: float): void = "ext#minepaint_brush_set_base_value"
 extern fun minepaint_brush_get_base_value(brush: int, setting: SettingId): float = "ext#minepaint_brush_get_base_value"
-
-extern fun sqrtf(x: float): float = "mac#"
-extern fun powf(x: float, y: float): float = "mac#"
 
 fn f2i(f: float): int = g0float2int_float_int(f)
 fn i2f(i: int): float = g0int2float_int_float(i)

@@ -22,6 +22,7 @@ staload "draw_engine/req_box.sats"
 staload "./helpers.dats"
 
 #include "./minepaint_types.hats"
+staload "sys/libc.dats"
 #include "./matrix_pure.hats"
 #define M_PI 3.14159265358979323846f
 
@@ -64,14 +65,6 @@ fn f_gt(a: float, b: float): bool = a > b
 fn mul_size_size(a: size_t, b: size_t): size_t = g0uint_mul_size(a, b)
 fn int2size(x: int): size_t = g0int2uint_int_size(x)
 
-extern fun malloc(sz: size_t): ptr = "mac#malloc"
-extern fun free(p: ptr): void = "mac#free"
-extern fun memset(p: ptr, v: int, sz: size_t): ptr = "mac#memset"
-extern fun cosf(x: float): float = "mac#cosf"
-extern fun sinf(x: float): float = "mac#sinf"
-extern fun sqrtf(x: float): float = "mac#sqrtf"
-extern fun floorf(x: float): float = "mac#floorf"
-extern fun roundf(x: float): float = "mac#roundf"
 
 fn f_clamp(x: float, min_v: float, max_v: float): float =
   if f_lt(x, min_v) then min_v else if f_gt(x, max_v) then max_v else x

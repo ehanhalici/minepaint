@@ -5,6 +5,7 @@
 #include "share/atspre_staload.hats"
 staload "draw_engine/surface_box.sats"
 staload "canvas/layer_box.sats"
+staload "sys/libc.dats"
 
 // OpenGL Sabitleri
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
@@ -30,10 +31,6 @@ extern fun glBegin(mode: int): void = "mac#"
 extern fun glEnd(): void = "mac#"
 extern fun glVertex2f(x: float, y: float): void = "mac#"
 
-// Matematik ve Bellek Fonksiyonları
-extern fun cosf(x: float): float = "mac#"
-extern fun sinf(x: float): float = "mac#"
-extern fun floorf(x: float): float = "mac#"
 fn f2i(x: float): int = g0float2int_float_int(x)
 fn f_sub(a: float, b: float): float = g0float_sub_float(a, b)
 fn f_add(a: float, b: float): float = g0float_add_float(a, b)
@@ -41,9 +38,6 @@ fn f_mul(a: float, b: float): float = g0float_mul_float(a, b)
 fn f_div(a: float, b: float): float = g0float_div_float(a, b)
 fn f_gt(a: float, b: float): bool = g0float_gt_float(a, b)
 fn f_lt(a: float, b: float): bool = g0float_lt_float(a, b)
-
-extern fun malloc(size: size_t): ptr = "mac#"
-extern fun free(p: ptr): void = "mac#"
 
 // Layer / Tile FFI Fonksiyonları
 extern fun layer_find_tile(layer: MpLayer, tx: int, ty: int): MpTile = "ext#layer_find_tile"

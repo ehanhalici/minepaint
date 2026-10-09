@@ -2,11 +2,7 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
-
-// Standart Matematik FFI
-extern fun expf(x: float): float = "mac#expf"
-extern fun floorf(x: float): float = "mac#floorf"
-extern fun hypotf(x: float, y: float): float = "mac#hypotf"
+staload "sys/libc.dats"
 
 fn f_add(a: float, b: float): float = g0float_add(a, b)
 fn f_sub(a: float, b: float): float = g0float_sub(a, b)
