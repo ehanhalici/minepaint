@@ -4,6 +4,7 @@
 #define BRUSH_HELPERS_HATS
 
 staload "draw_engine/setting_id.sats"
+staload "draw_engine/input_id.sats"
 
 fn {n:int}
 table_iget(a: &(@[int][n]), nsz: int(n), k: int): int = let
@@ -27,8 +28,8 @@ in
 end
 
 extern fun draw_engine_brush_set_base_value(b: int, id: SettingId, v: float): void = "ext#draw_engine_brush_set_base_value"
-extern fun draw_engine_brush_set_mapping_n(b: int, setting: SettingId, input: int, n: int): void = "ext#draw_engine_brush_set_mapping_n"
-extern fun draw_engine_brush_set_mapping_point(b: int, setting: SettingId, input: int, index: int, x: float, y: float): void = "ext#draw_engine_brush_set_mapping_point"
+extern fun draw_engine_brush_set_mapping_n(b: int, setting: SettingId, input: InputId, n: int): void = "ext#draw_engine_brush_set_mapping_n"
+extern fun draw_engine_brush_set_mapping_point(b: int, setting: SettingId, input: InputId, index: int, x: float, y: float): void = "ext#draw_engine_brush_set_mapping_point"
 
 fun {npt:int}
 apply_points(
@@ -36,7 +37,7 @@ apply_points(
   xs: &(@[float][npt]), np: int(npt), ys: &(@[float][npt])
 ): void =
   if pi < n then let
-    val () = draw_engine_brush_set_mapping_point(b, setting_of(sid), inp, pi, table_fget(xs, np, p0 + pi), table_fget(ys, np, p0 + pi))
+    val () = draw_engine_brush_set_mapping_point(b, setting_of(sid), input_of(inp), pi, table_fget(xs, np, p0 + pi), table_fget(ys, np, p0 + pi))
   in
     apply_points(b, sid, inp, p0, pi + 1, n, xs, np, ys)
   end else ()
@@ -52,7 +53,7 @@ apply_curves(
     val inp = table_iget(inps, nc, c)
     val n = table_iget(pns, nc, c)
     val p0 = table_iget(p0s, nc, c)
-    val () = draw_engine_brush_set_mapping_n(b, setting_of(sid), inp, n)
+    val () = draw_engine_brush_set_mapping_n(b, setting_of(sid), input_of(inp), n)
     val () = apply_points(b, sid, inp, p0, 0, n, xs, np, ys)
   in
     apply_curves(b, sid, c + 1, c1, inps, nc, p0s, pns, xs, np, ys)

@@ -7,6 +7,7 @@
 staload "./settings.dats"
 staload "draw_engine/setting_id.sats"
 staload "draw_engine/state_id.sats"
+staload "draw_engine/input_id.sats"
 staload "draw_engine/rng_box.sats"
 staload "draw_engine/surface_box.sats"
 staload "./helpers.dats"
@@ -314,25 +315,27 @@ in
 end
 
 extern fun draw_engine_brush_set_mapping_n(
-  b: int, setting: SettingId, input: int, n: int
+  b: int, setting: SettingId, input: InputId, n: int
 ): void = "ext#draw_engine_brush_set_mapping_n"
 implement draw_engine_brush_set_mapping_n(b, setting, input, n) = let
   val ix = setting_ix(setting)
+  val iin = input_ix(input)
 in
   if b >= 0 then
-    if (ix >= 0) * (ix < 65) * (input >= 0) * (input < 18) * (n >= 0) * (n <= 64) * (n != 1) then
-      minepaint_mapping_set_n(mp_brush_get_mapping(b, ix), input, n)
+    if (ix >= 0) * (ix < 65) * (iin >= 0) * (iin < 18) * (n >= 0) * (n <= 64) * (n != 1) then
+      minepaint_mapping_set_n(mp_brush_get_mapping(b, ix), iin, n)
 end
 
 extern fun draw_engine_brush_set_mapping_point(
-  b: int, setting: SettingId, input: int, index: int, x: float, y: float
+  b: int, setting: SettingId, input: InputId, index: int, x: float, y: float
 ): void = "ext#draw_engine_brush_set_mapping_point"
 implement draw_engine_brush_set_mapping_point(b, setting, input, index, x, y) = let
   val ix = setting_ix(setting)
+  val iin = input_ix(input)
 in
   if b >= 0 then
-    if (ix >= 0) * (ix < 65) * (input >= 0) * (input < 18) then
-      minepaint_mapping_set_point(mp_brush_get_mapping(b, ix), input, index, x, y)
+    if (ix >= 0) * (ix < 65) * (iin >= 0) * (iin < 18) then
+      minepaint_mapping_set_point(mp_brush_get_mapping(b, ix), iin, index, x, y)
 end
 
 extern fun draw_engine_brush_prepare_load(b: int): void = "ext#draw_engine_brush_prepare_load"
@@ -363,17 +366,17 @@ in
 end
 
 fn apply_startup_dynamics(b: int): void = let
-  val () = draw_engine_brush_set_mapping_n(b, SetRadiusLogarithmic(), 0, 4)
-  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), 0, 0, 0.0f, ~1.4f)
-  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), 0, 1, 0.8f, 0.0f)
-  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), 0, 2, 1.0f, 0.35f)
-  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), 0, 3, 2.0f, 0.7f)
+  val () = draw_engine_brush_set_mapping_n(b, SetRadiusLogarithmic(), InPressure(), 4)
+  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), InPressure(), 0, 0.0f, ~1.4f)
+  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), InPressure(), 1, 0.8f, 0.0f)
+  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), InPressure(), 2, 1.0f, 0.35f)
+  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), InPressure(), 3, 2.0f, 0.7f)
 
-  val () = draw_engine_brush_set_mapping_n(b, SetOpaqueMultiply(), 0, 4)
-  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), 0, 0, 0.0f, ~1.0f)
-  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), 0, 1, 0.8f, 0.0f)
-  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), 0, 2, 1.0f, 0.0f)
-  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), 0, 3, 2.0f, 0.0f)
+  val () = draw_engine_brush_set_mapping_n(b, SetOpaqueMultiply(), InPressure(), 4)
+  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), InPressure(), 0, 0.0f, ~1.0f)
+  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), InPressure(), 1, 0.8f, 0.0f)
+  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), InPressure(), 2, 1.0f, 0.0f)
+  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), InPressure(), 3, 2.0f, 0.0f)
 in
   mp_brush_set_reset(b, 1)
 end
@@ -483,8 +486,8 @@ in
   if pos < 0.0f then f_sub(256.0f, v) else v
 end
 
-fn in_set(arr: &(@[float][MAPPING_INPUTS]), k: int, v: float): void = let
-  val idx = g1ofg0(k)
+fn in_set(arr: &(@[float][MAPPING_INPUTS]), id: InputId, v: float): void = let
+  val idx = g1ofg0(input_ix(id))
 in
   if (idx >= 0) * (idx < MAPPING_INPUTS) then arr[idx] := v else ()
 end
@@ -495,16 +498,16 @@ fn populate_input_buffer(
   val gain = expf(mp_brush_get_base(b, setting_ix(SetPressureGainLog())))
   val zoom_lin = if viewzoom < 0.01f then 0.01f else viewzoom
   val gscale = expf(mp_brush_get_val(b, setting_ix(SetGridmapScale())))
-  val () = in_set(in_p, 0, f_mul(cur_p, gain))
-  val () = in_set(in_p, 1, g0float2float_double_float(rng_double_next(jitter_rng(b))))
-  val () = in_set(in_p, 2, mp_brush_get_state(b, StStroke()))
-  val () = in_set(in_p, 6, speed_input(mp_brush_get_base(b, setting_ix(SetSpeed1Gamma())), mp_brush_get_state(b, StNormSpeed1Slow())))
-  val () = in_set(in_p, 7, speed_input(mp_brush_get_base(b, setting_ix(SetSpeed2Gamma())), mp_brush_get_state(b, StNormSpeed2Slow())))
-  val () = in_set(in_p, 13, grid_coord(mp_brush_get_state(b, StActualX()), gscale, mp_brush_get_val(b, setting_ix(SetGridmapScaleX()))))
-  val () = in_set(in_p, 14, grid_coord(mp_brush_get_state(b, StActualY()), gscale, mp_brush_get_val(b, setting_ix(SetGridmapScaleY()))))
-  val () = in_set(in_p, 15, viewzoom_input(base_radius_log, zoom_lin))
+  val () = in_set(in_p, InPressure(), f_mul(cur_p, gain))
+  val () = in_set(in_p, InRandom(), g0float2float_double_float(rng_double_next(jitter_rng(b))))
+  val () = in_set(in_p, InStroke(), mp_brush_get_state(b, StStroke()))
+  val () = in_set(in_p, InSpeed1(), speed_input(mp_brush_get_base(b, setting_ix(SetSpeed1Gamma())), mp_brush_get_state(b, StNormSpeed1Slow())))
+  val () = in_set(in_p, InSpeed2(), speed_input(mp_brush_get_base(b, setting_ix(SetSpeed2Gamma())), mp_brush_get_state(b, StNormSpeed2Slow())))
+  val () = in_set(in_p, InGridmapX(), grid_coord(mp_brush_get_state(b, StActualX()), gscale, mp_brush_get_val(b, setting_ix(SetGridmapScaleX()))))
+  val () = in_set(in_p, InGridmapY(), grid_coord(mp_brush_get_state(b, StActualY()), gscale, mp_brush_get_val(b, setting_ix(SetGridmapScaleY()))))
+  val () = in_set(in_p, InViewzoom(), viewzoom_input(base_radius_log, zoom_lin))
 in
-  in_set(in_p, 16, base_radius_log)
+  in_set(in_p, InBrushRadius(), base_radius_log)
 end
 
 fun eval_mapping_slot(
