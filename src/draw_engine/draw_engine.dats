@@ -8,6 +8,7 @@ staload "./helpers.dats"
 staload "./surface.dats"
 staload "./brush.dats"
 staload "draw_engine/setting_id.sats"
+staload "draw_engine/state_id.sats"
 staload "draw_engine/surface_box.sats"
 
 // --- Fırça Motoru Fonksiyon Bildirimleri ---
@@ -65,11 +66,11 @@ implement minepaint_init() = ()
 extern fun minepaint_brush_ref(b: int): void = "ext#minepaint_brush_ref"
 implement minepaint_brush_ref(b) = ()
 
-extern fun minepaint_brush_get_state(b: int, i: int): float = "ext#minepaint_brush_get_state"
-implement minepaint_brush_get_state(b, i) = draw_engine_brush_get_state(b, i)
+extern fun minepaint_brush_get_state(b: int, id: BrushState): float = "ext#minepaint_brush_get_state"
+implement minepaint_brush_get_state(b, id) = draw_engine_brush_get_state(b, id)
 
-extern fun minepaint_brush_set_state(b: int, i: int, v: float): void = "ext#minepaint_brush_set_state"
-implement minepaint_brush_set_state(b, i, v) = draw_engine_brush_set_state(b, i, v)
+extern fun minepaint_brush_set_state(b: int, id: BrushState, v: float): void = "ext#minepaint_brush_set_state"
+implement minepaint_brush_set_state(b, id, v) = draw_engine_brush_set_state(b, id, v)
 
 extern fun minepaint_brush_is_constant(b: int, id: int): int = "ext#minepaint_brush_is_constant"
 implement minepaint_brush_is_constant(b, id) = 1
