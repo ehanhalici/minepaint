@@ -6,32 +6,26 @@ fun init_setting_entry(
   idx: int,
   cname: string, name: string, constant: int,
   min_v: float, def_v: float, max_v: float, tooltip: string
-): void = let
-  val i = g1ofg0(idx)
-in
-  if (i >= 0) * (i < 65) then
-    g_settings[i] := @{
+): void =
+  if airlock_span(idx, 1, 65) != 0 then
+    g_settings[airlock_below(idx, 65)] := @{
       cname= cname, name= name, constant= constant,
-      min= min_v, def= def_v, max= max_v, tooltip= tooltip
+      min= min_v, def= def_v, max= max_v,       tooltip= tooltip
     }
-end
 
 fun init_input_entry(
   idx: int,
   cname: string,
   hard_min: float, soft_min: float, normal: float, soft_max: float, hard_max: float,
   name: string, tooltip: string
-): void = let
-  val i = g1ofg0(idx)
-in
-  if (i >= 0) * (i < 18) then
-    g_inputs[i] := @{
+): void =
+  if airlock_span(idx, 1, 18) != 0 then
+    g_inputs[airlock_below(idx, 18)] := @{
       cname= cname,
       hard_min= hard_min, soft_min= soft_min, normal= normal,
       soft_max= soft_max, hard_max= hard_max,
       name= name, tooltip= tooltip
     }
-end
 
 fun populate_settings_info_array(): void = let
   val () = init_setting_entry(0, "opaque", "Opacity", 0, 0.0f, 1.0f, 2.0f, "0 means brush is transparent, 1 fully visible\n(also known as alpha or opacity)")

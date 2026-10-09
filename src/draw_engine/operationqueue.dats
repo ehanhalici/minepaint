@@ -42,7 +42,7 @@ extern fun fifo_peek_first(h: int): int = "ext#fifo_peek_first"
 extern fun fifo_peek_last(h: int): int = "ext#fifo_peek_last"
 extern fun dab_release(h: int): void = "ext#dab_release"
 
-fn oq_in(h: int): bool = airlock_below(h, OQ_CAP) != 0
+fn oq_in(h: int): bool = airlock_span(h, 1, OQ_CAP) != 0
 fn alive_get(h: int): bool = air_bget(g_alive, h, OQ_CAP)
 fn alive_set(h: int, v: bool): void = air_bset(g_alive, h, OQ_CAP, v)
 fn tm_get(h: int): int =

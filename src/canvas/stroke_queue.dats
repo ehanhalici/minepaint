@@ -47,7 +47,7 @@ val g_fresh = ref<int>(0)
 val g_nfree = ref<int>(0)
 val g_free = air_arena(STROKE_CAP, airlock_esz_int())
 
-fn in_cap(h: int): bool = airlock_below(h, STROKE_CAP) != 0
+fn in_cap(h: int): bool = airlock_span(h, 1, STROKE_CAP) != 0
 
 fn x_get(h: int): float = airlock_fget_n(g_x, h, STROKE_CAP)
 fn y_get(h: int): float = airlock_fget_n(g_y, h, STROKE_CAP)

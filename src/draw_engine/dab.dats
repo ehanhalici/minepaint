@@ -23,7 +23,7 @@ val g_fresh = ref<int>(0)
 val g_nfree = ref<int>(0)
 val g_free = air_arena(DAB_CAP, airlock_esz_int())
 
-fn in_cap(i: int): bool = airlock_below(i, DAB_CAP) != 0
+fn in_cap(i: int): bool = airlock_span(i, 1, DAB_CAP) != 0
 
 fn alloc_dab(): int =
   if !g_nfree > 0 then let
@@ -45,20 +45,16 @@ fn recycle_dab(h: int): void = let
 in () end
 
 extern fun dab_get(h: int): OperationDataDrawDab = "ext#dab_get"
-implement dab_get(h) = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < DAB_CAP) then
-    if air_bget(g_alive, h, DAB_CAP) then g_dab[i] else g_blank
+implement dab_get(h) =
+  if airlock_span(h, 1, DAB_CAP) != 0 then
+    if air_bget(g_alive, h, DAB_CAP) then g_dab[airlock_below(h, DAB_CAP)] else g_blank
   else g_blank
-end
 
 extern fun dab_new(v: OperationDataDrawDab): int = "ext#dab_new"
 implement dab_new(v) = let
   val h = alloc_dab()
   val () = assertloc(h >= 0)
-  val i = g1ofg0(h)
-  val () = if (i >= 0) * (i < DAB_CAP) then g_dab[i] := v
+  val () = if airlock_span(h, 1, DAB_CAP) != 0 then g_dab[airlock_below(h, DAB_CAP)] := v
   val () = air_bset(g_alive, h, DAB_CAP, true)
 in
   h
@@ -68,10 +64,7 @@ extern fun dab_clone(h: int): int = "ext#dab_clone"
 implement dab_clone(h) = dab_new(dab_get(h))
 
 extern fun dab_release(h: int): void = "ext#dab_release"
-implement dab_release(h) = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < DAB_CAP) then
+implement dab_release(h) =
+  if airlock_span(h, 1, DAB_CAP) != 0 then
     if air_bget(g_alive, h, DAB_CAP) then recycle_dab(h) else ()
   else ()
-end

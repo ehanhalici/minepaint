@@ -33,7 +33,7 @@ val g_fresh = ref<int>(0)
 val g_nfree = ref<int>(0)
 val g_free = air_arena(BRUSH_CAP, airlock_esz_int())
 
-fn brush_in(h: int): bool = airlock_below(h, BRUSH_CAP) != 0
+fn brush_in(h: int): bool = airlock_span(h, 1, BRUSH_CAP) != 0
 fn brush_alive(h: int): bool = air_bget(g_alive, h, BRUSH_CAP)
 
 fn alloc_brush(): int =
@@ -70,7 +70,7 @@ fn val_set(h: int, i: int, v: float): void =
 fn map_get(h: int, i: int): int = let
   val s = h * BV_N + i
 in
-  if brush_alive(h) * (airlock_below(s, BV_SLOTS) != 0) then airlock_iget_n(g_map, s, BV_SLOTS) else MAPPING_NONE
+  if brush_alive(h) * (airlock_span(s, 1, BV_SLOTS) != 0) then airlock_iget_n(g_map, s, BV_SLOTS) else MAPPING_NONE
 end
 fn map_set(h: int, i: int, m: int): void =
   if brush_alive(h) then airlock_iset_n(g_map, h * BV_N + i, BV_SLOTS, m)
@@ -437,9 +437,9 @@ in
 end
 
 fn in_set(arr: &(@[float][MAPPING_INPUTS]), id: InputId, v: float): void = let
-  val idx = g1ofg0(input_ix(id))
+  val j = input_ix(id)
 in
-  if (idx >= 0) * (idx < MAPPING_INPUTS) then arr[idx] := v else ()
+  if airlock_span(j, 1, MAPPING_INPUTS) != 0 then arr[airlock_below(j, MAPPING_INPUTS)] := v else ()
 end
 
 fn populate_input_buffer(

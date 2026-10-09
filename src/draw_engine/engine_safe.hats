@@ -6,9 +6,9 @@
 
 extern fun u16(x: uint): uint16 = "mac#mp_uint_to_u16"
 
-extern fun airlock_nat(i: int): int = "mac#airlock_nat"
-extern fun airlock_pos(i: int): int = "mac#airlock_pos"
-extern fun airlock_below(i: int, n: int): int = "mac#airlock_below"
+extern fun airlock_nat(i: int): [k:nat] int(k) = "mac#airlock_nat"
+extern fun airlock_pos(i: int): [k:pos] int(k) = "mac#airlock_pos"
+extern fun airlock_below {n:pos} (i: int, cap: int(n)): [k:nat | k < n] int(k) = "mac#airlock_ix"
 extern fun airlock_word(p: ptr, i: int, n: int): int = "mac#airlock_word"
 extern fun airlock_span(i: int, len: int, n: int): int = "mac#airlock_span"
 

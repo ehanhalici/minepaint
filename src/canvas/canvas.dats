@@ -38,29 +38,22 @@ val g_alive = air_arena(CANVAS_CAP, airlock_esz_int())
 val g_canvas = arrayref_make_elt<canvas_state_record>(i2sz(CANVAS_CAP), g_blank)
 val g_fresh = ref<int>(0)
 
-fn cget(h: int): canvas_state_record = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < CANVAS_CAP) then
-    if air_bget(g_alive, h, CANVAS_CAP) then g_canvas[i] else g_blank
+fn cget(h: int): canvas_state_record =
+  if airlock_span(h, 1, CANVAS_CAP) != 0 then
+    if air_bget(g_alive, h, CANVAS_CAP) then g_canvas[airlock_below(h, CANVAS_CAP)] else g_blank
   else g_blank
-end
 
-fn cput(h: int, v: canvas_state_record): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < CANVAS_CAP) then
-    if air_bget(g_alive, h, CANVAS_CAP) then g_canvas[i] := v else ()
+fn cput(h: int, v: canvas_state_record): void =
+  if airlock_span(h, 1, CANVAS_CAP) != 0 then
+    if air_bget(g_alive, h, CANVAS_CAP) then g_canvas[airlock_below(h, CANVAS_CAP)] := v else ()
   else ()
-end
 
 fn canvas_alloc(v: canvas_state_record): int = let
   val n = !g_fresh
   val () = assertloc(n < CANVAS_CAP)
   val () = !g_fresh := n + 1
-  val i = g1ofg0(n)
   val () = air_bset(g_alive, n, CANVAS_CAP, true)
-  val () = if (i >= 0) * (i < CANVAS_CAP) then g_canvas[i] := v
+  val () = if airlock_span(n, 1, CANVAS_CAP) != 0 then g_canvas[airlock_below(n, CANVAS_CAP)] := v
 in
   n
 end

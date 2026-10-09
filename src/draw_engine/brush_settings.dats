@@ -2,6 +2,7 @@
 // main.dats dynloads this file so the tables are filled before use.
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+#include "draw_engine/engine_safe.hats"
 #include "./brushsettings_gen.hats"
 
 val g_set_blank = @{
@@ -20,17 +21,11 @@ val g_inputs = arrayref_make_elt<MinePaintBrushInputInfo>(i2sz(18), g_in_blank)
 val () = populate_settings_info_array()
 val () = populate_inputs_info_array()
 
-fn setting_at(id: int): MinePaintBrushSettingInfo = let
-  val i = g1ofg0(id)
-in
-  if (i >= 0) * (i < 65) then g_settings[i] else g_set_blank
-end
+fn setting_at(id: int): MinePaintBrushSettingInfo =
+  if airlock_span(id, 1, 65) != 0 then g_settings[airlock_below(id, 65)] else g_set_blank
 
-fn input_at(id: int): MinePaintBrushInputInfo = let
-  val i = g1ofg0(id)
-in
-  if (i >= 0) * (i < 18) then g_inputs[i] else g_in_blank
-end
+fn input_at(id: int): MinePaintBrushInputInfo =
+  if airlock_span(id, 1, 18) != 0 then g_inputs[airlock_below(id, 18)] else g_in_blank
 
 extern fun minepaint_brush_setting_info(id: int): MinePaintBrushSettingInfo = "ext#minepaint_brush_setting_info"
 implement minepaint_brush_setting_info(id) = setting_at(id)

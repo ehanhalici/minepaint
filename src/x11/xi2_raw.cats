@@ -96,7 +96,7 @@ static inline double xi2_device_class_val_max(void *devs, int dev_idx, int class
 
 static inline int xi2_device_class_val_label(Display *dpy, void *devs, int dev_idx, int class_idx, char *buf, int bufsz) {
   XIValuatorClassInfo *val = (XIValuatorClassInfo *)xi2_class_at(devs, dev_idx, class_idx);
-  if (!val || val->label == None || !buf || !airlock_pos(bufsz)) return 0;
+  if (!val || val->label == None || !buf || bufsz <= 0) return 0;
   char *aname = XGetAtomName(dpy, val->label);
   if (!aname) return 0;
   strncpy(buf, aname, (size_t)(bufsz - 1));
@@ -136,7 +136,7 @@ static inline int xi2_raw_deviceid(void *data) {
 }
 
 static inline int xi2_mask_popcount(const unsigned char *mask, int mask_len) {
-  if (!mask || airlock_pos(mask_len) == 0) return 0;
+  if (!mask || mask_len <= 0) return 0;
   int n = 0;
   for (int i = 0; i < mask_len; i++) {
     unsigned char b = (unsigned char)airlock_word(mask, i, mask_len);

@@ -27,8 +27,8 @@ val g_ifresh = ref<int>(0)
 val g_infree = ref<int>(0)
 val g_ifree = air_arena(ITEM_CAP, airlock_esz_int())
 
-fn q_in(h: int): bool = airlock_below(h, FIFO_CAP) != 0
-fn item_in(it: int): bool = airlock_below(it, ITEM_CAP) != 0
+fn q_in(h: int): bool = airlock_span(h, 1, FIFO_CAP) != 0
+fn item_in(it: int): bool = airlock_span(it, 1, ITEM_CAP) != 0
 
 fn qalive_get(h: int): bool = air_bget(g_qalive, h, FIFO_CAP)
 fn qalive_set(h: int, v: bool): void = air_bset(g_qalive, h, FIFO_CAP, v)
@@ -53,7 +53,7 @@ fn take_free(nref: ref(int), stack: ptr, cap: int): int =
     val n = !nref - 1
     val () = !nref := n
   in
-    if airlock_below(n, cap) != 0 then airlock_iget_n(stack, n, cap) else FIFO_NONE
+    if airlock_span(n, 1, cap) != 0 then airlock_iget_n(stack, n, cap) else FIFO_NONE
   end else FIFO_NONE
 
 fn alloc_q(): int =

@@ -29,9 +29,13 @@ static inline int mp_ptr_is_null(void *p) { return p == 0; }
 #define MP_AIRLOCK_CAP 2000000
 
 static inline int airlock_nat(int i) { return i >= 0 ? i : 0; }
-static inline int airlock_pos(int i) { return i > 0 ? i : 0; }
+static inline int airlock_pos(int i) { return i > 0 ? i : 1; }
 static inline int airlock_below(int i, int n) {
   return (i >= 0 && n > 0 && i < n) ? 1 : 0;
+}
+/* In-range index, else 0. Callers skip the access when airlock_below is 0. */
+static inline int airlock_ix(int i, int n) {
+  return airlock_below(i, n) ? i : 0;
 }
 static inline int airlock_span(int i, int len, int n) {
   if (i < 0 || len < 0 || n < 0 || i > n) return 0;

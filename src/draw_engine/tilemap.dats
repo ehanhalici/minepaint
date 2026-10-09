@@ -20,14 +20,14 @@ val g_free = air_arena(TM_CAP, airlock_esz_int())
 
 extern fun fifo_free(h: int, user_free: (int) -> void): void = "ext#fifo_free"
 
-fn tm_in(h: int): bool = airlock_below(h, TM_CAP) != 0
+fn tm_in(h: int): bool = airlock_span(h, 1, TM_CAP) != 0
 
 fn alive_get(h: int): bool = air_bget(g_alive, h, TM_CAP)
 fn alive_set(h: int, v: bool): void = air_bset(g_alive, h, TM_CAP, v)
 fn size_get(h: int): int = airlock_iget_n(g_size, h, TM_CAP)
 fn size_set(h: int, v: int): void = airlock_iset_n(g_size, h, TM_CAP, v)
 fn slot_get(idx: int): int =
-  if airlock_below(idx, TM_SLOTS) != 0 then airlock_iget_n(g_slot, idx, TM_SLOTS) else FIFO_NONE
+  if airlock_span(idx, 1, TM_SLOTS) != 0 then airlock_iget_n(g_slot, idx, TM_SLOTS) else FIFO_NONE
 fn slot_set(idx: int, v: int): void = airlock_iset_n(g_slot, idx, TM_SLOTS, v)
 
 fn entries_of(sz: int): int = 4 * sz * sz

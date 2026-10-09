@@ -18,7 +18,7 @@ val g_fresh = ref<int>(0)
 val g_nfree = ref<int>(0)
 val g_free = air_arena(BBOX_BUFS, airlock_esz_int())
 
-fn buf_in(h: int): bool = airlock_below(h, BBOX_BUFS) != 0
+fn buf_in(h: int): bool = airlock_span(h, 1, BBOX_BUFS) != 0
 
 fn slot_of(h: int, i: int): int = h * BBOX_LEN + i
 
@@ -42,15 +42,15 @@ fn recycle_buf(h: int): void = let
 in () end
 
 fn rect_at(h: int, i: int): MinePaintRectangle = let
-  val s = g1ofg0(slot_of(h, i))
+  val s = slot_of(h, i)
 in
-  if (s >= 0) * (s < BBOX_SLOTS) then g_rect[s] else g_zero
+  if airlock_span(s, 1, BBOX_SLOTS) != 0 then g_rect[airlock_below(s, BBOX_SLOTS)] else g_zero
 end
 
 fn rect_put(h: int, i: int, v: MinePaintRectangle): void = let
-  val s = g1ofg0(slot_of(h, i))
+  val s = slot_of(h, i)
 in
-  if (s >= 0) * (s < BBOX_SLOTS) then g_rect[s] := v else ()
+  if airlock_span(s, 1, BBOX_SLOTS) != 0 then g_rect[airlock_below(s, BBOX_SLOTS)] := v else ()
 end
 
 fun clear_slots(h: int, i: int, n: int): void =

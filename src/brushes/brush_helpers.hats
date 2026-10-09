@@ -5,27 +5,25 @@
 
 staload "draw_engine/setting_id.sats"
 staload "draw_engine/input_id.sats"
+#include "draw_engine/engine_safe.hats"
 
 fn {n:int}
-table_iget(a: &(@[int][n]), nsz: int(n), k: int): int = let
-  val i = g1ofg0(k)
-in
-  if (i >= 0) * (i < nsz) then a[i] else 0
-end
+table_iget(a: &(@[int][n]), nsz: int(n), k: int): int =
+  if nsz > 0 then
+    if airlock_span(k, 1, nsz) != 0 then a[airlock_below(k, nsz)] else 0
+  else 0
 
 fn {n:int}
-table_fget(a: &(@[float][n]), nsz: int(n), k: int): float = let
-  val i = g1ofg0(k)
-in
-  if (i >= 0) * (i < nsz) then a[i] else 0.0f
-end
+table_fget(a: &(@[float][n]), nsz: int(n), k: int): float =
+  if nsz > 0 then
+    if airlock_span(k, 1, nsz) != 0 then a[airlock_below(k, nsz)] else 0.0f
+  else 0.0f
 
 fn {n:int}
-table_sget(a: &(@[string][n]), nsz: int(n), k: int): string = let
-  val i = g1ofg0(k)
-in
-  if (i >= 0) * (i < nsz) then a[i] else ""
-end
+table_sget(a: &(@[string][n]), nsz: int(n), k: int): string =
+  if nsz > 0 then
+    if airlock_span(k, 1, nsz) != 0 then a[airlock_below(k, nsz)] else ""
+  else ""
 
 extern fun draw_engine_brush_set_base_value(b: int, id: SettingId, v: float): void = "ext#draw_engine_brush_set_base_value"
 extern fun draw_engine_brush_set_mapping_n(b: int, setting: SettingId, input: InputId, n: int): void = "ext#draw_engine_brush_set_mapping_n"

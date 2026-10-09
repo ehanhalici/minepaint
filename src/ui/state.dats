@@ -54,7 +54,7 @@ implement ui_get() = g_ui
 fn pal_init_put(p: ptr, i: int, r: float, g: float, b: float): void = let
   val o = i * 3
 in
-  if airlock_below(o, 34) != 0 then let
+  if airlock_span(o, 1, 34) != 0 then let
     val () = airlock_fset_n(p, o, 36, r)
     val () = airlock_fset_n(p, o + 1, 36, g)
     val () = airlock_fset_n(p, o + 2, 36, b)

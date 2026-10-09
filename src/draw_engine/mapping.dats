@@ -169,11 +169,8 @@ in
   end
 end
 
-fn input_at(data: &(@[float][MAPPING_INPUTS]), j: int): float = let
-  val idx = g1ofg0(j)
-in
-  if (idx >= 0) * (idx < MAPPING_INPUTS) then data[idx] else 0.0f
-end
+fn input_at(data: &(@[float][MAPPING_INPUTS]), j: int): float =
+  if airlock_span(j, 1, MAPPING_INPUTS) != 0 then data[airlock_below(j, MAPPING_INPUTS)] else 0.0f
 
 fun sum_inputs(
   h: int, data: &(@[float][MAPPING_INPUTS]), j: int, num_in: int, acc: float
