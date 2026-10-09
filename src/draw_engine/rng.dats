@@ -23,21 +23,21 @@ extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
 
 fn mp_rng_get_u(s: MpRng, i: int): double =
-  if (i >= 0) * (i < 10) then mp_c_dget(rng_ptr(s), i) else 0.0
+  airlock_dget_n(rng_ptr(s), i, 10)
 
 fn mp_rng_set_u(s: MpRng, i: int, v: double): void =
-  if (i >= 0) * (i < 10) then mp_c_dset(rng_ptr(s), i, v) else ()
+  airlock_dset_n(rng_ptr(s), i, 10, v)
 
 fn mp_rng_get_buf(s: MpRng, i: int): double = let
   val base = rng_ptr(rng_add_dbl(s, 10))
 in
-  if (i >= 0) * (i < 19) then mp_c_dget(base, i) else 0.0
+  airlock_dget_n(base, i, 19)
 end
 
 fn mp_rng_set_buf(s: MpRng, i: int, v: double): void = let
   val base = rng_ptr(rng_add_dbl(s, 10))
 in
-  if (i >= 0) * (i < 19) then mp_c_dset(base, i, v) else ()
+  airlock_dset_n(base, i, 19, v)
 end
 
 fn sdget(u: DblBuf, i: int): double = mp_arr_dget(dbl_ptr(u), i)
@@ -47,10 +47,10 @@ fn mp_rng_get_buf_ptr(s: MpRng, i: int): DblBuf =
   dbl_of(rng_ptr(rng_add_dbl(s, 10 + i)))
 
 fn mp_rng_get_arr_pos(s: MpRng): int =
-  mp_c_iget(rng_ptr(rng_add_byte(s, RNG_ARR_POS_BYTE_OFFSET)), 0)
+  airlock_iget_n(rng_ptr(rng_add_byte(s, RNG_ARR_POS_BYTE_OFFSET)), 0, 1)
 
 fn mp_rng_set_arr_pos(s: MpRng, v: int): void =
-  mp_c_iset(rng_ptr(rng_add_byte(s, RNG_ARR_POS_BYTE_OFFSET)), 0, v)
+  airlock_iset_n(rng_ptr(rng_add_byte(s, RNG_ARR_POS_BYTE_OFFSET)), 0, 1, v)
 
 fn mod_sum(x: double, y: double): double = let
   val s = x + y
