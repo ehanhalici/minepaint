@@ -4,6 +4,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 #include "./engine_safe.hats"
+staload "draw_engine/intbuf.sats"
 
 staload "./rectangle.dats"
 staload "draw_engine/rect_box.sats"
@@ -75,9 +76,10 @@ fn f_clamp(x: float, min_v: float, max_v: float): float =
 fn i_min(a: int, b: int): int = if a < b then a else b
 fn i_max(a: int, b: int): int = if a > b then a else b
 
-fn get_dirty_tile(dirty_tiles: ptr, idx: int): @(int, int) = let
-  val x = mp_arr_iget(dirty_tiles, idx * 2)
-  val y = mp_arr_iget(dirty_tiles, idx * 2 + 1)
+fn get_dirty_tile(dirty_tiles: IntBuf, idx: int): @(int, int) = let
+  val p = intbuf_ptr(dirty_tiles)
+  val x = mp_arr_iget(p, idx * 2)
+  val y = mp_arr_iget(p, idx * 2 + 1)
 in
   @(x, y)
 end
@@ -524,7 +526,7 @@ implement minepaint_tiled_surface_begin_atomic(self_p) =
     prepare_bounding_boxes(self_p)
   end
 
-fun process_dirty_tile_list(self_p: ptr, t_ptr: ptr, i: int, n: int): void =
+fun process_dirty_tile_list(self_p: ptr, t_ptr: IntBuf, i: int, n: int): void =
   if i < n then let
     val t = get_dirty_tile(t_ptr, i)
     val () = process_tile(self_p, t.0, t.1)
@@ -553,7 +555,7 @@ implement minepaint_tiled_surface_end_atomic(self_p, roi_p) =
     val self = view_tiled(self_p)
     var tiles_ptr: ptr
     val tiles_n = operation_queue_get_dirty_tiles(self->operation_queue, tiles_ptr)
-    val () = process_dirty_tile_list(self_p, tiles_ptr, 0, tiles_n)
+    val () = process_dirty_tile_list(self_p, intbuf_of(tiles_ptr), 0, tiles_n)
     val () = operation_queue_clear_dirty_tiles(self->operation_queue)
     val () =
       if roi_p != the_null_ptr then let

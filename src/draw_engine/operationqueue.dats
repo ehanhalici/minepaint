@@ -1,9 +1,10 @@
-// Operation queue as an integer handle. The dirty-tile buffer stays a
-// malloc'd pair array because the surface reads it back through a pointer.
+// Operation queue as an integer handle. The dirty-tile array is an IntBuf.
+// The surface still receives that address through the out-parameter cell.
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 #include "./engine_safe.hats"
 #include "./minepaint_types.hats"
+staload "draw_engine/intbuf.sats"
 
 #define OQ_CAP 8
 #define TM_MAX 256
@@ -15,7 +16,7 @@ typedef TileIndex = @{
 
 val g_alive = arrayref_make_elt<bool>(i2sz(OQ_CAP), false)
 val g_tm = arrayref_make_elt<int>(i2sz(OQ_CAP), TILEMAP_NONE)
-val g_dirty = arrayref_make_elt<ptr>(i2sz(OQ_CAP), the_null_ptr)
+val g_dirty = arrayref_make_elt<IntBuf>(i2sz(OQ_CAP), intbuf_none())
 val g_n = arrayref_make_elt<int>(i2sz(OQ_CAP), 0)
 val g_fresh = ref<int>(0)
 val g_nfree = ref<int>(0)
@@ -64,13 +65,13 @@ in
   if (i >= 0) * (i < OQ_CAP) then g_tm[i] := v else ()
 end
 
-fn dirty_get(h: int): ptr = let
+fn dirty_get(h: int): IntBuf = let
   val i = g1ofg0(h)
 in
-  if (i >= 0) * (i < OQ_CAP) then g_dirty[i] else the_null_ptr
+  if (i >= 0) * (i < OQ_CAP) then g_dirty[i] else intbuf_none()
 end
 
-fn dirty_set(h: int, v: ptr): void = let
+fn dirty_set(h: int, v: IntBuf): void = let
   val i = g1ofg0(h)
 in
   if (i >= 0) * (i < OQ_CAP) then g_dirty[i] := v else ()
@@ -111,16 +112,16 @@ in () end
 fn free_op_func(item: int): void =
   if item >= 0 then dab_release(item)
 
-fn get_dirty_tile(p: ptr, idx: int): @(int, int) =
-  @(mp_arr_iget(p, idx * 2), mp_arr_iget(p, idx * 2 + 1))
+fn get_dirty_tile(p: IntBuf, idx: int): @(int, int) =
+  @(mp_arr_iget(intbuf_ptr(p), idx * 2), mp_arr_iget(intbuf_ptr(p), idx * 2 + 1))
 
-fn set_dirty_tile(p: ptr, idx: int, x: int, y: int): void = let
-  val () = mp_arr_iset(p, idx * 2, x)
+fn set_dirty_tile(p: IntBuf, idx: int, x: int, y: int): void = let
+  val () = mp_arr_iset(intbuf_ptr(p), idx * 2, x)
 in
-  mp_arr_iset(p, idx * 2 + 1, y)
+  mp_arr_iset(intbuf_ptr(p), idx * 2 + 1, y)
 end
 
-fn remove_duplicate_tiles(array_ptr: ptr, len: int): int =
+fn remove_duplicate_tiles(array_ptr: IntBuf, len: int): int =
   if len < 2 then len
   else let
     fun loop_i(i: int, new_len: int): int =
@@ -144,7 +145,7 @@ fn remove_duplicate_tiles(array_ptr: ptr, len: int): int =
     loop_i(1, 1)
   end
 
-fn copy_dirty_array(old_dirty: ptr, new_dirty: ptr, n: int): void = let
+fn copy_dirty_array(old_dirty: IntBuf, new_dirty: IntBuf, n: int): void = let
   fun loop(i: int): void =
     if i < n then let
       val @(x, y) = get_dirty_tile(old_dirty, i)
@@ -161,8 +162,8 @@ fn free_oq_data(h: int): void = let
   val () = if tm >= 0 then tile_map_free(tm, true, free_op_func)
   val () = tm_set(h, TILEMAP_NONE)
   val dt = dirty_get(h)
-  val () = if dt != the_null_ptr then free(dt)
-  val () = dirty_set(h, the_null_ptr)
+  val () = if intbuf_is_null(dt) = 0 then free(intbuf_ptr(dt))
+  val () = dirty_set(h, intbuf_none())
 in
   n_set(h, 0)
 end
@@ -173,14 +174,15 @@ fn operation_queue_resize(h: int, new_size: int): bool =
     val () = assertloc((new_size > 0) * (new_size <= TM_MAX))
     val new_tm = tile_map_new(new_size)
     val new_map_size = 4 * new_size * new_size
-    val new_dirty = malloc(g0int2uint_int_size(new_map_size) * sizeof<TileIndex>)
-    val () = assertloc(new_dirty > the_null_ptr)
+    val raw_dirty = malloc(g0int2uint_int_size(new_map_size) * sizeof<TileIndex>)
+    val () = assertloc(raw_dirty > the_null_ptr)
+    val new_dirty = intbuf_of(raw_dirty)
     val old_tm = tm_get(h)
     val () = if old_tm >= 0 then let
       val () = tile_map_copy_to(old_tm, new_tm)
       val () = copy_dirty_array(dirty_get(h), new_dirty, n_get(h))
       val () = tile_map_free(old_tm, false, free_op_func)
-      val () = free(dirty_get(h))
+      val () = free(intbuf_ptr(dirty_get(h)))
     in () end
     val () = tm_set(h, new_tm)
     val () = dirty_set(h, new_dirty)
@@ -194,7 +196,7 @@ implement operation_queue_new() = let
   val () = assertloc(h >= 0)
   val () = alive_set(h, true)
   val () = tm_set(h, TILEMAP_NONE)
-  val () = dirty_set(h, the_null_ptr)
+  val () = dirty_set(h, intbuf_none())
   val () = n_set(h, 0)
   val _ = operation_queue_resize(h, 10)
 in
@@ -217,7 +219,7 @@ implement operation_queue_get_dirty_tiles(h, tiles_out) =
     val dirty = dirty_get(h)
     val n0 = remove_duplicate_tiles(dirty, n_get(h))
     val () = n_set(h, n0)
-    val () = if tiles_out != the_null_ptr then mp_arr_pset(tiles_out, 0, dirty)
+    val () = if tiles_out != the_null_ptr then mp_arr_pset(tiles_out, 0, intbuf_ptr(dirty))
   in
     n0
   end
