@@ -500,10 +500,10 @@ fun clean_bounding_boxes(bboxes: int, i: int, n: int): void =
     clean_bounding_boxes(bboxes, i + 1, n)
   end
 
-fun clean_roi_rects(rects: ptr, i: int, n: int): void =
+fun clean_roi_rects(rects: RectRun, i: int, n: int): void =
   if i < n then let
-    val dest = ptr_add<byte>(rects, int2size(g0int_mul(i, 16)))
-    val () = minepaint_rectangle_clear(rect_of(dest))
+    val dest = rectrun_add(rects, g0int_mul(i, 16))
+    val () = minepaint_rectangle_clear(rect_of(rectrun_ptr(dest)))
   in
     clean_roi_rects(rects, i + 1, n)
   end
@@ -549,8 +549,8 @@ fun export_roi_rects(
       if num_dirty > roi_rects then
         i_min(roi_rects - 1, g0float2int_float_int(roundf(f_div(g0int2float_int_float(i), factor))))
       else i
-    val dest_p = ptr_add<byte>(roi->rectangles, int2size(g0int_mul(out_idx, 16)))
-    val () = minepaint_rectangle_expand_to_include_value(rect_of(dest_p), bbox_get(bboxes, i))
+    val dest = rectrun_add(rectrun_of(roi->rectangles), g0int_mul(out_idx, 16))
+    val () = minepaint_rectangle_expand_to_include_value(rect_of(rectrun_ptr(dest)), bbox_get(bboxes, i))
   in
     export_roi_rects(roi, bboxes, i + 1, num_dirty, roi_rects, factor)
   end
@@ -567,7 +567,7 @@ implement minepaint_tiled_surface_end_atomic(self_p, roi_p) =
       if roi_p != the_null_ptr then let
         val roi = view_rects(roi_p)
         val num_dirty = self->num_bboxes_dirtied
-        val () = clean_roi_rects(roi->rectangles, 0, i_min(roi->num_rectangles, num_dirty))
+        val () = clean_roi_rects(rectrun_of(roi->rectangles), 0, i_min(roi->num_rectangles, num_dirty))
         val bpo = if roi->num_rectangles > 0 then f_div(g0int2float_int_float(num_dirty), g0int2float_int_float(roi->num_rectangles)) else 1.0f
         val factor = if f_lt(bpo, 1.0f) then 1.0f else bpo
         val () = export_roi_rects(roi, self->bboxes, 0, num_dirty, roi->num_rectangles, factor)
