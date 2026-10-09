@@ -5,106 +5,38 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 #include "./minepaint_types.hats"
+#include "./engine_safe.hats"
 
 #define MAPPING_CAPACITY 512
 #define CURVE_CAPACITY (MAPPING_CAPACITY * MAPPING_INPUTS)
 #define POINT_CAPACITY (CURVE_CAPACITY * MAPPING_CURVE_POINTS)
 
-val g_alive = arrayref_make_elt<bool>(i2sz(MAPPING_CAPACITY), false)
-val g_base = arrayref_make_elt<float>(i2sz(MAPPING_CAPACITY), 0.0f)
-val g_inputs = arrayref_make_elt<int>(i2sz(MAPPING_CAPACITY), 0)
-val g_used = arrayref_make_elt<int>(i2sz(MAPPING_CAPACITY), 0)
-val g_n = arrayref_make_elt<int>(i2sz(CURVE_CAPACITY), 0)
-val g_x = arrayref_make_elt<float>(i2sz(POINT_CAPACITY), 0.0f)
-val g_y = arrayref_make_elt<float>(i2sz(POINT_CAPACITY), 0.0f)
+val g_alive = air_arena(MAPPING_CAPACITY, airlock_esz_int())
+val g_base = air_arena(MAPPING_CAPACITY, airlock_esz_float())
+val g_inputs = air_arena(MAPPING_CAPACITY, airlock_esz_int())
+val g_used = air_arena(MAPPING_CAPACITY, airlock_esz_int())
+val g_n = air_arena(CURVE_CAPACITY, airlock_esz_int())
+val g_x = air_arena(POINT_CAPACITY, airlock_esz_float())
+val g_y = air_arena(POINT_CAPACITY, airlock_esz_float())
 
 fn curve_slot(h: int, j: int): int = h * MAPPING_INPUTS + j
 fn point_slot(h: int, j: int, k: int): int =
   curve_slot(h, j) * MAPPING_CURVE_POINTS + k
 
-fn alive_get(h: int): bool = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < MAPPING_CAPACITY) then g_alive[i] else false
-end
-
-fn alive_set(h: int, v: bool): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < MAPPING_CAPACITY) then g_alive[i] := v else ()
-end
-
-fn base_get(h: int): float = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < MAPPING_CAPACITY) then g_base[i] else 0.0f
-end
-
-fn base_set(h: int, v: float): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < MAPPING_CAPACITY) then g_base[i] := v else ()
-end
-
-fn inputs_get(h: int): int = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < MAPPING_CAPACITY) then g_inputs[i] else 0
-end
-
-fn inputs_set(h: int, v: int): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < MAPPING_CAPACITY) then g_inputs[i] := v else ()
-end
-
-fn used_get(h: int): int = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < MAPPING_CAPACITY) then g_used[i] else 0
-end
-
-fn used_set(h: int, v: int): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < MAPPING_CAPACITY) then g_used[i] := v else ()
-end
-
-fn n_get(h: int, j: int): int = let
-  val i = g1ofg0(curve_slot(h, j))
-in
-  if (i >= 0) * (i < CURVE_CAPACITY) then g_n[i] else 0
-end
-
-fn n_set(h: int, j: int, v: int): void = let
-  val i = g1ofg0(curve_slot(h, j))
-in
-  if (i >= 0) * (i < CURVE_CAPACITY) then g_n[i] := v else ()
-end
-
-fn x_get(h: int, j: int, k: int): float = let
-  val i = g1ofg0(point_slot(h, j, k))
-in
-  if (i >= 0) * (i < POINT_CAPACITY) then g_x[i] else 0.0f
-end
-
-fn x_set(h: int, j: int, k: int, v: float): void = let
-  val i = g1ofg0(point_slot(h, j, k))
-in
-  if (i >= 0) * (i < POINT_CAPACITY) then g_x[i] := v else ()
-end
-
-fn y_get(h: int, j: int, k: int): float = let
-  val i = g1ofg0(point_slot(h, j, k))
-in
-  if (i >= 0) * (i < POINT_CAPACITY) then g_y[i] else 0.0f
-end
-
-fn y_set(h: int, j: int, k: int, v: float): void = let
-  val i = g1ofg0(point_slot(h, j, k))
-in
-  if (i >= 0) * (i < POINT_CAPACITY) then g_y[i] := v else ()
-end
+fn alive_get(h: int): bool = air_bget(g_alive, h, MAPPING_CAPACITY)
+fn alive_set(h: int, v: bool): void = air_bset(g_alive, h, MAPPING_CAPACITY, v)
+fn base_get(h: int): float = airlock_fget_n(g_base, h, MAPPING_CAPACITY)
+fn base_set(h: int, v: float): void = airlock_fset_n(g_base, h, MAPPING_CAPACITY, v)
+fn inputs_get(h: int): int = airlock_iget_n(g_inputs, h, MAPPING_CAPACITY)
+fn inputs_set(h: int, v: int): void = airlock_iset_n(g_inputs, h, MAPPING_CAPACITY, v)
+fn used_get(h: int): int = airlock_iget_n(g_used, h, MAPPING_CAPACITY)
+fn used_set(h: int, v: int): void = airlock_iset_n(g_used, h, MAPPING_CAPACITY, v)
+fn n_get(h: int, j: int): int = airlock_iget_n(g_n, curve_slot(h, j), CURVE_CAPACITY)
+fn n_set(h: int, j: int, v: int): void = airlock_iset_n(g_n, curve_slot(h, j), CURVE_CAPACITY, v)
+fn x_get(h: int, j: int, k: int): float = airlock_fget_n(g_x, point_slot(h, j, k), POINT_CAPACITY)
+fn x_set(h: int, j: int, k: int, v: float): void = airlock_fset_n(g_x, point_slot(h, j, k), POINT_CAPACITY, v)
+fn y_get(h: int, j: int, k: int): float = airlock_fget_n(g_y, point_slot(h, j, k), POINT_CAPACITY)
+fn y_set(h: int, j: int, k: int, v: float): void = airlock_fset_n(g_y, point_slot(h, j, k), POINT_CAPACITY, v)
 
 fun find_free_slot(i: int): int =
   if i >= MAPPING_CAPACITY then MAPPING_NONE

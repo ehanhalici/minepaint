@@ -3,6 +3,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
+#include "draw_engine/engine_safe.hats"
 staload "ui/color.dats"
 staload "canvas/stroke_queue.dats"
 staload "canvas/gl_surface.dats"
@@ -33,7 +34,7 @@ val g_blank = @{
   last_mouse_x= 0.0f, last_mouse_y= 0.0f,
   last_time= 0.0, q= ~1
 } : canvas_state_record
-val g_alive = arrayref_make_elt<bool>(i2sz(CANVAS_CAP), false)
+val g_alive = air_arena(CANVAS_CAP, airlock_esz_int())
 val g_canvas = arrayref_make_elt<canvas_state_record>(i2sz(CANVAS_CAP), g_blank)
 val g_fresh = ref<int>(0)
 
@@ -41,7 +42,7 @@ fn cget(h: int): canvas_state_record = let
   val i = g1ofg0(h)
 in
   if (i >= 0) * (i < CANVAS_CAP) then
-    if g_alive[i] then g_canvas[i] else g_blank
+    if air_bget(g_alive, h, CANVAS_CAP) then g_canvas[i] else g_blank
   else g_blank
 end
 
@@ -49,7 +50,7 @@ fn cput(h: int, v: canvas_state_record): void = let
   val i = g1ofg0(h)
 in
   if (i >= 0) * (i < CANVAS_CAP) then
-    if g_alive[i] then g_canvas[i] := v else ()
+    if air_bget(g_alive, h, CANVAS_CAP) then g_canvas[i] := v else ()
   else ()
 end
 
@@ -58,7 +59,7 @@ fn canvas_alloc(v: canvas_state_record): int = let
   val () = assertloc(n < CANVAS_CAP)
   val () = !g_fresh := n + 1
   val i = g1ofg0(n)
-  val () = if (i >= 0) * (i < CANVAS_CAP) then g_alive[i] := true
+  val () = air_bset(g_alive, n, CANVAS_CAP, true)
   val () = if (i >= 0) * (i < CANVAS_CAP) then g_canvas[i] := v
 in
   n

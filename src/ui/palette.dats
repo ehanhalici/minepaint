@@ -2,6 +2,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
+#include "draw_engine/engine_safe.hats"
 staload "ui/state.dats"
 
 fn pal_clampf(v: float): float =
@@ -14,10 +15,8 @@ implement pal_get(i, c) =
   if (i < 0) || (i >= 12) || (c < 0) || (c > 2) then 0.0f
   else let
     val u = ui_get()
-    val p = u->pal
-    val idx = g1ofg0(i * 3 + c)
   in
-    if (idx >= 0) * (idx < 36) then p[idx] else 0.0f
+    airlock_fget_n(u->pal, i * 3 + c, 36)
   end
 
 extern fun pal_get_color(i: int): @(float, float, float) = "ext#pal_get_color"
@@ -29,8 +28,6 @@ implement pal_set(i, c, v) =
   if (i < 0) || (i >= 12) || (c < 0) || (c > 2) then ()
   else let
     val u = ui_get()
-    val p = u->pal
-    val idx = g1ofg0(i * 3 + c)
   in
-    if (idx >= 0) * (idx < 36) then p[idx] := pal_clampf(v) else ()
+    airlock_fset_n(u->pal, i * 3 + c, 36, pal_clampf(v))
   end

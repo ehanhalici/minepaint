@@ -3,6 +3,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 #include "./minepaint_types.hats"
+#include "./engine_safe.hats"
 
 staload "./settings.dats"
 staload "draw_engine/setting_id.sats"
@@ -21,30 +22,26 @@ staload "./surface.dats"
 #define ST_SLOTS 352
 #define BV_SLOTS 520
 
-val g_alive = arrayref_make_elt<bool>(i2sz(BRUSH_CAP), false)
-val g_reset = arrayref_make_elt<int>(i2sz(BRUSH_CAP), 0)
-val g_rng = arrayref_make_elt<MpRng>(i2sz(BRUSH_CAP), rng_none())
-val g_state = arrayref_make_elt<float>(i2sz(ST_SLOTS), 0.0f)
-val g_base = arrayref_make_elt<float>(i2sz(BV_SLOTS), 0.0f)
-val g_val = arrayref_make_elt<float>(i2sz(BV_SLOTS), 0.0f)
-val g_map = arrayref_make_elt<int>(i2sz(BV_SLOTS), 0)
+val g_alive = air_arena(BRUSH_CAP, airlock_esz_int())
+val g_reset = air_arena(BRUSH_CAP, airlock_esz_int())
+val g_rng = air_arena(BRUSH_CAP, airlock_esz_ptr())
+val g_state = air_arena(ST_SLOTS, airlock_esz_float())
+val g_base = air_arena(BV_SLOTS, airlock_esz_float())
+val g_val = air_arena(BV_SLOTS, airlock_esz_float())
+val g_map = air_arena(BV_SLOTS, airlock_esz_int())
 val g_fresh = ref<int>(0)
 val g_nfree = ref<int>(0)
-val g_free = arrayref_make_elt<int>(i2sz(BRUSH_CAP), 0)
+val g_free = air_arena(BRUSH_CAP, airlock_esz_int())
 
-fn brush_alive(h: int): bool = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < BRUSH_CAP) then g_alive[i] else false
-end
+fn brush_in(h: int): bool = airlock_below(h, BRUSH_CAP) != 0
+fn brush_alive(h: int): bool = air_bget(g_alive, h, BRUSH_CAP)
 
 fn alloc_brush(): int =
   if !g_nfree > 0 then let
     val n = !g_nfree - 1
     val () = !g_nfree := n
-    val i = g1ofg0(n)
   in
-    if (i >= 0) * (i < BRUSH_CAP) then g_free[i] else BRUSH_NONE
+    if brush_in(n) then airlock_iget_n(g_free, n, BRUSH_CAP) else BRUSH_NONE
   end else let
     val n = !g_fresh
   in
@@ -53,84 +50,38 @@ fn alloc_brush(): int =
 
 fn recycle_brush(h: int): void = let
   val n = !g_nfree
-  val i = g1ofg0(n)
-  val hi = g1ofg0(h)
-  val () = if (i >= 0) * (i < BRUSH_CAP) then g_free[i] := h
-  val () = if (hi >= 0) * (hi < BRUSH_CAP) then g_alive[hi] := false
-  val () = if (hi >= 0) * (hi < BRUSH_CAP) then !g_nfree := n + 1
+  val () = if brush_in(n) then airlock_iset_n(g_free, n, BRUSH_CAP, h)
+  val () = air_bset(g_alive, h, BRUSH_CAP, false)
+  val () = if brush_in(h) then !g_nfree := n + 1
 in () end
 
-fn st_get(h: int, i: int): float = let
-  val s = g1ofg0(h * ST_N + i)
-in
-  if brush_alive(h) * (s >= 0) * (s < ST_SLOTS) then g_state[s] else 0.0f
-end
-
-fn st_set(h: int, i: int, v: float): void = let
-  val s = g1ofg0(h * ST_N + i)
-in
-  if brush_alive(h) * (s >= 0) * (s < ST_SLOTS) then g_state[s] := v else ()
-end
-
-fn base_get(h: int, i: int): float = let
-  val s = g1ofg0(h * BV_N + i)
-in
-  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_base[s] else 0.0f
-end
-
-fn base_set(h: int, i: int, v: float): void = let
-  val s = g1ofg0(h * BV_N + i)
-in
-  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_base[s] := v else ()
-end
-
-fn val_get(h: int, i: int): float = let
-  val s = g1ofg0(h * BV_N + i)
-in
-  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_val[s] else 0.0f
-end
-
-fn val_set(h: int, i: int, v: float): void = let
-  val s = g1ofg0(h * BV_N + i)
-in
-  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_val[s] := v else ()
-end
-
+fn st_get(h: int, i: int): float =
+  if brush_alive(h) then airlock_fget_n(g_state, h * ST_N + i, ST_SLOTS) else 0.0f
+fn st_set(h: int, i: int, v: float): void =
+  if brush_alive(h) then airlock_fset_n(g_state, h * ST_N + i, ST_SLOTS, v)
+fn base_get(h: int, i: int): float =
+  if brush_alive(h) then airlock_fget_n(g_base, h * BV_N + i, BV_SLOTS) else 0.0f
+fn base_set(h: int, i: int, v: float): void =
+  if brush_alive(h) then airlock_fset_n(g_base, h * BV_N + i, BV_SLOTS, v)
+fn val_get(h: int, i: int): float =
+  if brush_alive(h) then airlock_fget_n(g_val, h * BV_N + i, BV_SLOTS) else 0.0f
+fn val_set(h: int, i: int, v: float): void =
+  if brush_alive(h) then airlock_fset_n(g_val, h * BV_N + i, BV_SLOTS, v)
 fn map_get(h: int, i: int): int = let
-  val s = g1ofg0(h * BV_N + i)
+  val s = h * BV_N + i
 in
-  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_map[s] else MAPPING_NONE
+  if brush_alive(h) * (airlock_below(s, BV_SLOTS) != 0) then airlock_iget_n(g_map, s, BV_SLOTS) else MAPPING_NONE
 end
-
-fn map_set(h: int, i: int, m: int): void = let
-  val s = g1ofg0(h * BV_N + i)
-in
-  if brush_alive(h) * (s >= 0) * (s < BV_SLOTS) then g_map[s] := m else ()
-end
-
-fn reset_get(h: int): int = let
-  val i = g1ofg0(h)
-in
-  if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_reset[i] else 0
-end
-
-fn reset_set(h: int, v: int): void = let
-  val i = g1ofg0(h)
-in
-  if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_reset[i] := v else ()
-end
-
-fn rng_get(h: int): MpRng = let
-  val i = g1ofg0(h)
-in
-  if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_rng[i] else rng_none()
-end
-
-fn rng_set(h: int, r: MpRng): void = let
-  val i = g1ofg0(h)
-in
-  if brush_alive(h) * (i >= 0) * (i < BRUSH_CAP) then g_rng[i] := r else ()
-end
+fn map_set(h: int, i: int, m: int): void =
+  if brush_alive(h) then airlock_iset_n(g_map, h * BV_N + i, BV_SLOTS, m)
+fn reset_get(h: int): int =
+  if brush_alive(h) then airlock_iget_n(g_reset, h, BRUSH_CAP) else 0
+fn reset_set(h: int, v: int): void =
+  if brush_alive(h) then airlock_iset_n(g_reset, h, BRUSH_CAP, v)
+fn rng_get(h: int): MpRng =
+  if brush_alive(h) * brush_in(h) then rng_of(airlock_pget_n(g_rng, h, BRUSH_CAP)) else rng_none()
+fn rng_set(h: int, r: MpRng): void =
+  if brush_alive(h) then airlock_pset_n(g_rng, h, BRUSH_CAP, rng_ptr(r))
 
 fun zero_state(h: int, i: int): void =
   if i < ST_N then let
@@ -147,8 +98,7 @@ fun zero_base(h: int, i: int): void =
 fn mp_brush_alloc(): int = let
   val h = alloc_brush()
   val () = assertloc(h >= 0)
-  val i = g1ofg0(h)
-  val () = if (i >= 0) * (i < BRUSH_CAP) then g_alive[i] := true
+  val () = air_bset(g_alive, h, BRUSH_CAP, true)
   val () = reset_set(h, 0)
   val () = rng_set(h, rng_none())
   val () = zero_state(h, 0)

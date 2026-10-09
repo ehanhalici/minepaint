@@ -3,129 +3,61 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 #include "./minepaint_types.hats"
+#include "./engine_safe.hats"
 
 #define FIFO_CAP 4096
 #define ITEM_CAP 262144
 
-val g_qalive = arrayref_make_elt<bool>(i2sz(FIFO_CAP), false)
-val g_qfirst = arrayref_make_elt<int>(i2sz(FIFO_CAP), FIFO_NONE)
-val g_qlast = arrayref_make_elt<int>(i2sz(FIFO_CAP), FIFO_NONE)
-val g_qcount = arrayref_make_elt<int>(i2sz(FIFO_CAP), 0)
+val g_qalive = air_arena(FIFO_CAP, airlock_esz_int())
+val g_qfirst = air_arena(FIFO_CAP, airlock_esz_int())
+val () = airlock_fill_int(g_qfirst, FIFO_CAP, FIFO_NONE)
+val g_qlast = air_arena(FIFO_CAP, airlock_esz_int())
+val () = airlock_fill_int(g_qlast, FIFO_CAP, FIFO_NONE)
+val g_qcount = air_arena(FIFO_CAP, airlock_esz_int())
 val g_qfresh = ref<int>(0)
 val g_qnfree = ref<int>(0)
-val g_qfree = arrayref_make_elt<int>(i2sz(FIFO_CAP), 0)
+val g_qfree = air_arena(FIFO_CAP, airlock_esz_int())
 
-val g_ialive = arrayref_make_elt<bool>(i2sz(ITEM_CAP), false)
-val g_inext = arrayref_make_elt<int>(i2sz(ITEM_CAP), FIFO_NONE)
-val g_ipay = arrayref_make_elt<int>(i2sz(ITEM_CAP), FIFO_NONE)
+val g_ialive = air_arena(ITEM_CAP, airlock_esz_int())
+val g_inext = air_arena(ITEM_CAP, airlock_esz_int())
+val () = airlock_fill_int(g_inext, ITEM_CAP, FIFO_NONE)
+val g_ipay = air_arena(ITEM_CAP, airlock_esz_int())
+val () = airlock_fill_int(g_ipay, ITEM_CAP, FIFO_NONE)
 val g_ifresh = ref<int>(0)
 val g_infree = ref<int>(0)
-val g_ifree = arrayref_make_elt<int>(i2sz(ITEM_CAP), 0)
+val g_ifree = air_arena(ITEM_CAP, airlock_esz_int())
 
-fn q_in(h: int): bool = let
-  val i = g1ofg0(h)
-in
-  (i >= 0) * (i < FIFO_CAP)
-end
+fn q_in(h: int): bool = airlock_below(h, FIFO_CAP) != 0
+fn item_in(it: int): bool = airlock_below(it, ITEM_CAP) != 0
 
-fn qalive_get(h: int): bool = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < FIFO_CAP) then g_qalive[i] else false
-end
+fn qalive_get(h: int): bool = air_bget(g_qalive, h, FIFO_CAP)
+fn qalive_set(h: int, v: bool): void = air_bset(g_qalive, h, FIFO_CAP, v)
+fn qfirst_get(h: int): int =
+  if q_in(h) then airlock_iget_n(g_qfirst, h, FIFO_CAP) else FIFO_NONE
+fn qfirst_set(h: int, v: int): void = airlock_iset_n(g_qfirst, h, FIFO_CAP, v)
+fn qlast_get(h: int): int =
+  if q_in(h) then airlock_iget_n(g_qlast, h, FIFO_CAP) else FIFO_NONE
+fn qlast_set(h: int, v: int): void = airlock_iset_n(g_qlast, h, FIFO_CAP, v)
+fn qcount_get(h: int): int = airlock_iget_n(g_qcount, h, FIFO_CAP)
+fn qcount_set(h: int, v: int): void = airlock_iset_n(g_qcount, h, FIFO_CAP, v)
+fn inext_get(it: int): int =
+  if item_in(it) then airlock_iget_n(g_inext, it, ITEM_CAP) else FIFO_NONE
+fn inext_set(it: int, v: int): void = airlock_iset_n(g_inext, it, ITEM_CAP, v)
+fn ipay_get(it: int): int =
+  if item_in(it) then airlock_iget_n(g_ipay, it, ITEM_CAP) else FIFO_NONE
+fn ipay_set(it: int, v: int): void = airlock_iset_n(g_ipay, it, ITEM_CAP, v)
+fn ialive_set(it: int, v: bool): void = air_bset(g_ialive, it, ITEM_CAP, v)
 
-fn qalive_set(h: int, v: bool): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < FIFO_CAP) then g_qalive[i] := v else ()
-end
-
-fn qfirst_get(h: int): int = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < FIFO_CAP) then g_qfirst[i] else FIFO_NONE
-end
-
-fn qfirst_set(h: int, v: int): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < FIFO_CAP) then g_qfirst[i] := v else ()
-end
-
-fn qlast_get(h: int): int = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < FIFO_CAP) then g_qlast[i] else FIFO_NONE
-end
-
-fn qlast_set(h: int, v: int): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < FIFO_CAP) then g_qlast[i] := v else ()
-end
-
-fn qcount_get(h: int): int = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < FIFO_CAP) then g_qcount[i] else 0
-end
-
-fn qcount_set(h: int, v: int): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < FIFO_CAP) then g_qcount[i] := v else ()
-end
-
-fn inext_get(it: int): int = let
-  val i = g1ofg0(it)
-in
-  if (i >= 0) * (i < ITEM_CAP) then g_inext[i] else FIFO_NONE
-end
-
-fn inext_set(it: int, v: int): void = let
-  val i = g1ofg0(it)
-in
-  if (i >= 0) * (i < ITEM_CAP) then g_inext[i] := v else ()
-end
-
-fn ipay_get(it: int): int = let
-  val i = g1ofg0(it)
-in
-  if (i >= 0) * (i < ITEM_CAP) then g_ipay[i] else FIFO_NONE
-end
-
-fn ipay_set(it: int, v: int): void = let
-  val i = g1ofg0(it)
-in
-  if (i >= 0) * (i < ITEM_CAP) then g_ipay[i] := v else ()
-end
-
-fn ialive_set(it: int, v: bool): void = let
-  val i = g1ofg0(it)
-in
-  if (i >= 0) * (i < ITEM_CAP) then g_ialive[i] := v else ()
-end
-
-fn take_free(nref: ref(int), stack: arrayref(int, FIFO_CAP)): int =
+fn take_free(nref: ref(int), stack: ptr, cap: int): int =
   if !nref > 0 then let
     val n = !nref - 1
     val () = !nref := n
-    val i = g1ofg0(n)
   in
-    if (i >= 0) * (i < FIFO_CAP) then stack[i] else FIFO_NONE
-  end else FIFO_NONE
-
-fn take_ifree(): int =
-  if !g_infree > 0 then let
-    val n = !g_infree - 1
-    val () = !g_infree := n
-    val i = g1ofg0(n)
-  in
-    if (i >= 0) * (i < ITEM_CAP) then g_ifree[i] else FIFO_NONE
+    if airlock_below(n, cap) != 0 then airlock_iget_n(stack, n, cap) else FIFO_NONE
   end else FIFO_NONE
 
 fn alloc_q(): int =
-  if !g_qnfree > 0 then take_free(g_qnfree, g_qfree)
+  if !g_qnfree > 0 then take_free(g_qnfree, g_qfree, FIFO_CAP)
   else let
     val n = !g_qfresh
   in
@@ -133,7 +65,7 @@ fn alloc_q(): int =
   end
 
 fn alloc_item(): int =
-  if !g_infree > 0 then take_ifree()
+  if !g_infree > 0 then take_free(g_infree, g_ifree, ITEM_CAP)
   else let
     val n = !g_ifresh
   in
@@ -142,16 +74,14 @@ fn alloc_item(): int =
 
 fn recycle_q(h: int): void = let
   val n = !g_qnfree
-  val i = g1ofg0(n)
-  val () = if (i >= 0) * (i < FIFO_CAP) then g_qfree[i] := h
+  val () = if q_in(n) then airlock_iset_n(g_qfree, n, FIFO_CAP, h)
   val () = if q_in(h) then !g_qnfree := n + 1
 in () end
 
 fn recycle_item(it: int): void = let
   val n = !g_infree
-  val i = g1ofg0(n)
-  val () = if (i >= 0) * (i < ITEM_CAP) then g_ifree[i] := it
-  val () = if (g1ofg0(it) >= 0) * (g1ofg0(it) < ITEM_CAP) then !g_infree := n + 1
+  val () = if item_in(n) then airlock_iset_n(g_ifree, n, ITEM_CAP, it)
+  val () = if item_in(it) then !g_infree := n + 1
 in () end
 
 fn q_reset(h: int): void = let

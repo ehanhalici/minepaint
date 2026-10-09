@@ -4,6 +4,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 #include "./minepaint_types.hats"
+#include "./engine_safe.hats"
 #include "./matrix_pure.hats"
 
 #define SYMM_CAP 8
@@ -33,72 +34,37 @@ fn kind_of(t: int): SymmetryKind =
   else if t = SYM_SNOWFLAKE then SymSnowflake()
   else SymOther()
 
-val g_alive = arrayref_make_elt<bool>(i2sz(SYMM_CAP), false)
-val g_active = arrayref_make_elt<int>(i2sz(SYMM_CAP), 0)
-val g_changes = arrayref_make_elt<int>(i2sz(SYMM_CAP), 0)
-val g_nmat = arrayref_make_elt<int>(i2sz(SYMM_CAP), 0)
-val g_cur_type = arrayref_make_elt<int>(i2sz(SYMM_CAP), 0)
-val g_cur_x = arrayref_make_elt<float>(i2sz(SYMM_CAP), 0.0f)
-val g_cur_y = arrayref_make_elt<float>(i2sz(SYMM_CAP), 0.0f)
-val g_cur_ang = arrayref_make_elt<float>(i2sz(SYMM_CAP), 0.0f)
-val g_cur_lines = arrayref_make_elt<float>(i2sz(SYMM_CAP), 0.0f)
-val g_pen_type = arrayref_make_elt<int>(i2sz(SYMM_CAP), 0)
-val g_pen_x = arrayref_make_elt<float>(i2sz(SYMM_CAP), 0.0f)
-val g_pen_y = arrayref_make_elt<float>(i2sz(SYMM_CAP), 0.0f)
-val g_pen_ang = arrayref_make_elt<float>(i2sz(SYMM_CAP), 0.0f)
-val g_pen_lines = arrayref_make_elt<float>(i2sz(SYMM_CAP), 0.0f)
-val g_mat = arrayref_make_elt<float>(i2sz(SYMM_FLOATS), 0.0f)
+val g_alive = air_arena(SYMM_CAP, airlock_esz_int())
+val g_active = air_arena(SYMM_CAP, airlock_esz_int())
+val g_changes = air_arena(SYMM_CAP, airlock_esz_int())
+val g_nmat = air_arena(SYMM_CAP, airlock_esz_int())
+val g_cur_type = air_arena(SYMM_CAP, airlock_esz_int())
+val g_cur_x = air_arena(SYMM_CAP, airlock_esz_float())
+val g_cur_y = air_arena(SYMM_CAP, airlock_esz_float())
+val g_cur_ang = air_arena(SYMM_CAP, airlock_esz_float())
+val g_cur_lines = air_arena(SYMM_CAP, airlock_esz_float())
+val g_pen_type = air_arena(SYMM_CAP, airlock_esz_int())
+val g_pen_x = air_arena(SYMM_CAP, airlock_esz_float())
+val g_pen_y = air_arena(SYMM_CAP, airlock_esz_float())
+val g_pen_ang = air_arena(SYMM_CAP, airlock_esz_float())
+val g_pen_lines = air_arena(SYMM_CAP, airlock_esz_float())
+val g_mat = air_arena(SYMM_FLOATS, airlock_esz_float())
 
-fn alive_get(h: int): bool = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < SYMM_CAP) then g_alive[i] else false
-end
-
-fn alive_set(h: int, v: bool): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < SYMM_CAP) then g_alive[i] := v else ()
-end
-
-fn i_get(a: arrayref(int, SYMM_CAP), h: int): int = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < SYMM_CAP) then a[i] else 0
-end
-
-fn i_set(a: arrayref(int, SYMM_CAP), h: int, v: int): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < SYMM_CAP) then a[i] := v else ()
-end
-
-fn f_get(a: arrayref(float, SYMM_CAP), h: int): float = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < SYMM_CAP) then a[i] else 0.0f
-end
-
-fn f_set(a: arrayref(float, SYMM_CAP), h: int, v: float): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < SYMM_CAP) then a[i] := v else ()
-end
+fn alive_get(h: int): bool = air_bget(g_alive, h, SYMM_CAP)
+fn alive_set(h: int, v: bool): void = air_bset(g_alive, h, SYMM_CAP, v)
+fn i_get(a: ptr, h: int): int = airlock_iget_n(a, h, SYMM_CAP)
+fn i_set(a: ptr, h: int, v: int): void = airlock_iset_n(a, h, SYMM_CAP, v)
+fn f_get(a: ptr, h: int): float = airlock_fget_n(a, h, SYMM_CAP)
+fn f_set(a: ptr, h: int, v: float): void = airlock_fset_n(a, h, SYMM_CAP, v)
 
 fn mat_index(h: int, idx: int, k: int): int =
   (h * SYMM_MAX_MATRICES + idx) * 9 + k
 
-fn mat_get(h: int, idx: int, k: int): float = let
-  val i = g1ofg0(mat_index(h, idx, k))
-in
-  if (i >= 0) * (i < SYMM_FLOATS) then g_mat[i] else 0.0f
-end
+fn mat_get(h: int, idx: int, k: int): float =
+  airlock_fget_n(g_mat, mat_index(h, idx, k), SYMM_FLOATS)
 
-fn mat_set(h: int, idx: int, k: int, v: float): void = let
-  val i = g1ofg0(mat_index(h, idx, k))
-in
-  if (i >= 0) * (i < SYMM_FLOATS) then g_mat[i] := v else ()
-end
+fn mat_set(h: int, idx: int, k: int, v: float): void =
+  airlock_fset_n(g_mat, mat_index(h, idx, k), SYMM_FLOATS, v)
 
 fn load_mat(h: int, idx: int): MinePaintTransform =
   @{ r0= mat_get(h, idx, 0), r1= mat_get(h, idx, 1), r2= mat_get(h, idx, 2),

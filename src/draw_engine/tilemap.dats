@@ -3,56 +3,32 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 #include "./minepaint_types.hats"
+#include "./engine_safe.hats"
 
 #define TM_CAP 8
 #define TM_MAX 256
 #define TM_ENTRIES 262144
 #define TM_SLOTS 2097152
 
-val g_alive = arrayref_make_elt<bool>(i2sz(TM_CAP), false)
-val g_size = arrayref_make_elt<int>(i2sz(TM_CAP), 0)
-val g_slot = arrayref_make_elt<int>(i2sz(TM_SLOTS), FIFO_NONE)
+val g_alive = air_arena(TM_CAP, airlock_esz_int())
+val g_size = air_arena(TM_CAP, airlock_esz_int())
+val g_slot = air_arena(TM_SLOTS, airlock_esz_int())
+val () = airlock_fill_int(g_slot, TM_SLOTS, FIFO_NONE)
 val g_fresh = ref<int>(0)
 val g_nfree = ref<int>(0)
-val g_free = arrayref_make_elt<int>(i2sz(TM_CAP), 0)
+val g_free = air_arena(TM_CAP, airlock_esz_int())
 
 extern fun fifo_free(h: int, user_free: (int) -> void): void = "ext#fifo_free"
 
-fn alive_get(h: int): bool = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < TM_CAP) then g_alive[i] else false
-end
+fn tm_in(h: int): bool = airlock_below(h, TM_CAP) != 0
 
-fn alive_set(h: int, v: bool): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < TM_CAP) then g_alive[i] := v else ()
-end
-
-fn size_get(h: int): int = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < TM_CAP) then g_size[i] else 0
-end
-
-fn size_set(h: int, v: int): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < TM_CAP) then g_size[i] := v else ()
-end
-
-fn slot_get(idx: int): int = let
-  val i = g1ofg0(idx)
-in
-  if (i >= 0) * (i < TM_SLOTS) then g_slot[i] else FIFO_NONE
-end
-
-fn slot_set(idx: int, v: int): void = let
-  val i = g1ofg0(idx)
-in
-  if (i >= 0) * (i < TM_SLOTS) then g_slot[i] := v else ()
-end
+fn alive_get(h: int): bool = air_bget(g_alive, h, TM_CAP)
+fn alive_set(h: int, v: bool): void = air_bset(g_alive, h, TM_CAP, v)
+fn size_get(h: int): int = airlock_iget_n(g_size, h, TM_CAP)
+fn size_set(h: int, v: int): void = airlock_iset_n(g_size, h, TM_CAP, v)
+fn slot_get(idx: int): int =
+  if airlock_below(idx, TM_SLOTS) != 0 then airlock_iget_n(g_slot, idx, TM_SLOTS) else FIFO_NONE
+fn slot_set(idx: int, v: int): void = airlock_iset_n(g_slot, idx, TM_SLOTS, v)
 
 fn entries_of(sz: int): int = 4 * sz * sz
 
@@ -65,9 +41,8 @@ fn alloc_tm(): int =
   if !g_nfree > 0 then let
     val n = !g_nfree - 1
     val () = !g_nfree := n
-    val i = g1ofg0(n)
   in
-    if (i >= 0) * (i < TM_CAP) then g_free[i] else TILEMAP_NONE
+    if tm_in(n) then airlock_iget_n(g_free, n, TM_CAP) else TILEMAP_NONE
   end else let
     val n = !g_fresh
   in
@@ -76,9 +51,8 @@ fn alloc_tm(): int =
 
 fn recycle_tm(h: int): void = let
   val n = !g_nfree
-  val i = g1ofg0(n)
-  val () = if (i >= 0) * (i < TM_CAP) then g_free[i] := h
-  val () = if (g1ofg0(h) >= 0) * (g1ofg0(h) < TM_CAP) then !g_nfree := n + 1
+  val () = if tm_in(n) then airlock_iset_n(g_free, n, TM_CAP, h)
+  val () = if tm_in(h) then !g_nfree := n + 1
 in () end
 
 fn clear_slots(h: int, n: int): void = let

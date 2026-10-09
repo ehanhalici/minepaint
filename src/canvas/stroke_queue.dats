@@ -4,6 +4,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
+#include "draw_engine/engine_safe.hats"
 staload "canvas/gl_surface.dats"
 staload "draw_engine/setting_id.sats"
 staload "draw_engine/surface_box.sats"
@@ -35,67 +36,46 @@ fn f_div(a: float, b: float): float = g0float_div_float(a, b)
 
 typedef input_point = @{ x= float, y= float, pressure= float, time= double }
 
-val g_alive = arrayref_make_elt<bool>(i2sz(STROKE_CAP), false)
-val g_x = arrayref_make_elt<float>(i2sz(STROKE_CAP), 0.0f)
-val g_y = arrayref_make_elt<float>(i2sz(STROKE_CAP), 0.0f)
-val g_p = arrayref_make_elt<float>(i2sz(STROKE_CAP), 0.0f)
-val g_t = arrayref_make_elt<double>(i2sz(STROKE_CAP), 0.0)
-val g_next = arrayref_make_elt<int>(i2sz(STROKE_CAP), STROKE_NONE)
+val g_alive = air_arena(STROKE_CAP, airlock_esz_int())
+val g_x = air_arena(STROKE_CAP, airlock_esz_float())
+val g_y = air_arena(STROKE_CAP, airlock_esz_float())
+val g_p = air_arena(STROKE_CAP, airlock_esz_float())
+val g_t = air_arena(STROKE_CAP, airlock_esz_double())
+val g_next = air_arena(STROKE_CAP, airlock_esz_int())
+val () = airlock_fill_int(g_next, STROKE_CAP, STROKE_NONE)
 val g_fresh = ref<int>(0)
 val g_nfree = ref<int>(0)
-val g_free = arrayref_make_elt<int>(i2sz(STROKE_CAP), 0)
+val g_free = air_arena(STROKE_CAP, airlock_esz_int())
 
-fn in_cap(h: int): bool = (g1ofg0(h) >= 0) * (g1ofg0(h) < STROKE_CAP)
+fn in_cap(h: int): bool = airlock_below(h, STROKE_CAP) != 0
 
-fn x_get(h: int): float = let
-  val i = g1ofg0(h)
-in if (i >= 0) * (i < STROKE_CAP) then g_x[i] else 0.0f end
-fn y_get(h: int): float = let
-  val i = g1ofg0(h)
-in if (i >= 0) * (i < STROKE_CAP) then g_y[i] else 0.0f end
-fn p_get(h: int): float = let
-  val i = g1ofg0(h)
-in if (i >= 0) * (i < STROKE_CAP) then g_p[i] else 0.0f end
-fn t_get(h: int): double = let
-  val i = g1ofg0(h)
-in if (i >= 0) * (i < STROKE_CAP) then g_t[i] else 0.0 end
-fn next_get(h: int): int = let
-  val i = g1ofg0(h)
-in if (i >= 0) * (i < STROKE_CAP) then g_next[i] else STROKE_NONE end
+fn x_get(h: int): float = airlock_fget_n(g_x, h, STROKE_CAP)
+fn y_get(h: int): float = airlock_fget_n(g_y, h, STROKE_CAP)
+fn p_get(h: int): float = airlock_fget_n(g_p, h, STROKE_CAP)
+fn t_get(h: int): double = airlock_dget_n(g_t, h, STROKE_CAP)
+fn next_get(h: int): int =
+  if in_cap(h) then airlock_iget_n(g_next, h, STROKE_CAP) else STROKE_NONE
 
-fn x_set(h: int, v: float): void = let
-  val i = g1ofg0(h)
-in if (i >= 0) * (i < STROKE_CAP) then g_x[i] := v else () end
-fn y_set(h: int, v: float): void = let
-  val i = g1ofg0(h)
-in if (i >= 0) * (i < STROKE_CAP) then g_y[i] := v else () end
-fn p_set(h: int, v: float): void = let
-  val i = g1ofg0(h)
-in if (i >= 0) * (i < STROKE_CAP) then g_p[i] := v else () end
-fn t_set(h: int, v: double): void = let
-  val i = g1ofg0(h)
-in if (i >= 0) * (i < STROKE_CAP) then g_t[i] := v else () end
-fn next_set(h: int, v: int): void = let
-  val i = g1ofg0(h)
-in if (i >= 0) * (i < STROKE_CAP) then g_next[i] := v else () end
-fn alive_set(h: int, v: bool): void = let
-  val i = g1ofg0(h)
-in if (i >= 0) * (i < STROKE_CAP) then g_alive[i] := v else () end
+fn x_set(h: int, v: float): void = airlock_fset_n(g_x, h, STROKE_CAP, v)
+fn y_set(h: int, v: float): void = airlock_fset_n(g_y, h, STROKE_CAP, v)
+fn p_set(h: int, v: float): void = airlock_fset_n(g_p, h, STROKE_CAP, v)
+fn t_set(h: int, v: double): void = airlock_dset_n(g_t, h, STROKE_CAP, v)
+fn next_set(h: int, v: int): void = airlock_iset_n(g_next, h, STROKE_CAP, v)
+fn alive_set(h: int, v: bool): void = air_bset(g_alive, h, STROKE_CAP, v)
 
 fn alloc_node(): int =
   if !g_nfree > 0 then let
     val n = !g_nfree - 1
     val () = !g_nfree := n
-    val i = g1ofg0(n)
-  in if (i >= 0) * (i < STROKE_CAP) then g_free[i] else STROKE_NONE end
-  else let
+  in
+    if in_cap(n) then airlock_iget_n(g_free, n, STROKE_CAP) else STROKE_NONE
+  end else let
     val n = !g_fresh
   in if n < STROKE_CAP then (!g_fresh := n + 1; n) else STROKE_NONE end
 
 fn recycle_node(h: int): void = let
   val n = !g_nfree
-  val i = g1ofg0(n)
-  val () = if (i >= 0) * (i < STROKE_CAP) then g_free[i] := h
+  val () = if in_cap(n) then airlock_iset_n(g_free, n, STROKE_CAP, h)
   val () = alive_set(h, false)
   val () = next_set(h, STROKE_NONE)
   val () = if in_cap(h) then !g_nfree := n + 1

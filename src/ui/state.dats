@@ -1,6 +1,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
+#include "draw_engine/engine_safe.hats"
 staload "brushes/brush_group.sats"
 staload "ui/widget_drag.sats"
 
@@ -27,10 +28,10 @@ typedef UIWidgetsState = @{
   brush_scroll= int,
   panel_h= int,
   active_swatch= int,
-  pal= arrayref(float, 36)
+  pal= ptr
 }
 
-val g_pal = arrayref_make_elt<float>(i2sz(36), 0.0f)
+val g_pal = air_arena(36, airlock_esz_float())
 val g_ui = ref<UIWidgetsState>(@{
   edge_hover_time= 0.0,
   cur_r= 0.0f, cur_g= 0.0f, cur_b= 0.0f,
@@ -50,17 +51,17 @@ val g_ui = ref<UIWidgetsState>(@{
 extern fun ui_get(): ref(UIWidgetsState) = "ext#ui_get"
 implement ui_get() = g_ui
 
-fn pal_init_put(p: arrayref(float, 36), i: int, r: float, g: float, b: float): void = let
-  val o = g1ofg0(i * 3)
+fn pal_init_put(p: ptr, i: int, r: float, g: float, b: float): void = let
+  val o = i * 3
 in
-  if (o >= 0) * (o + 2 < 36) then {
-    val () = p[o] := r
-    val () = p[o + 1] := g
-    val () = p[o + 2] := b
-  } else ()
+  if airlock_below(o, 34) != 0 then let
+    val () = airlock_fset_n(p, o, 36, r)
+    val () = airlock_fset_n(p, o + 1, 36, g)
+    val () = airlock_fset_n(p, o + 2, 36, b)
+  in () end else ()
 end
 
-fn init_palette_colors(p: arrayref(float, 36)): void = {
+fn init_palette_colors(p: ptr): void = {
   val () = pal_init_put(p, 0, 1.00f, 1.00f, 1.00f)
   val () = pal_init_put(p, 1, 0.73f, 0.73f, 0.73f)
   val () = pal_init_put(p, 2, 0.30f, 0.30f, 0.30f)
@@ -77,7 +78,7 @@ fn init_palette_colors(p: arrayref(float, 36)): void = {
 
 extern fun ui_state_new(): void = "ext#ui_state_new"
 implement ui_state_new() = let
-  val pal_arr = arrayref_make_elt<float>(i2sz(36), 0.0f)
+  val pal_arr = air_arena(36, airlock_esz_float())
   val () = init_palette_colors(pal_arr)
   val u = g_ui
   val () = u->edge_hover_time := 0.0

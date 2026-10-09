@@ -59,13 +59,44 @@ static inline double mp_dget(const double *p, int i) { return p[i]; }
 static inline void mp_dset(double *p, int i, double v) { p[i] = v; }
 
 
-static inline float airlock_fget(const void *p, int i) {
-  if (!p || !airlock_below(i, MP_AIRLOCK_CAP)) return 0.f;
+static inline float airlock_fget_n(const void *p, int i, int n) {
+  if (!p || !airlock_below(i, n)) return 0.f;
   return mp_fget((const float *)p, i);
 }
-static inline void airlock_fset(void *p, int i, float v) {
-  if (!p || !airlock_below(i, MP_AIRLOCK_CAP)) return;
+static inline void airlock_fset_n(void *p, int i, int n, float v) {
+  if (!p || !airlock_below(i, n)) return;
   mp_fset((float *)p, i, v);
+}
+static inline void *airlock_pget_n(void *p, int i, int n) {
+  if (!p || !airlock_below(i, n)) return 0;
+  return mp_pget((void **)p, i);
+}
+static inline void airlock_pset_n(void *p, int i, int n, void *v) {
+  if (!p || !airlock_below(i, n)) return;
+  mp_pset((void **)p, i, v);
+}
+static inline int airlock_esz_int(void) { return (int)sizeof(int); }
+static inline int airlock_esz_float(void) { return (int)sizeof(float); }
+static inline int airlock_esz_double(void) { return (int)sizeof(double); }
+static inline int airlock_esz_ptr(void) { return (int)sizeof(void *); }
+static inline void *airlock_alloc(int n, int esz) {
+  if (n <= 0 || esz <= 0) return 0;
+  if ((size_t)n > ((size_t)-1) / (size_t)esz) return 0;
+  void *p = malloc((size_t)n * (size_t)esz);
+  if (!p) return 0;
+  memset(p, 0, (size_t)n * (size_t)esz);
+  return p;
+}
+static inline void airlock_fill_int(void *p, int n, int v) {
+  if (!p || n <= 0) return;
+  int *a = (int *)p;
+  for (int i = 0; i < n; i++) a[i] = v;
+}
+static inline float airlock_fget(const void *p, int i) {
+  return airlock_fget_n(p, i, MP_AIRLOCK_CAP);
+}
+static inline void airlock_fset(void *p, int i, float v) {
+  airlock_fset_n(p, i, MP_AIRLOCK_CAP, v);
 }
 static inline int airlock_iget(const void *p, int i) {
   if (!p || !airlock_below(i, MP_AIRLOCK_CAP)) return 0;

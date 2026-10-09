@@ -14,13 +14,14 @@ typedef TileIndex = @{
   y= int
 }
 
-val g_alive = arrayref_make_elt<bool>(i2sz(OQ_CAP), false)
-val g_tm = arrayref_make_elt<int>(i2sz(OQ_CAP), TILEMAP_NONE)
-val g_dirty = arrayref_make_elt<IntBuf>(i2sz(OQ_CAP), intbuf_none())
-val g_n = arrayref_make_elt<int>(i2sz(OQ_CAP), 0)
+val g_alive = air_arena(OQ_CAP, airlock_esz_int())
+val g_tm = air_arena(OQ_CAP, airlock_esz_int())
+val () = airlock_fill_int(g_tm, OQ_CAP, TILEMAP_NONE)
+val g_dirty = air_arena(OQ_CAP, airlock_esz_ptr())
+val g_n = air_arena(OQ_CAP, airlock_esz_int())
 val g_fresh = ref<int>(0)
 val g_nfree = ref<int>(0)
-val g_free = arrayref_make_elt<int>(i2sz(OQ_CAP), 0)
+val g_free = air_arena(OQ_CAP, airlock_esz_int())
 
 extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
@@ -41,61 +42,25 @@ extern fun fifo_peek_first(h: int): int = "ext#fifo_peek_first"
 extern fun fifo_peek_last(h: int): int = "ext#fifo_peek_last"
 extern fun dab_release(h: int): void = "ext#dab_release"
 
-fn alive_get(h: int): bool = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < OQ_CAP) then g_alive[i] else false
-end
-
-fn alive_set(h: int, v: bool): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < OQ_CAP) then g_alive[i] := v else ()
-end
-
-fn tm_get(h: int): int = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < OQ_CAP) then g_tm[i] else TILEMAP_NONE
-end
-
-fn tm_set(h: int, v: int): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < OQ_CAP) then g_tm[i] := v else ()
-end
-
-fn dirty_get(h: int): IntBuf = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < OQ_CAP) then g_dirty[i] else intbuf_none()
-end
-
-fn dirty_set(h: int, v: IntBuf): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < OQ_CAP) then g_dirty[i] := v else ()
-end
-
-fn n_get(h: int): int = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < OQ_CAP) then g_n[i] else 0
-end
-
-fn n_set(h: int, v: int): void = let
-  val i = g1ofg0(h)
-in
-  if (i >= 0) * (i < OQ_CAP) then g_n[i] := v else ()
-end
+fn oq_in(h: int): bool = airlock_below(h, OQ_CAP) != 0
+fn alive_get(h: int): bool = air_bget(g_alive, h, OQ_CAP)
+fn alive_set(h: int, v: bool): void = air_bset(g_alive, h, OQ_CAP, v)
+fn tm_get(h: int): int =
+  if oq_in(h) then airlock_iget_n(g_tm, h, OQ_CAP) else TILEMAP_NONE
+fn tm_set(h: int, v: int): void = airlock_iset_n(g_tm, h, OQ_CAP, v)
+fn dirty_get(h: int): IntBuf =
+  if oq_in(h) then intbuf_of(airlock_pget_n(g_dirty, h, OQ_CAP)) else intbuf_none()
+fn dirty_set(h: int, v: IntBuf): void =
+  if oq_in(h) then airlock_pset_n(g_dirty, h, OQ_CAP, intbuf_ptr(v))
+fn n_get(h: int): int = airlock_iget_n(g_n, h, OQ_CAP)
+fn n_set(h: int, v: int): void = airlock_iset_n(g_n, h, OQ_CAP, v)
 
 fn alloc_oq(): int =
   if !g_nfree > 0 then let
     val n = !g_nfree - 1
     val () = !g_nfree := n
-    val i = g1ofg0(n)
   in
-    if (i >= 0) * (i < OQ_CAP) then g_free[i] else OQ_NONE
+    if oq_in(n) then airlock_iget_n(g_free, n, OQ_CAP) else OQ_NONE
   end else let
     val n = !g_fresh
   in
@@ -104,9 +69,8 @@ fn alloc_oq(): int =
 
 fn recycle_oq(h: int): void = let
   val n = !g_nfree
-  val i = g1ofg0(n)
-  val () = if (i >= 0) * (i < OQ_CAP) then g_free[i] := h
-  val () = if (g1ofg0(h) >= 0) * (g1ofg0(h) < OQ_CAP) then !g_nfree := n + 1
+  val () = if oq_in(n) then airlock_iset_n(g_free, n, OQ_CAP, h)
+  val () = if oq_in(h) then !g_nfree := n + 1
 in () end
 
 fn free_op_func(item: int): void =
