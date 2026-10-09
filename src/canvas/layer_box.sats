@@ -15,3 +15,8 @@ abst@ype MpBuckets = ptr
 
 fun buckets_of(p: ptr): MpBuckets = "mac#mp_id_ptr"
 fun buckets_ptr(b: MpBuckets): ptr = "mac#mp_id_ptr"
+
+abst@ype MpSlot = ptr
+
+fun slot_of(p: ptr): MpSlot = "mac#mp_id_ptr"
+fun slot_ptr(s: MpSlot): ptr = "mac#mp_id_ptr"

@@ -28,12 +28,12 @@ typedef Layer_Record = @{
 extern fun view_layer(p: ptr): ref(Layer_Record) = "mac#mp_id_ptr"
 extern fun view_tile(p: ptr): ref(CanvasTile) = "mac#mp_id_ptr"
 
-fn mp_slot_get(p: ptr): ptr = mp_arr_pget(p, 0)
+fn mp_slot_get(p: MpSlot): ptr = mp_arr_pget(slot_ptr(p), 0)
 
-fn mp_slot_set(p: ptr, v: ptr): void = mp_arr_pset(p, 0, v)
+fn mp_slot_set(p: MpSlot, v: ptr): void = mp_arr_pset(slot_ptr(p), 0, v)
 
-fn bucket_at(b: MpBuckets, i: int): ptr =
-  ptr_add<ptr>(buckets_ptr(b), i)
+fn bucket_at(b: MpBuckets, i: int): MpSlot =
+  slot_of(ptr_add<ptr>(buckets_ptr(b), i))
 
 // OpenGL Sabitleri
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
