@@ -9,13 +9,14 @@ staload "./surface.dats"
 staload "./tiled_surface.dats"
 staload "draw_engine/surface_box.sats"
 staload "draw_engine/req_box.sats"
+staload "draw_engine/bytebuf.sats"
 #include "./minepaint_types.hats"
 
 typedef MinePaintFixedTiledSurface_struct = @{
   parent= MinePaintTiledSurface,
   tile_size= size_t,
-  tile_buffer= ptr,
-  null_tile= ptr,
+  tile_buffer= ByteBuf,
+  null_tile= ByteBuf,
   tiles_width= int,
   tiles_height= int,
   width= int,
@@ -51,7 +52,7 @@ fn is_out_of_bounds(tx: int, ty: int, w: int, h: int): bool =
 
 fn reset_null_tile(self_p: MpSurface): void = let
   val self = view_fixed(mp_surface_to_ptr(self_p))
-  val _ = memset(self->null_tile, 0, self->tile_size)
+  val _ = memset(byte_ptr(self->null_tile), 0, self->tile_size)
 in () end
 
 fn compute_tile_offset(self: ref(MinePaintFixedTiledSurface_struct), tx: int, ty: int): size_t = let
@@ -68,11 +69,11 @@ implement fixed_tile_request_start(tiled_surface, request) = let
   val ty = req->ty
 in
   if is_out_of_bounds(tx, ty, self->tiles_width, self->tiles_height) then
-    req->buffer := self->null_tile
+    req->buffer := byte_ptr(self->null_tile)
   else let
     val offset = compute_tile_offset(self, tx, ty)
   in
-    req->buffer := ptr_add<byte>(self->tile_buffer, offset)
+    req->buffer := ptr_add<byte>(byte_ptr(self->tile_buffer), offset)
   end
 end
 
@@ -96,8 +97,8 @@ implement free_simple_tiledsurf(surface) =
   if mp_surface_is_null(surface) = 0 then let
     val self = view_fixed(mp_surface_to_ptr(surface))
     val () = minepaint_tiled_surface_destroy(surface)
-    val () = if self->tile_buffer != the_null_ptr then free(self->tile_buffer)
-    val () = if self->null_tile != the_null_ptr then free(self->null_tile)
+    val () = if byte_is_null(self->tile_buffer) = 0 then free(byte_ptr(self->tile_buffer))
+    val () = if byte_is_null(self->null_tile) = 0 then free(byte_ptr(self->null_tile))
   in
     free(mp_surface_to_ptr(surface))
   end
@@ -107,7 +108,7 @@ fn calc_tiles_dim(dim: int, tile_size: int): int =
 
 fn setup_fixed_surface(
   self: ref(MinePaintFixedTiledSurface_struct),
-  w: int, h: int, tw: int, th: int, single_bytes: size_t, buf: ptr, null_t: ptr
+  w: int, h: int, tw: int, th: int, single_bytes: size_t, buf: ByteBuf, null_t: ByteBuf
 ): void = let
   val () = self->tile_buffer := buf
   val () = self->tile_size := single_bytes
@@ -136,16 +137,16 @@ in
     val th = calc_tiles_dim(height, ts)
     val single_bytes = mul_size_size(int2size(g0int_mul(ts, ts)), int2size(8))
     val total_bytes = mul_size_size(mul_size_size(int2size(tw), int2size(th)), single_bytes)
-    val buf = malloc(total_bytes)
+    val buf_raw = malloc(total_bytes)
   in
-    if buf = the_null_ptr then let
+    if buf_raw = the_null_ptr then let
       val () = free(self_p)
     in mp_surface_none() end
     else let
-      val _ = memset(buf, 255, total_bytes)
-      val null_t = malloc(single_bytes)
-      val () = assertloc(null_t > the_null_ptr)
-      val () = setup_fixed_surface(self, width, height, tw, th, single_bytes, buf, null_t)
+      val _ = memset(buf_raw, 255, total_bytes)
+      val null_raw = malloc(single_bytes)
+      val () = assertloc(null_raw > the_null_ptr)
+      val () = setup_fixed_surface(self, width, height, tw, th, single_bytes, byte_of(buf_raw), byte_of(null_raw))
       val () = reset_null_tile(mp_surface_of_ptr(self_p))
     in
       mp_surface_of_ptr(self_p)
