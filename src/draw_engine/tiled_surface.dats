@@ -14,6 +14,7 @@ staload "./operationqueue.dats"
 staload "./dab.dats"
 staload "./brushmodes.dats"
 staload "draw_engine/pixel_buf.sats"
+staload "draw_engine/fltbuf.sats"
 staload "draw_engine/fcell.sats"
 staload "./surface.dats"
 staload "draw_engine/surface_box.sats"
@@ -223,8 +224,12 @@ in
   @(x0, y0, x1, y1)
 end
 
+fn u16s(m: U16Buf, i: int, v: uint16): void = mp_arr_u16set(u16buf_ptr(m), i, v)
+fn fsetm(m: FltBuf, i: int, v: float): void = mp_arr_fset(flt_ptr(m), i, v)
+fn fgetm(m: FltBuf, i: int): float = mp_arr_fget(flt_ptr(m), i)
+
 fun fill_rr_aa(
-  rr_mask: ptr, x0: int, y0: int, x1: int, y1: int,
+  rr_mask: FltBuf, x0: int, y0: int, x1: int, y1: int,
   x: float, y: float, ar: float, sn: float, cs: float,
   inv_r2: float, r_aa_start: float
 ): void = let
@@ -233,7 +238,7 @@ fun fill_rr_aa(
       fun loop_x(xp: int): void =
         if xp <= x1 then let
           val rr = calculate_rr_antialiased(xp, yp, x, y, ar, sn, cs, inv_r2, r_aa_start)
-          val () = mp_arr_fset(rr_mask, yp * MINEPAINT_TILE_SIZE + xp, rr)
+          val () = fsetm(rr_mask, yp * MINEPAINT_TILE_SIZE + xp, rr)
         in loop_x(xp + 1) end
       val () = loop_x(x0)
     in loop_y(yp + 1) end
@@ -242,7 +247,7 @@ in
 end
 
 fun fill_rr_std(
-  rr_mask: ptr, x0: int, y0: int, x1: int, y1: int,
+  rr_mask: FltBuf, x0: int, y0: int, x1: int, y1: int,
   x: float, y: float, ar: float, sn: float, cs: float, inv_r2: float
 ): void = let
   fun loop_y(yp: int): void =
@@ -250,7 +255,7 @@ fun fill_rr_std(
       fun loop_x(xp: int): void =
         if xp <= x1 then let
           val rr = calculate_rr(xp, yp, x, y, ar, sn, cs, inv_r2)
-          val () = mp_arr_fset(rr_mask, yp * MINEPAINT_TILE_SIZE + xp, rr)
+          val () = fsetm(rr_mask, yp * MINEPAINT_TILE_SIZE + xp, rr)
         in loop_x(xp + 1) end
       val () = loop_x(x0)
     in loop_y(yp + 1) end
@@ -258,22 +263,22 @@ in
   loop_y(y0)
 end
 
-fn write_rle_skip(mask: ptr, o_idx: int, s_acc: int): int =
+fn write_rle_skip(mask: U16Buf, o_idx: int, s_acc: int): int =
   if s_acc > 0 then let
-    val () = mp_arr_u16set(mask, o_idx, u16(0U))
-    val () = mp_arr_u16set(mask, o_idx + 1, u16(g0int2uint_int_uint(s_acc * 4)))
+    val () = u16s(mask, o_idx, u16(0U))
+    val () = u16s(mask, o_idx + 1, u16(g0int2uint_int_uint(s_acc * 4)))
   in
     o_idx + 2
   end
   else o_idx
 
 fun encode_rle_row(
-  mask: ptr, rr_mask: ptr, yp: int, xp: int, x1: int,
+  mask: U16Buf, rr_mask: FltBuf, yp: int, xp: int, x1: int,
   h: float, s1_off: float, s1_sl: float, s2_off: float, s2_sl: float,
   s_acc: int, o_idx: int
 ): @(int, int) =
   if xp <= x1 then let
-    val rr = mp_arr_fget(rr_mask, yp * MINEPAINT_TILE_SIZE + xp)
+    val rr = fgetm(rr_mask, yp * MINEPAINT_TILE_SIZE + xp)
     val opa = calculate_opa(rr, h, s1_off, s1_sl, s2_off, s2_sl)
     val opa_i = g0float2int_float_int(f_mul(opa, 32768.0f))
   in
@@ -281,7 +286,7 @@ fun encode_rle_row(
       encode_rle_row(mask, rr_mask, yp, xp + 1, x1, h, s1_off, s1_sl, s2_off, s2_sl, s_acc + 1, o_idx)
     else let
       val next_o = write_rle_skip(mask, o_idx, s_acc)
-      val () = mp_arr_u16set(mask, next_o, u16(g0int2uint_int_uint(opa_i)))
+      val () = u16s(mask, next_o, u16(g0int2uint_int_uint(opa_i)))
     in
       encode_rle_row(mask, rr_mask, yp, xp + 1, x1, h, s1_off, s1_sl, s2_off, s2_sl, 0, next_o + 1)
     end
@@ -289,7 +294,7 @@ fun encode_rle_row(
   else @(s_acc, o_idx)
 
 fun encode_rle_mask(
-  mask: ptr, rr_mask: ptr, yp: int, y1: int, x0: int, x1: int,
+  mask: U16Buf, rr_mask: FltBuf, yp: int, y1: int, x0: int, x1: int,
   h: float, s1_off: float, s1_sl: float, s2_off: float, s2_sl: float,
   cur_skip: int, out_idx: int
 ): int =
@@ -304,7 +309,7 @@ fun encode_rle_mask(
   else out_idx
 
 extern fun render_dab_mask(
-  mask: ptr, x: float, y: float, radius: float,
+  mask: U16Buf, x: float, y: float, radius: float,
   hardness: float, softness: float, aspect_ratio: float, angle: float
 ): void = "ext#render_dab_mask"
 implement render_dab_mask(mask, x, y, radius, hardness, softness, aspect_ratio, angle) = let
@@ -318,8 +323,9 @@ implement render_dab_mask(mask, x, y, radius, hardness, softness, aspect_ratio, 
   val @(x0, y0, x1, y1) = compute_dab_bounds(x, y, radius)
   val inv_r2 = f_div(1.0f, f_mul(radius, radius))
   val sz_rr = (MINEPAINT_TILE_SIZE * MINEPAINT_TILE_SIZE + 2 * MINEPAINT_TILE_SIZE) * 4
-  val rr_mask = malloc(int2size(sz_rr))
-  val () = assertloc(rr_mask > the_null_ptr)
+  val rr_raw = malloc(int2size(sz_rr))
+  val () = assertloc(rr_raw > the_null_ptr)
+  val rr_mask = flt_of(rr_raw)
   val () =
     if f_lt(radius, 3.0f) then let
       val r_base = if f_gt(radius, 1.0f) then f_sub(radius, 1.0f) else 0.0f
@@ -331,14 +337,14 @@ implement render_dab_mask(mask, x, y, radius, hardness, softness, aspect_ratio, 
   val final_out = encode_rle_mask(
     mask, rr_mask, y0, y1, x0, x1, h, s1_off, s1_slope, s2_off, s2_slope, y0 * MINEPAINT_TILE_SIZE, 0
   )
-  val () = mp_arr_u16set(mask, final_out, u16(0U))
-  val () = mp_arr_u16set(mask, final_out + 1, u16(0U))
+  val () = u16s(mask, final_out, u16(0U))
+  val () = u16s(mask, final_out + 1, u16(0U))
 in
-  free(rr_mask)
+  free(rr_raw)
 end
 
 fn apply_non_paint_normal(
-  mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab, paint: float
+  mask: U16Buf, rgba_p: U16Buf, op_rec: OperationDataDrawDab, paint: float
 ): void =
   if f_gt(op_rec.normal, 0.0f) then let
     val opaq_norm = f_mul(f_mul(op_rec.normal, op_rec.opaque), f_mul(f_sub(1.0f, paint), 32768.0f))
@@ -348,27 +354,27 @@ fn apply_non_paint_normal(
     val cb = i2u16(op_rec.color_b)
   in
     if f_gte(op_rec.color_a, 1.0f) then
-      draw_dab_pixels_BlendMode_Normal(u16buf_of(mask), u16buf_of(rgba_p), cr, cg, cb, opaq_u16)
+      draw_dab_pixels_BlendMode_Normal(mask, rgba_p, cr, cg, cb, opaq_u16)
     else let
       val ca_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(f_mul(op_rec.color_a, 32768.0f))))
     in
-      draw_dab_pixels_BlendMode_Normal_and_Eraser(u16buf_of(mask), u16buf_of(rgba_p), cr, cg, cb, ca_u16, opaq_u16)
+      draw_dab_pixels_BlendMode_Normal_and_Eraser(mask, rgba_p, cr, cg, cb, ca_u16, opaq_u16)
     end
   end
 
 fn apply_non_paint_lock_alpha(
-  mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab, paint: float
+  mask: U16Buf, rgba_p: U16Buf, op_rec: OperationDataDrawDab, paint: float
 ): void =
   if (f_gt(op_rec.lock_alpha, 0.0f)) * (op_rec.color_a != 0.0f) then let
     val la_fac = f_mul(f_mul(op_rec.lock_alpha, op_rec.opaque), f_mul(f_sub(1.0f, op_rec.colorize), f_sub(1.0f, op_rec.posterize)))
     val la_norm = f_mul(f_mul(la_fac, f_sub(1.0f, paint)), 32768.0f)
     val la_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(la_norm)))
   in
-    draw_dab_pixels_BlendMode_LockAlpha(u16buf_of(mask), u16buf_of(rgba_p), i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
+    draw_dab_pixels_BlendMode_LockAlpha(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
   end
 
 fn apply_paint_normal(
-  mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab, paint: float
+  mask: U16Buf, rgba_p: U16Buf, op_rec: OperationDataDrawDab, paint: float
 ): void =
   if f_gt(op_rec.normal, 0.0f) then let
     val opaq_norm = f_mul(f_mul(op_rec.normal, op_rec.opaque), f_mul(paint, 32768.0f))
@@ -378,32 +384,32 @@ fn apply_paint_normal(
     val cb = i2u16(op_rec.color_b)
   in
     if f_gte(op_rec.color_a, 1.0f) then
-      draw_dab_pixels_BlendMode_Normal_Paint(u16buf_of(mask), u16buf_of(rgba_p), cr, cg, cb, opaq_u16)
+      draw_dab_pixels_BlendMode_Normal_Paint(mask, rgba_p, cr, cg, cb, opaq_u16)
     else let
       val ca_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(f_mul(op_rec.color_a, 32768.0f))))
     in
-      draw_dab_pixels_BlendMode_Normal_and_Eraser_Paint(u16buf_of(mask), u16buf_of(rgba_p), cr, cg, cb, ca_u16, opaq_u16)
+      draw_dab_pixels_BlendMode_Normal_and_Eraser_Paint(mask, rgba_p, cr, cg, cb, ca_u16, opaq_u16)
     end
   end
 
 fn apply_paint_lock_alpha(
-  mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab, paint: float
+  mask: U16Buf, rgba_p: U16Buf, op_rec: OperationDataDrawDab, paint: float
 ): void =
   if (f_gt(op_rec.lock_alpha, 0.0f)) * (op_rec.color_a != 0.0f) then let
     val la_fac = f_mul(f_mul(op_rec.lock_alpha, op_rec.opaque), f_mul(f_sub(1.0f, op_rec.colorize), f_sub(1.0f, op_rec.posterize)))
     val la_norm = f_mul(f_mul(la_fac, paint), 32768.0f)
     val la_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(la_norm)))
   in
-    draw_dab_pixels_BlendMode_LockAlpha_Paint(u16buf_of(mask), u16buf_of(rgba_p), i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
+    draw_dab_pixels_BlendMode_LockAlpha_Paint(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
   end
 
-fn apply_colorize_posterize(mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab): void = let
+fn apply_colorize_posterize(mask: U16Buf, rgba_p: U16Buf, op_rec: OperationDataDrawDab): void = let
   val () =
     if f_gt(op_rec.colorize, 0.0f) then let
       val c_norm = f_mul(f_mul(op_rec.colorize, op_rec.opaque), 32768.0f)
       val c_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(c_norm)))
     in
-      draw_dab_pixels_BlendMode_Color(u16buf_of(mask), u16buf_of(rgba_p), i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), c_u16)
+      draw_dab_pixels_BlendMode_Color(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), c_u16)
     end
   val () =
     if f_gt(op_rec.posterize, 0.0f) then let
@@ -411,13 +417,13 @@ fn apply_colorize_posterize(mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab
       val p_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(p_norm)))
       val pnum_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(op_rec.posterize_num)))
     in
-      draw_dab_pixels_BlendMode_Posterize(u16buf_of(mask), u16buf_of(rgba_p), p_u16, pnum_u16)
+      draw_dab_pixels_BlendMode_Posterize(mask, rgba_p, p_u16, pnum_u16)
     end
 in () end
 
-extern fun process_op(rgba_p: ptr, mask: ptr, tx: int, ty: int, op_h: int): void = "ext#process_op"
+extern fun process_op(rgba_p: U16Buf, mask: U16Buf, tx: int, ty: int, op_h: int): void = "ext#process_op"
 implement process_op(rgba_p, mask, tx, ty, op_h) =
-  if (rgba_p != the_null_ptr) * (op_h >= 0) then let
+  if (u16buf_is_null(rgba_p) = 0) * (op_h >= 0) then let
     val op_rec = dab_get(op_h)
     val ox = f_sub(op_rec.x, g0int2float_int_float(tx * MINEPAINT_TILE_SIZE))
     val oy = f_sub(op_rec.y, g0int2float_int_float(ty * MINEPAINT_TILE_SIZE))
@@ -438,7 +444,7 @@ implement process_op(rgba_p, mask, tx, ty, op_h) =
     apply_colorize_posterize(mask, rgba_p, op_rec)
   end
 
-fun drain_op_queue(q: int, rgba_p: ptr, mask: ptr, tx: int, ty: int, cur_op: int): void =
+fun drain_op_queue(q: int, rgba_p: U16Buf, mask: U16Buf, tx: int, ty: int, cur_op: int): void =
   if cur_op >= 0 then let
     val () = process_op(rgba_p, mask, tx, ty, cur_op)
     val () = dab_release(cur_op)
@@ -458,17 +464,17 @@ implement process_tile(self_p, tx, ty) =
       val () = assertloc(req_mem > the_null_ptr)
       val () = minepaint_tile_request_init(req_mem, 0, tx, ty, false)
       val () = minepaint_tiled_surface_tile_request_start(self_p, req_mem)
-      val rgba_p = (view_tile_req(req_mem))->buffer
+      val rgba_raw = (view_tile_req(req_mem))->buffer
     in
-      if rgba_p = the_null_ptr then {
+      if rgba_raw = the_null_ptr then {
         val () = dab_release(op_first)
         val () = free(req_mem)
       } else let
         val mask_sz = (MINEPAINT_TILE_SIZE * MINEPAINT_TILE_SIZE + 2 * MINEPAINT_TILE_SIZE) * 2
-        val mask = malloc(int2size(mask_sz))
-        val () = assertloc(mask > the_null_ptr)
-        val () = drain_op_queue(self->operation_queue, rgba_p, mask, tx, ty, op_first)
-        val () = free(mask)
+        val mask_raw = malloc(int2size(mask_sz))
+        val () = assertloc(mask_raw > the_null_ptr)
+        val () = drain_op_queue(self->operation_queue, u16buf_of(rgba_raw), u16buf_of(mask_raw), tx, ty, op_first)
+        val () = free(mask_raw)
         val () = minepaint_tiled_surface_tile_request_end(self_p, req_mem)
       in
         free(req_mem)
@@ -785,7 +791,7 @@ end
 
 fn sample_tile_color(
   surface: ptr, tx: int, ty: int, x: float, y: float, rad: float,
-  mask: ptr, pw: FCell, pr: FCell, pg: FCell, pb: FCell, pa: FCell,
+  mask: U16Buf, pw: FCell, pr: FCell, pg: FCell, pb: FCell, pa: FCell,
   paint: float, s_u16: uint16, rate: float
 ): void = let
   val () = process_tile(surface, tx, ty)
@@ -793,13 +799,13 @@ fn sample_tile_color(
   val () = assertloc(req_mem > the_null_ptr)
   val () = minepaint_tile_request_init(req_mem, 0, tx, ty, true)
   val () = minepaint_tiled_surface_tile_request_start(surface, req_mem)
-  val rgba_p = (view_tile_req(req_mem))->buffer
+  val rgba_raw = (view_tile_req(req_mem))->buffer
 in
-  if rgba_p != the_null_ptr then let
+  if rgba_raw != the_null_ptr then let
     val ox = f_sub(x, g0int2float_int_float(tx * MINEPAINT_TILE_SIZE))
     val oy = f_sub(y, g0int2float_int_float(ty * MINEPAINT_TILE_SIZE))
     val () = render_dab_mask(mask, ox, oy, rad, 0.5f, 0.5f, 1.0f, 0.0f)
-    val () = get_color_pixels_accumulate(u16buf_of(mask), u16buf_of(rgba_p), pw, pr, pg, pb, pa, paint, s_u16, rate)
+    val () = get_color_pixels_accumulate(mask, u16buf_of(rgba_raw), pw, pr, pg, pb, pa, paint, s_u16, rate)
     val () = minepaint_tiled_surface_tile_request_end(surface, req_mem)
   in free(req_mem) end
   else free(req_mem)
@@ -807,7 +813,7 @@ end
 
 fun collect_color_samples(
   surface: ptr, ty: int, ty2: int, tx1: int, tx2: int,
-  x: float, y: float, rad: float, mask: ptr,
+  x: float, y: float, rad: float, mask: U16Buf,
   pw: FCell, pr: FCell, pg: FCell, pb: FCell, pa: FCell,
   paint: float, s_u16: uint16, rate: float
 ): void =
@@ -876,10 +882,11 @@ implement tiled_surface_get_color(surface, x, y, radius, color_r, color_g, color
   val ty2 = g0float2int_float_int(floorf(f_div(floorf(f_add(y, rf)), g0int2float_int_float(MINEPAINT_TILE_SIZE))))
 
   val mask_sz = (MINEPAINT_TILE_SIZE * MINEPAINT_TILE_SIZE + 2 * MINEPAINT_TILE_SIZE) * 2
-  val mask = malloc(int2size(mask_sz))
-  val () = assertloc(mask > the_null_ptr)
+  val mask_raw = malloc(int2size(mask_sz))
+  val () = assertloc(mask_raw > the_null_ptr)
+  val mask = u16buf_of(mask_raw)
   val () = collect_color_samples(surface, ty1, ty2, tx1, tx2, x, y, rad, mask, pw, pr, pg, pb, pa, paint, s_u16, rate)
-  val () = free(mask)
+  val () = free(mask_raw)
   val () = finalize_sampled_color(pw, pr, pg, pb, pa, paint, color_r, color_g, color_b, color_a)
 in
   free(acc_mem)
