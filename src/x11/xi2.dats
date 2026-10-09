@@ -7,6 +7,7 @@ staload "x11/xi2.sats"
 staload "x11/devtab.sats"
 staload "x11/display_box.sats"
 staload "x11/xevent_box.sats"
+staload "sys/io_box.sats"
 
 %{#
 #include "x11/xi2_raw.cats"
@@ -26,7 +27,7 @@ extern fun c_xi2_device_class_type(devs: ptr, dev_idx: int, class_idx: int): int
 extern fun c_xi2_device_class_val_axis(devs: ptr, dev_idx: int, class_idx: int): int = "mac#xi2_device_class_val_axis"
 extern fun c_xi2_device_class_val_min(devs: ptr, dev_idx: int, class_idx: int): double = "mac#xi2_device_class_val_min"
 extern fun c_xi2_device_class_val_max(devs: ptr, dev_idx: int, class_idx: int): double = "mac#xi2_device_class_val_max"
-extern fun c_xi2_device_class_val_label(dpy: MpDisplay, devs: ptr, dev_idx: int, class_idx: int, buf: ptr, bufsz: int): int = "mac#xi2_device_class_val_label"
+extern fun c_xi2_device_class_val_label(dpy: MpDisplay, devs: ptr, dev_idx: int, class_idx: int, buf: MpText, bufsz: int): int = "mac#xi2_device_class_val_label"
 extern fun c_xi2_cookie_extension(ev: MpXEvent): int = "mac#xi2_cookie_extension"
 extern fun c_xi2_cookie_get_data(dpy: MpDisplay, ev: MpXEvent): int = "mac#xi2_cookie_get_data"
 extern fun c_xi2_cookie_free_data(dpy: MpDisplay, ev: MpXEvent): void = "mac#xi2_cookie_free_data"
@@ -150,9 +151,9 @@ in
   if ctype != XI2_VALUATOR_CLASS then ()
   else let
     var buf = @[char][128]()
-    val p_buf = addr@(buf)
+    val p_buf = text_of(addr@(buf))
     val ok = c_xi2_device_class_val_label(dpy, devs, dev_idx, class_idx, p_buf, 128)
-    val is_press = if ok > 0 then str_has_substr_ci(addr2str(p_buf), "pressure") else false
+    val is_press = if ok > 0 then str_has_substr_ci(addr2str(text_ptr(p_buf)), "pressure") else false
   in
     if is_press then let
       val dev = view_dev(dev_p)
