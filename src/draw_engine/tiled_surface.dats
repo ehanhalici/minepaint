@@ -18,22 +18,32 @@ staload "./helpers.dats"
 #include "./matrix_pure.hats"
 #define M_PI 3.14159265358979323846f
 
-extern castfn ptr2tiled_surface(p: ptr): ref(MinePaintTiledSurface) = "mac#"
-extern castfn ptr2tile_req(p: ptr): ref(MinePaintTileRequest) = "mac#"
-extern castfn ptr2rects(p: ptr): ref(MinePaintRectangles) = "mac#"
+extern fun view_tiled(p: ptr): ref(MinePaintTiledSurface) = "mac#mp_id_ptr"
+extern fun view_tile_req(p: ptr): ref(MinePaintTileRequest) = "mac#mp_id_ptr"
+extern fun view_rects(p: ptr): ref(MinePaintRectangles) = "mac#mp_id_ptr"
+extern fun store_draw_dab(f: MinePaintSurfaceDrawDabFunction): ptr = "mac#mp_id_ptr"
+typedef TiledGetColorFn = (
+  ptr, float, float, float,
+  &float? >> float, &float? >> float, &float? >> float, &float? >> float,
+  float
+) -> void
+extern fun store_get_color(f: TiledGetColorFn): ptr = "mac#mp_id_ptr"
+extern fun store_begin(f: MinePaintSurfaceBeginAtomicFunction): ptr = "mac#mp_id_ptr"
+extern fun store_end(f: MinePaintSurfaceEndAtomicFunction): ptr = "mac#mp_id_ptr"
 
 fn i2u16(x: int): uint16 = u16(g0int2uint_int_uint(x))
 
 typedef MinePaintTileRequestFunc = (ptr, ptr) -> void
+extern fun load_tile_req(p: ptr): MinePaintTileRequestFunc = "mac#mp_id_ptr"
 
 fn call_tile_request_start(f: ptr, self: ptr, req: ptr): void =
-  if f != the_null_ptr then ptr2fn{MinePaintTileRequestFunc}(f)(self, req)
+  if f != the_null_ptr then load_tile_req(f)(self, req)
 
 fn call_tile_request_end(f: ptr, self: ptr, req: ptr): void =
-  if f != the_null_ptr then ptr2fn{MinePaintTileRequestFunc}(f)(self, req)
+  if f != the_null_ptr then load_tile_req(f)(self, req)
 
 fn get_tiled_surface_symmetry_data(self: ptr): int =
-  (ptr2tiled_surface(self))->symmetry_data
+  (view_tiled(self))->symmetry_data
 
 fn f_add(a: float, b: float): float = g0float_add(a, b)
 fn f_sub(a: float, b: float): float = g0float_sub(a, b)
@@ -74,7 +84,7 @@ extern fun minepaint_tile_request_init(
 ): void = "ext#minepaint_tile_request_init"
 implement minepaint_tile_request_init(data_p, level, tx, ty, readonly) =
   if data_p != the_null_ptr then let
-    val r = ptr2tile_req(data_p)
+    val r = view_tile_req(data_p)
     val () = r->tx := tx
     val () = r->ty := ty
     val () = r->readonly := (if readonly then 1 else 0)
@@ -87,7 +97,7 @@ implement minepaint_tile_request_init(data_p, level, tx, ty, readonly) =
 extern fun minepaint_tiled_surface_tile_request_start(self_p: ptr, req_p: ptr): void = "ext#minepaint_tiled_surface_tile_request_start"
 implement minepaint_tiled_surface_tile_request_start(self_p, req_p) =
   if (self_p != the_null_ptr) * (req_p != the_null_ptr) then let
-    val self = ptr2tiled_surface(self_p)
+    val self = view_tiled(self_p)
   in
     call_tile_request_start(self->tile_request_start, self_p, req_p)
   end
@@ -95,7 +105,7 @@ implement minepaint_tiled_surface_tile_request_start(self_p, req_p) =
 extern fun minepaint_tiled_surface_tile_request_end(self_p: ptr, req_p: ptr): void = "ext#minepaint_tiled_surface_tile_request_end"
 implement minepaint_tiled_surface_tile_request_end(self_p, req_p) =
   if (self_p != the_null_ptr) * (req_p != the_null_ptr) then let
-    val self = ptr2tiled_surface(self_p)
+    val self = view_tiled(self_p)
   in
     call_tile_request_end(self->tile_request_end, self_p, req_p)
   end
@@ -434,7 +444,7 @@ fun drain_op_queue(q: int, rgba_p: ptr, mask: ptr, tx: int, ty: int, cur_op: int
 extern fun process_tile(self_p: ptr, tx: int, ty: int): void = "ext#process_tile"
 implement process_tile(self_p, tx, ty) =
   if self_p != the_null_ptr then let
-    val self = ptr2tiled_surface(self_p)
+    val self = view_tiled(self_p)
     val op_first = operation_queue_pop(self->operation_queue, tx, ty)
   in
     if op_first >= 0 then let
@@ -442,7 +452,7 @@ implement process_tile(self_p, tx, ty) =
       val () = assertloc(req_mem > the_null_ptr)
       val () = minepaint_tile_request_init(req_mem, 0, tx, ty, false)
       val () = minepaint_tiled_surface_tile_request_start(self_p, req_mem)
-      val rgba_p = (ptr2tile_req(req_mem))->buffer
+      val rgba_p = (view_tile_req(req_mem))->buffer
     in
       if rgba_p = the_null_ptr then {
         val () = dab_release(op_first)
@@ -488,7 +498,7 @@ fun clean_roi_rects(rects: ptr, i: int, n: int): void =
 
 fn prepare_bounding_boxes(self_p: ptr): void =
   if self_p != the_null_ptr then let
-    val self = ptr2tiled_surface(self_p)
+    val self = view_tiled(self_p)
     val h = self->symmetry_data
     val ty = minepaint_symmetry_current_type(h)
     val nl = minepaint_symmetry_current_lines(h)
@@ -536,14 +546,14 @@ fun export_roi_rects(
 extern fun minepaint_tiled_surface_end_atomic(self_p: ptr, roi_p: ptr): void = "ext#minepaint_tiled_surface_end_atomic"
 implement minepaint_tiled_surface_end_atomic(self_p, roi_p) =
   if self_p != the_null_ptr then let
-    val self = ptr2tiled_surface(self_p)
+    val self = view_tiled(self_p)
     var tiles_ptr: ptr
     val tiles_n = operation_queue_get_dirty_tiles(self->operation_queue, tiles_ptr)
     val () = process_dirty_tile_list(self_p, tiles_ptr, 0, tiles_n)
     val () = operation_queue_clear_dirty_tiles(self->operation_queue)
     val () =
       if roi_p != the_null_ptr then let
-        val roi = ptr2rects(roi_p)
+        val roi = view_rects(roi_p)
         val num_dirty = self->num_bboxes_dirtied
         val () = clean_roi_rects(roi->rectangles, 0, i_min(roi->num_rectangles, num_dirty))
         val bpo = if roi->num_rectangles > 0 then f_div(g0int2float_int_float(num_dirty), g0int2float_int_float(roi->num_rectangles)) else 1.0f
@@ -615,7 +625,7 @@ fn draw_dab_internal(
 ): bool =
   if f_lt(radius, 0.1f) || f_lte(hardness, 0.0f) || f_gte(softness, 1.0f) || f_lte(opaque, 0.0f) then false
   else let
-    val self = ptr2tiled_surface(self_p)
+    val self = view_tiled(self_p)
     val src = dab_new(make_dab(
       x, y, radius, aspect_ratio, angle, opaque, hardness, softness,
       lock_alpha, colorize, posterize, posterize_num, paint,
@@ -757,7 +767,7 @@ implement tiled_surface_draw_dab(
   )
 in
   if modified then let
-    val self = ptr2tiled_surface(surface)
+    val self = view_tiled(surface)
     val () = dispatch_symmetry_dab(
       surface, self, self->symmetry_data, x, y, radius, color_r, color_g, color_b,
       opaque, hardness, softness, color_a, aspect_ratio, angle,
@@ -777,7 +787,7 @@ fn sample_tile_color(
   val () = assertloc(req_mem > the_null_ptr)
   val () = minepaint_tile_request_init(req_mem, 0, tx, ty, true)
   val () = minepaint_tiled_surface_tile_request_start(surface, req_mem)
-  val rgba_p = (ptr2tile_req(req_mem))->buffer
+  val rgba_p = (view_tile_req(req_mem))->buffer
 in
   if rgba_p != the_null_ptr then let
     val ox = f_sub(x, g0int2float_int_float(tx * MINEPAINT_TILE_SIZE))
@@ -874,12 +884,12 @@ extern fun minepaint_tiled_surface_init(
 ): void = "ext#minepaint_tiled_surface_init"
 implement minepaint_tiled_surface_init(self_p, tile_request_start, tile_request_end) =
   if self_p != the_null_ptr then let
-    val self = ptr2tiled_surface(self_p)
+    val self = view_tiled(self_p)
     val () = minepaint_surface_init(self_p)
-    val () = self->parent.draw_dab := fn2ptr(tiled_surface_draw_dab)
-    val () = self->parent.get_color := fn2ptr(tiled_surface_get_color)
-    val () = self->parent.begin_atomic := fn2ptr(minepaint_tiled_surface_begin_atomic)
-    val () = self->parent.end_atomic := fn2ptr(minepaint_tiled_surface_end_atomic)
+    val () = self->parent.draw_dab := store_draw_dab(tiled_surface_draw_dab)
+    val () = self->parent.get_color := store_get_color(tiled_surface_get_color)
+    val () = self->parent.begin_atomic := store_begin(minepaint_tiled_surface_begin_atomic)
+    val () = self->parent.end_atomic := store_end(minepaint_tiled_surface_end_atomic)
     val () = self->tile_request_start := tile_request_start
     val () = self->tile_request_end := tile_request_end
     val () = self->tile_size := MINEPAINT_TILE_SIZE
@@ -896,7 +906,7 @@ implement minepaint_tiled_surface_init(self_p, tile_request_start, tile_request_
 extern fun minepaint_tiled_surface_destroy(self_p: ptr): void = "ext#minepaint_tiled_surface_destroy"
 implement minepaint_tiled_surface_destroy(self_p) =
   if self_p != the_null_ptr then let
-    val self = ptr2tiled_surface(self_p)
+    val self = view_tiled(self_p)
     val () = operation_queue_free(self->operation_queue)
     val def_boxes = self->default_bboxes
     val () = if self->bboxes != def_boxes then bbox_buf_release(self->bboxes)

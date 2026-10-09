@@ -62,16 +62,16 @@ typedef AppState = @{
   current_mouse_btn= int
 }
 
-extern castfn ptr2appstate(p: ptr): ref(AppState)
-extern castfn ulint2lint(x: ulint): lint = "mac#"
-extern castfn addr2ptr(p: ptr): ptr = "mac#"
+extern fun ulint2lint(x: ulint): lint = "mac#mp_ulint_to_lint"
+extern fun view_appstate(p: ptr): ref(AppState) = "mac#mp_id_ptr"
+extern fun mp_id_ptr(p: ptr): ptr = "mac#mp_id_ptr"
 
 // Boşluk Tuşu Otomatik Tekrar Kontrolü (Sıfır Heap Tahsisi, Stack Tabanlı)
 fn is_space_autorepeat(dpy: ptr, ev: ptr): int =
   if XEventsQueued(dpy, QueuedAfterReading) <= 0 then 0
   else let
     var nev: @[byte][256]
-    val nev_p = addr2ptr(addr@(nev))
+    val nev_p = mp_id_ptr(addr@(nev))
     val _ = XPeekEvent(dpy, nev_p)
     val same =
       (mp_xevent_type(nev_p) = KeyPress) &&
@@ -82,22 +82,19 @@ fn is_space_autorepeat(dpy: ptr, ev: ptr): int =
     if same then 1 else 0
   end
 
-fn handle_configure(p_st: ptr, p_xev: ptr): void = let
-  val st = ptr2appstate(p_st)
+fn handle_configure(st: ref(AppState), p_xev: ptr): void = let
   val () = st->win_w := mp_xevent_config_w(p_xev)
   val () = st->win_h := mp_xevent_config_h(p_xev)
 in () end
 
-fn handle_client_message(p_st: ptr, app: ptr, p_xev: ptr): void = let
-  val st = ptr2appstate(p_st)
+fn handle_client_message(st: ref(AppState), app: ptr, p_xev: ptr): void = let
   val d0 = mp_xevent_client_data0(p_xev)
   val wm_del = ulint2lint(app_wm_delete(app))
 in
   if g0int_eq(d0, wm_del) then st->running := 0 else ()
 end
 
-fn handle_key_press(p_st: ptr, p_xev: ptr): void = let
-  val st = ptr2appstate(p_st)
+fn handle_key_press(st: ref(AppState), p_xev: ptr): void = let
   val ks = mp_xevent_keysym(p_xev)
 in
   if ks = XK_Escape then st->running := 0
@@ -105,8 +102,7 @@ in
   else ()
 end
 
-fn handle_key_release(p_st: ptr, app: ptr, p_xev: ptr): void = let
-  val st = ptr2appstate(p_st)
+fn handle_key_release(st: ref(AppState), app: ptr, p_xev: ptr): void = let
   val ks = mp_xevent_keysym(p_xev)
 in
   if ks = XK_space then let
@@ -129,8 +125,7 @@ in
   end else canvas_on_wheel(canvas_ptr, bx, by, dy)
 end
 
-fn handle_button_press(p_st: ptr, canvas_ptr: int, p_xev: ptr): void = let
-  val st = ptr2appstate(p_st)
+fn handle_button_press(st: ref(AppState), canvas_ptr: int, p_xev: ptr): void = let
   val bx = mp_xevent_btn_x(p_xev)
   val by = mp_xevent_btn_y(p_xev)
   val raw_btn = mp_xevent_btn_button(p_xev)
@@ -163,8 +158,7 @@ in
   end
 end
 
-fn handle_button_release(p_st: ptr, canvas_ptr: int, p_xev: ptr): void = let
-  val st = ptr2appstate(p_st)
+fn handle_button_release(st: ref(AppState), canvas_ptr: int, p_xev: ptr): void = let
   val bx = mp_xevent_btn_x(p_xev)
   val by = mp_xevent_btn_y(p_xev)
   val raw_btn = mp_xevent_btn_button(p_xev)
@@ -183,8 +177,7 @@ in
   in () end else ()
 end
 
-fn handle_motion_notify(p_st: ptr, canvas_ptr: int, p_xev: ptr): void = let
-  val st = ptr2appstate(p_st)
+fn handle_motion_notify(st: ref(AppState), canvas_ptr: int, p_xev: ptr): void = let
   val mx = mp_xevent_motion_x(p_xev)
   val my = mp_xevent_motion_y(p_xev)
   val cur_time = get_time_seconds()
@@ -212,8 +205,7 @@ in
   end
 end
 
-fn render_frame(p_st: ptr, app: ptr, canvas_ptr: int): void = let
-  val st = ptr2appstate(p_st)
+fn render_frame(st: ref(AppState), app: ptr, canvas_ptr: int): void = let
   val s_vis = widgets_get_sidebar_visible()
   val cur_time = get_time_seconds()
   val canvas_w =
@@ -257,35 +249,34 @@ fn xev_kind_of(t: int): xev_kind =
   else if t = MotionNotify then XevMotion()
   else XevOther()
 
-fn dispatch_xev(k: xev_kind, p_st: ptr, app: ptr, p_xev: ptr, canvas_ptr: int): void =
+fn dispatch_xev(k: xev_kind, st: ref(AppState), app: ptr, p_xev: ptr, canvas_ptr: int): void =
   case+ k of
-  | XevConfigure() => handle_configure(p_st, p_xev)
-  | XevClient() => handle_client_message(p_st, app, p_xev)
-  | XevKeyPress() => handle_key_press(p_st, p_xev)
-  | XevKeyRelease() => handle_key_release(p_st, app, p_xev)
+  | XevConfigure() => handle_configure(st, p_xev)
+  | XevClient() => handle_client_message(st, app, p_xev)
+  | XevKeyPress() => handle_key_press(st, p_xev)
+  | XevKeyRelease() => handle_key_release(st, app, p_xev)
   | XevGeneric() => let
       val _ = xi2_process_raw_event(app_dpy(app), p_xev)
     in () end
-  | XevButtonPress() => handle_button_press(p_st, canvas_ptr, p_xev)
-  | XevButtonRelease() => handle_button_release(p_st, canvas_ptr, p_xev)
-  | XevMotion() => handle_motion_notify(p_st, canvas_ptr, p_xev)
+  | XevButtonPress() => handle_button_press(st, canvas_ptr, p_xev)
+  | XevButtonRelease() => handle_button_release(st, canvas_ptr, p_xev)
+  | XevMotion() => handle_motion_notify(st, canvas_ptr, p_xev)
   | XevOther() => ()
 
-fun event_loop(p_st: ptr, app: ptr, p_xev: ptr, canvas_ptr: int): void = let
-  val st = ptr2appstate(p_st)
+fun event_loop(st: ref(AppState), app: ptr, p_xev: ptr, canvas_ptr: int): void = let
 in
   if st->running > 0 then let
     fun drain(): void =
       if app_pending(app) > 0 then let
         val () = app_next_event(app, p_xev)
-        val () = dispatch_xev(xev_kind_of(mp_xevent_type(p_xev)), p_st, app, p_xev, canvas_ptr)
+        val () = dispatch_xev(xev_kind_of(mp_xevent_type(p_xev)), st, app, p_xev, canvas_ptr)
       in
         drain()
       end else ()
     val () = drain()
-    val () = render_frame(p_st, app, canvas_ptr)
+    val () = render_frame(st, app, canvas_ptr)
   in
-    event_loop(p_st, app, p_xev, canvas_ptr)
+    event_loop(st, app, p_xev, canvas_ptr)
   end else ()
 end
 
@@ -296,7 +287,7 @@ in
   if app = the_null_ptr then 1
   else let
     var xev_buf: @[byte][256]
-    val p_xev = addr2ptr(addr@(xev_buf))
+    val p_xev = mp_id_ptr(addr@(xev_buf))
     var st: AppState
     val () = st.win_w := 1000
     val () = st.win_h := 600
@@ -304,7 +295,7 @@ in
     val () = st.running := 1
     val () = st.is_space_pressed := 0
     val () = st.current_mouse_btn := 0
-    val p_st = addr@(st)
+    val p_st = view_appstate(addr@(st))
     val () = widgets_restore_session(canvas_ptr)
     val () = event_loop(p_st, app, p_xev, canvas_ptr)
     val () = widgets_save_session()

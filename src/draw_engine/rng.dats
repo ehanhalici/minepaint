@@ -21,49 +21,33 @@
 extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
 
-fn mp_rng_get_u(s: ptr, i: int): double = let
-  val a = ptr2darr{10}(s)
-  val idx = g1ofg0(i)
-in
-  if (idx >= 0) * (idx < 10) then a[idx] else 0.0
-end
+fn mp_rng_get_u(s: ptr, i: int): double =
+  if (i >= 0) * (i < 10) then mp_c_dget(s, i) else 0.0
 
-fn mp_rng_set_u(s: ptr, i: int, v: double): void = let
-  val a = ptr2darr{10}(s)
-  val idx = g1ofg0(i)
-in
-  if (idx >= 0) * (idx < 10) then a[idx] := v else ()
-end
+fn mp_rng_set_u(s: ptr, i: int, v: double): void =
+  if (i >= 0) * (i < 10) then mp_c_dset(s, i, v) else ()
 
 fn mp_rng_get_buf(s: ptr, i: int): double = let
-  val a = ptr2darr{19}(ptr_add<double>(s, 10))
-  val idx = g1ofg0(i)
+  val base = ptr_add<double>(s, 10)
 in
-  if (idx >= 0) * (idx < 19) then a[idx] else 0.0
+  if (i >= 0) * (i < 19) then mp_c_dget(base, i) else 0.0
 end
 
 fn mp_rng_set_buf(s: ptr, i: int, v: double): void = let
-  val a = ptr2darr{19}(ptr_add<double>(s, 10))
-  val idx = g1ofg0(i)
+  val base = ptr_add<double>(s, 10)
 in
-  if (idx >= 0) * (idx < 19) then a[idx] := v else ()
+  if (i >= 0) * (i < 19) then mp_c_dset(base, i, v) else ()
 end
 
 fn mp_rng_get_buf_ptr(s: ptr, i: int): ptr =
   ptr_add<double>(s, 10 + i)
 
 // Okuma konumu: buf içinde indeks; RNG_ARR_NONE ise tampon henüz hazır değil.
-fn mp_rng_get_arr_pos(s: ptr): int = let
-  val a = ptr2iarr{1}(ptr_add<byte>(s, RNG_ARR_POS_BYTE_OFFSET))
-in
-  a[0]
-end
+fn mp_rng_get_arr_pos(s: ptr): int =
+  mp_c_iget(ptr_add<byte>(s, RNG_ARR_POS_BYTE_OFFSET), 0)
 
-fn mp_rng_set_arr_pos(s: ptr, v: int): void = let
-  val a = ptr2iarr{1}(ptr_add<byte>(s, RNG_ARR_POS_BYTE_OFFSET))
-in
-  a[0] := v
-end
+fn mp_rng_set_arr_pos(s: ptr, v: int): void =
+  mp_c_iset(ptr_add<byte>(s, RNG_ARR_POS_BYTE_OFFSET), 0, v)
 
 fn mod_sum(x: double, y: double): double = let
   val s = x + y

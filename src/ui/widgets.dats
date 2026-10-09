@@ -43,7 +43,7 @@ extern fun slider_get_label(i: int): string = "ext#slider_get_label"
 extern fun slider_get_val(i: int): float = "ext#slider_get_val"
 extern fun slider_get_pct(i: int): float = "ext#slider_get_pct"
 
-extern castfn addr2str(p: ptr): string = "mac#"
+extern fun addr2str(p: ptr): string = "mac#mp_id_ptr"
 
 fn format_slider_val(buf: ptr, sz: int, v: float): void = let
   val _ = mp_snprintf_f(buf, g0int2uint_int_size(sz), "%.2f", g0float2float_float_double(v))

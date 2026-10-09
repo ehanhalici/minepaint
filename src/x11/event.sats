@@ -24,6 +24,13 @@ fun mp_swa_sizeof(): int = "mac#"
 fun mp_hints_sizeof(): int = "mac#"
 fun mp_swa_set(swa: ptr, cmap: ulint, mask: lint): void = "mac#"
 fun mp_hints_set_min(h: ptr, w: int, ht: int): void = "mac#"
+fun mp_x_open_display(): ptr = "mac#"
+fun mp_x_default_screen(d: ptr): int = "mac#"
+fun mp_x_root_window(d: ptr, s: int): ulint = "mac#"
+fun mp_x_map_window(d: ptr, w: ulint): void = "mac#"
+fun mp_x_define_cursor(d: ptr, w: ulint, c: ulint): void = "mac#"
+fun mp_x_destroy_window(d: ptr, w: ulint): void = "mac#"
+fun mp_x_close_display(d: ptr): void = "mac#"
 
 fun XCreateColormap(dpy: ptr, w: ulint, visual: ptr, alloc: int): ulint = "mac#"
 fun mp_XCreateWindow(

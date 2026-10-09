@@ -3,7 +3,6 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-#include "x11/staloadall.hats"
 staload "x11/event.sats"
 staload "x11/xi2.sats"
 staload "gl/glx.dats"
@@ -17,53 +16,16 @@ typedef X11App = @{
   wm_delete= ulint
 }
 
-extern castfn ptr2dpy(p: ptr): Display_ptr1 = "mac#"
-extern castfn dpy2ptr{l:addr}(p: Display_ptr(l)): ptr = "mac#"
-extern castfn ptr2app(p: ptr): ref(X11App) = "mac#"
-extern castfn ulint2win(x: ulint): Window = "mac#"
-extern castfn win2ulint(x: Window): ulint = "mac#"
-extern castfn ulint2cursor(x: ulint): Cursor = "mac#"
-extern castfn addr2ptr(p: ptr): ptr = "mac#"
+extern fun view_app(p: ptr): ref(X11App) = "mac#mp_id_ptr"
+extern fun mp_id_ptr(p: ptr): ptr = "mac#mp_id_ptr"
 
-fn app_ref(app: ptr): ref(X11App) = ptr2app(app)
+fn app_ref(app: ptr): ref(X11App) = view_app(app)
 
 fn i2u(i: int): uint = g0int2uint_int_uint(i)
 
-fn x_default_screen(p: ptr): int = let
-  val dpy = ptr2dpy(p)
-  val s = XDefaultScreen(dpy)
-  val _ = dpy2ptr(dpy)
-in s end
-
-fn x_root(p: ptr, screen: int): ulint = let
-  val dpy = ptr2dpy(p)
-  val w = XRootWindow(dpy, screen)
-  val _ = dpy2ptr(dpy)
-in win2ulint(w) end
-
-fn x_map(p: ptr, win: ulint): void = let
-  val dpy = ptr2dpy(p)
-  val () = XMapWindow(dpy, ulint2win(win))
-  val _ = dpy2ptr(dpy)
-in () end
-
-fn x_define_cursor(p: ptr, win: ulint, cursor: ulint): void = let
-  val dpy = ptr2dpy(p)
-  val () = XDefineCursor(dpy, ulint2win(win), ulint2cursor(cursor))
-  val _ = dpy2ptr(dpy)
-in () end
-
-fn x_destroy(p: ptr, win: ulint): void = let
-  val dpy = ptr2dpy(p)
-  val () = XDestroyWindow(dpy, ulint2win(win))
-  val _ = dpy2ptr(dpy)
-in () end
-
-fn x_close(p: ptr): void = let
-  val dpy = ptr2dpy(p)
-in
-  XCloseDisplay(dpy)
-end
+macdef ALLOC_NONE = $extval(int, "AllocNone")
+macdef INPUT_OUTPUT = $extval(int, "InputOutput")
+macdef XC_CROSSHAIR = $extval(uint, "XC_crosshair")
 
 fn event_mask(): lint =
   $extval(lint, "(ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | StructureNotifyMask)")
@@ -71,22 +33,22 @@ fn event_mask(): lint =
 fn create_window_with_hints(
   dpy: ptr, root: ulint, vi: ptr, w: int, h: int, title: string
 ): ulint = let
-  val cmap = XCreateColormap(dpy, root, mp_xvi_visual(vi), AllocNone)
+  val cmap = XCreateColormap(dpy, root, mp_xvi_visual(vi), ALLOC_NONE)
   var swa = @[byte][256]()
-  val p_swa = addr2ptr(addr@(swa))
+  val p_swa = mp_id_ptr(addr@(swa))
   val _ = memset(p_swa, 0, g0int2uint_int_size(256))
   val () = mp_swa_set(p_swa, cmap, event_mask())
   val win = mp_XCreateWindow(
     dpy, root, 0, 0, i2u(w), i2u(h), 0u,
-    mp_xvi_depth(vi), i2u(InputOutput), mp_xvi_visual(vi),
+    mp_xvi_depth(vi), i2u(INPUT_OUTPUT), mp_xvi_visual(vi),
     $extval(ulint, "(CWColormap | CWEventMask)"), p_swa
   )
   var hints = @[byte][256]()
-  val p_hints = addr2ptr(addr@(hints))
+  val p_hints = mp_id_ptr(addr@(hints))
   val _ = memset(p_hints, 0, g0int2uint_int_size(256))
   val () = mp_hints_set_min(p_hints, 450, 350)
   val () = XSetWMNormalHints(dpy, win, p_hints)
-  val () = x_map(dpy, win)
+  val () = mp_x_map_window(dpy, win)
   val _ = XStoreName(dpy, win, title)
 in win end
 
@@ -103,29 +65,28 @@ in
   else let
     val _ = glXMakeCurrent(dpy, win, glc)
     val _ = XFree(vi)
-    val cursor = XCreateFontCursor(dpy, $extval(uint, "XC_crosshair"))
-    val () = x_define_cursor(dpy, win, cursor)
+    val cursor = XCreateFontCursor(dpy, XC_CROSSHAIR)
+    val () = mp_x_define_cursor(dpy, win, cursor)
     val _ = xi2_init(dpy)
   in (glc, cursor) end
 end
 
 extern fun app_create(w: int, h: int, title: string): ptr = "ext#app_create"
 implement app_create(w, h, title) = let
-  val dpy0 = XOpenDisplay(stropt_none())
-  val dpy = dpy2ptr(dpy0)
+  val dpy = mp_x_open_display()
 in
   if dpy = the_null_ptr then let
     val () = fprintln!(stderr_ref, "HATA: X11 Display acilamadi!")
   in the_null_ptr end
   else let
-    val screen = x_default_screen(dpy)
-    val root = x_root(dpy, screen)
+    val screen = mp_x_default_screen(dpy)
+    val root = mp_x_root_window(dpy, screen)
     var att = @[int][5](GLX_RGBA, GLX_DEPTH_SIZE, 16, GLX_DOUBLEBUFFER, 0)
     val vi = glXChooseVisual(dpy, screen, addr@att)
   in
     if vi = the_null_ptr then let
       val () = fprintln!(stderr_ref, "HATA: Uygun GLX Visual bulunamadi!")
-      val () = x_close(dpy)
+      val () = mp_x_close_display(dpy)
     in the_null_ptr end
     else let
       val win = create_window_with_hints(dpy, root, vi, w, h, title)
@@ -135,12 +96,12 @@ in
       if glc = the_null_ptr then let
         val () = fprintln!(stderr_ref, "HATA: GLX Context olusturulamadi!")
         val _ = XFree(vi)
-        val () = x_destroy(dpy, win)
-        val () = x_close(dpy)
+        val () = mp_x_destroy_window(dpy, win)
+        val () = mp_x_close_display(dpy)
       in the_null_ptr end
       else let
         val app = malloc(sizeof<X11App>)
-        val a = ptr2app(app)
+        val a = view_app(app)
         val () = a->dpy := dpy
         val () = a->win := win
         val () = a->glc := glc
@@ -155,13 +116,13 @@ extern fun app_destroy(app: ptr): void = "ext#app_destroy"
 implement app_destroy(app) =
   if app = the_null_ptr then ()
   else let
-    val a = ptr2app(app)
+    val a = view_app(app)
     val dpy = a->dpy
     val _ = XFreeCursor(dpy, a->cursor)
     val _ = glXMakeCurrent(dpy, 0ul, the_null_ptr)
     val () = glXDestroyContext(dpy, a->glc)
-    val () = x_destroy(dpy, a->win)
-    val () = x_close(dpy)
+    val () = mp_x_destroy_window(dpy, a->win)
+    val () = mp_x_close_display(dpy)
   in
     free(app)
   end
@@ -188,7 +149,7 @@ in () end
 
 extern fun app_swap(app: ptr): void = "ext#app_swap"
 implement app_swap(app) = let
-  val a = ptr2app(app)
+  val a = view_app(app)
 in
   glXSwapBuffers(a->dpy, a->win)
 end

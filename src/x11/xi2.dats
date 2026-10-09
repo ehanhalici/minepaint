@@ -97,8 +97,8 @@ typedef XI2BackendState = @{
   devs= ptr
 }
 
-extern castfn ptr2dev_info(p: ptr): ref(XI2DevInfo) = "mac#"
-extern castfn addr2str(p: ptr): string = "mac#"
+extern fun view_dev(p: ptr): ref(XI2DevInfo) = "mac#mp_id_ptr"
+extern fun addr2str(p: ptr): string = "mac#mp_id_ptr"
 
 val g_dev_sz = g0int2uint_int_size(XI2_MAX_DEVICES) * sizeof<XI2DevInfo>
 val g_devs = malloc(g_dev_sz)
@@ -116,7 +116,7 @@ fn xi2_dev_ptr(base: ptr, id: int): ptr =
   ptr_add<XI2DevInfo>(base, id)
 
 fn xi2_dev_ref(base: ptr, id: int): ref(XI2DevInfo) =
-  ptr2dev_info(xi2_dev_ptr(base, id))
+  view_dev(xi2_dev_ptr(base, id))
 
 fn xi2_clear_device(base: ptr, id: int): void = let
   val dev = xi2_dev_ref(base, id)
@@ -151,7 +151,7 @@ in
     val is_press = if ok > 0 then str_has_substr_ci(addr2str(p_buf), "pressure") else false
   in
     if is_press then let
-      val dev = ptr2dev_info(dev_p)
+      val dev = view_dev(dev_p)
       val axis = c_xi2_device_class_val_axis(devs, dev_idx, class_idx)
       val min_v = c_xi2_device_class_val_min(devs, dev_idx, class_idx)
       val max_v = c_xi2_device_class_val_max(devs, dev_idx, class_idx)
@@ -261,7 +261,7 @@ end
 fn xi2_process_stylus_event(
   raw_data: ptr, dev_p: ptr, evtype: int, now: double
 ): void = let
-  val dev = ptr2dev_info(dev_p)
+  val dev = view_dev(dev_p)
   val axis = dev->pressure_axis
 in
   if axis >= 0 then let

@@ -8,7 +8,7 @@ staload "brushes/brush_group.sats"
 staload "ui/palette.dats"
 
 macdef MODE_0755 = $extval(uint, "0755")
-extern castfn addr2str(p: ptr): string = "mac#"
+extern fun addr2str(p: ptr): string = "mac#mp_id_ptr"
 
 fn f2d(v: float): double = g0float2float_float_double(v)
 

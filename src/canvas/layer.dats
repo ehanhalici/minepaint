@@ -2,6 +2,7 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+#include "draw_engine/engine_safe.hats"
 
 typedef GLuint = uint
 
@@ -23,22 +24,12 @@ typedef Layer_Record = @{
   tile_count= int
 }
 
-extern castfn ptr2layer(p: ptr): ref(Layer_Record) = "mac#"
-extern castfn ptr2tile(p: ptr): ref(CanvasTile) = "mac#"
+extern fun view_layer(p: ptr): ref(Layer_Record) = "mac#mp_id_ptr"
+extern fun view_tile(p: ptr): ref(CanvasTile) = "mac#mp_id_ptr"
 
-extern castfn ptr2parr{n:int}(p: ptr): arrayref(ptr, n) = "mac#"
+fn mp_slot_get(p: ptr): ptr = mp_arr_pget(p, 0)
 
-fn mp_slot_get(p: ptr): ptr = let
-  val a = ptr2parr{1}(p)
-in
-  a[0]
-end
-
-fn mp_slot_set(p: ptr, v: ptr): void = let
-  val a = ptr2parr{1}(p)
-in
-  a[0] := v
-end
+fn mp_slot_set(p: ptr, v: ptr): void = mp_arr_pset(p, 0, v)
 
 // OpenGL Sabitleri
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
@@ -123,7 +114,7 @@ end
 // --- Pür ATS2 ile Sonsuz Katman Oluşturma ---
 implement layer_create(w, h) = let
   val p = malloc(sizeof<Layer_Record>)
-  val r = ptr2layer(p)
+  val r = view_layer(p)
   val sz = g0int2uint_int_size(TILE_HASH_SIZE) * sizeof<ptr>
   val buckets_mem = malloc(sz)
   val () = assertloc(buckets_mem > the_null_ptr)
@@ -147,7 +138,7 @@ implement layer_create_c(w, h) = layer_create(w, h)
 fun find_tile_in_bucket(cur: ptr, tx: int, ty: int): ptr =
   if cur = the_null_ptr then the_null_ptr
   else let
-    val t = ptr2tile(cur)
+    val t = view_tile(cur)
   in
     if (t->tx = tx) && (t->ty = ty) then cur
     else find_tile_in_bucket(t->next_in_bucket, tx, ty)
@@ -155,7 +146,7 @@ fun find_tile_in_bucket(cur: ptr, tx: int, ty: int): ptr =
 
 implement layer_find_tile(layer, tx, ty) = let
   val () = assertloc(layer != the_null_ptr)
-  val lr = ptr2layer(layer)
+  val lr = view_layer(layer)
   val idx = tile_hash(tx, ty)
   val head = mp_slot_get(ptr_add<ptr>(lr->buckets, idx))
 in
@@ -186,7 +177,7 @@ end
 
 fun alloc_tile(tx: int, ty: int, next_bucket: ptr, next_layer: ptr): ptr = let
   val p = malloc(sizeof<CanvasTile>)
-  val t = ptr2tile(p)
+  val t = view_tile(p)
   val @(tex_id, fbo_id) = init_tile_texture_and_fbo()
   val () = t->tx := tx
   val () = t->ty := ty
@@ -199,7 +190,7 @@ in
 end
 
 implement layer_get_or_create_tile(layer, tx, ty) = let
-  val lr = ptr2layer(layer)
+  val lr = view_layer(layer)
   val found = layer_find_tile(layer, tx, ty)
 in
   if found != the_null_ptr then found
@@ -218,7 +209,7 @@ end
 
 // --- Tile Çizim Bağlantısı (FBO + Projeksiyon) ---
 implement layer_bind_tile(tile) = let
-  val t = ptr2tile(tile)
+  val t = view_tile(tile)
   val () = glBindFramebuffer(GL_FRAMEBUFFER, t->fbo)
   val () = glViewport(0, 0, 1024, 1024)
   val tx_f = g0int2float(t->tx) * 1024.0f
@@ -269,7 +260,7 @@ in () end
 fun draw_tiles_rec(cur: ptr, vl: float, vt: float, vr: float, vb: float, zoom: float): void =
   if cur = the_null_ptr then ()
   else let
-    val t = ptr2tile(cur)
+    val t = view_tile(cur)
     val x0 = g0int2float(t->tx) * 1024.0f
     val y0 = g0int2float(t->ty) * 1024.0f
     val bleed = g0float_div_float(0.5f, zoom)
@@ -287,7 +278,7 @@ fun draw_tiles_rec(cur: ptr, vl: float, vt: float, vr: float, vb: float, zoom: f
   end
 
 implement layer_draw_tiles(layer, vl, vt, vr, vb, zoom) = let
-  val lr = ptr2layer(layer)
+  val lr = view_layer(layer)
 in
   if lr->tiles != the_null_ptr then let
     val () = glEnable(GL_TEXTURE_2D)
@@ -303,7 +294,7 @@ end
 fun free_tiles_rec(cur: ptr): void =
   if cur = the_null_ptr then ()
   else let
-    val t = ptr2tile(cur)
+    val t = view_tile(cur)
     val next = t->next_in_layer
     var tex: GLuint = t->texture
     var fbo: GLuint = t->fbo
@@ -315,7 +306,7 @@ fun free_tiles_rec(cur: ptr): void =
   end
 
 implement layer_clear(layer) = let
-  val lr = ptr2layer(layer)
+  val lr = view_layer(layer)
   val () = free_tiles_rec(lr->tiles)
   val () = lr->tiles := the_null_ptr
   val () = lr->tile_count := 0
@@ -328,7 +319,7 @@ in
 end
 
 implement layer_destroy(layer) = let
-  val lr = ptr2layer(layer)
+  val lr = view_layer(layer)
   val () = layer_clear(layer)
   val () = free(lr->buckets)
   val () = free(layer)

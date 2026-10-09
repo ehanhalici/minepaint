@@ -72,7 +72,7 @@ typedef MyGLSurface_Record = @{
   layer= ptr
 }
 
-extern castfn ptr2glsurf(p: ptr): ref(MyGLSurface_Record) = "mac#"
+extern fun view_glsurf(p: ptr): ref(MyGLSurface_Record) = "mac#mp_id_ptr"
 
 typedef glsurface_vtype = ptr
 
@@ -160,7 +160,7 @@ end
 
 // --- Dab Çizim Callback'i ---
 implement draw_dab_callback(self, x, y, radius, r, g, b, opaque, hardness, softness, alpha_eraser, aspect, angle, lock_alpha, colorize, posterize, posterize_num, paint): int = let
-  val surf = ptr2glsurf(self)
+  val surf = view_glsurf(self)
   val layer = surf->layer
   val is_erasing = surf->is_erasing
 in
@@ -185,7 +185,7 @@ end
 implement glsurface_create() = let
   val p = malloc(sizeof<MyGLSurface_Record>)
   val () = assertloc(p > the_null_ptr)
-  val p1 = ptr2glsurf(p)
+  val p1 = view_glsurf(p)
   val () = p1->parent.draw_dab := draw_dab_callback
   val () = p1->parent.refcount := 1
   val () = p1->is_erasing := 0
@@ -197,13 +197,13 @@ end
 implement glsurface_destroy(s) = free(s)
 
 implement glsurface_set_erasing(s, v) = let
-  val surf = ptr2glsurf(s)
+  val surf = view_glsurf(s)
 in
   surf->is_erasing := v
 end
 
 implement mygl_surface_set_layer(s, layer) = let
-  val surf = ptr2glsurf(s)
+  val surf = view_glsurf(s)
 in
   surf->layer := layer
 end

@@ -38,4 +38,14 @@ static inline void mp_hints_set_min(XSizeHints *h, int w, int ht) {
   h->min_height = ht;
 }
 
+static inline void *mp_x_open_display(void) { return (void *)XOpenDisplay(NULL); }
+static inline int mp_x_default_screen(void *d) { return DefaultScreen((Display *)d); }
+static inline unsigned long mp_x_root_window(void *d, int s) { return RootWindow((Display *)d, s); }
+static inline void mp_x_map_window(void *d, unsigned long w) { XMapWindow((Display *)d, w); }
+static inline void mp_x_define_cursor(void *d, unsigned long w, unsigned long c) {
+  XDefineCursor((Display *)d, w, c);
+}
+static inline void mp_x_destroy_window(void *d, unsigned long w) { XDestroyWindow((Display *)d, w); }
+static inline void mp_x_close_display(void *d) { XCloseDisplay((Display *)d); }
+
 #endif

@@ -8,24 +8,19 @@
 // --- Sınır (C ABI pointer katmanı) ---
 // Dış API ptr üzerinden çalışır; hesap rectangle_pure.hats içindedir.
 
-extern castfn ptr2rect(p: ptr): ref(MinePaintRectangle) = "mac#"
-
 extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
+extern fun rect_get_x(p: ptr): int = "mac#mp_rect_get_x"
+extern fun rect_get_y(p: ptr): int = "mac#mp_rect_get_y"
+extern fun rect_get_w(p: ptr): int = "mac#mp_rect_get_w"
+extern fun rect_get_h(p: ptr): int = "mac#mp_rect_get_h"
+extern fun rect_put(p: ptr, x: int, y: int, w: int, h: int): void = "mac#mp_rect_set"
 
-fn rect_load(p: ptr): MinePaintRectangle = let
-  val r = ptr2rect(p)
-in
-  @{ x= r->x, y= r->y, width= r->width, height= r->height }
-end
+fn rect_load(p: ptr): MinePaintRectangle =
+  @{ x= rect_get_x(p), y= rect_get_y(p), width= rect_get_w(p), height= rect_get_h(p) }
 
-fn rect_store(p: ptr, v: MinePaintRectangle): void = let
-  val r = ptr2rect(p)
-  val () = r->x := v.x
-  val () = r->y := v.y
-  val () = r->width := v.width
-  val () = r->height := v.height
-in () end
+fn rect_store(p: ptr, v: MinePaintRectangle): void =
+  rect_put(p, v.x, v.y, v.width, v.height)
 
 // Dikdörtgen Oluşturma
 extern fun minepaint_rectangle_new(x: int, y: int, w: int, h: int): ptr = "ext#minepaint_rectangle_new"
