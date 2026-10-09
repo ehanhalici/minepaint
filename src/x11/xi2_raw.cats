@@ -41,102 +41,136 @@ static inline void xi2_free_devices(void *devs) {
   if (devs) XIFreeDeviceInfo((XIDeviceInfo*)devs);
 }
 
+static inline XIDeviceInfo *xi2_dev_at(void *devs, int idx) {
+  if (!devs || !airlock_below(idx, MP_AIRLOCK_CAP)) return 0;
+  return &((XIDeviceInfo *)devs)[idx];
+}
+
+static inline XIAnyClassInfo *xi2_class_at(void *devs, int dev_idx, int class_idx) {
+  XIDeviceInfo *d = xi2_dev_at(devs, dev_idx);
+  if (!d || !d->classes || !airlock_below(class_idx, d->num_classes)) return 0;
+  return d->classes[class_idx];
+}
+
 static inline int xi2_device_id(void *devs, int idx) {
-  return ((XIDeviceInfo*)devs)[idx].deviceid;
+  XIDeviceInfo *d = xi2_dev_at(devs, idx);
+  return d ? d->deviceid : 0;
 }
 
 static inline int xi2_device_is_master(void *devs, int idx) {
-  int use = ((XIDeviceInfo*)devs)[idx].use;
-  return (use == XIMasterPointer || use == XIMasterKeyboard) ? 1 : 0;
+  XIDeviceInfo *d = xi2_dev_at(devs, idx);
+  if (!d) return 0;
+  return (d->use == XIMasterPointer || d->use == XIMasterKeyboard) ? 1 : 0;
 }
 
-static inline char* xi2_device_name(void *devs, int idx) {
-  return ((XIDeviceInfo*)devs)[idx].name ? ((XIDeviceInfo*)devs)[idx].name : "";
+static inline char *xi2_device_name(void *devs, int idx) {
+  XIDeviceInfo *d = xi2_dev_at(devs, idx);
+  if (!d || !d->name) return "";
+  return d->name;
 }
 
 static inline int xi2_device_num_classes(void *devs, int idx) {
-  return ((XIDeviceInfo*)devs)[idx].num_classes;
+  XIDeviceInfo *d = xi2_dev_at(devs, idx);
+  return d ? d->num_classes : 0;
 }
 
 static inline int xi2_device_class_type(void *devs, int dev_idx, int class_idx) {
-  XIAnyClassInfo *ci = ((XIDeviceInfo*)devs)[dev_idx].classes[class_idx];
+  XIAnyClassInfo *ci = xi2_class_at(devs, dev_idx, class_idx);
   return ci ? ci->type : -1;
 }
 
 static inline int xi2_device_class_val_axis(void *devs, int dev_idx, int class_idx) {
-  XIValuatorClassInfo *val = (XIValuatorClassInfo*)(((XIDeviceInfo*)devs)[dev_idx].classes[class_idx]);
+  XIValuatorClassInfo *val = (XIValuatorClassInfo *)xi2_class_at(devs, dev_idx, class_idx);
   return val ? val->number : -1;
 }
 
 static inline double xi2_device_class_val_min(void *devs, int dev_idx, int class_idx) {
-  XIValuatorClassInfo *val = (XIValuatorClassInfo*)(((XIDeviceInfo*)devs)[dev_idx].classes[class_idx]);
+  XIValuatorClassInfo *val = (XIValuatorClassInfo *)xi2_class_at(devs, dev_idx, class_idx);
   return val ? val->min : 0.0;
 }
 
 static inline double xi2_device_class_val_max(void *devs, int dev_idx, int class_idx) {
-  XIValuatorClassInfo *val = (XIValuatorClassInfo*)(((XIDeviceInfo*)devs)[dev_idx].classes[class_idx]);
+  XIValuatorClassInfo *val = (XIValuatorClassInfo *)xi2_class_at(devs, dev_idx, class_idx);
   return val ? val->max : 1.0;
 }
 
 static inline int xi2_device_class_val_label(Display *dpy, void *devs, int dev_idx, int class_idx, char *buf, int bufsz) {
-  XIValuatorClassInfo *val = (XIValuatorClassInfo*)(((XIDeviceInfo*)devs)[dev_idx].classes[class_idx]);
-  if (!val || val->label == None) return 0;
+  XIValuatorClassInfo *val = (XIValuatorClassInfo *)xi2_class_at(devs, dev_idx, class_idx);
+  if (!val || val->label == None || !buf || !airlock_pos(bufsz)) return 0;
   char *aname = XGetAtomName(dpy, val->label);
   if (!aname) return 0;
-  strncpy(buf, aname, bufsz - 1);
+  strncpy(buf, aname, (size_t)(bufsz - 1));
   buf[bufsz - 1] = '\0';
   XFree(aname);
   return 1;
 }
 
 static inline int xi2_cookie_extension(void *ev) {
+  if (!ev) return 0;
   return ((XEvent*)ev)->xcookie.extension;
 }
 
 static inline int xi2_cookie_get_data(Display *dpy, void *ev) {
+  if (!dpy || !ev) return 0;
   return XGetEventData(dpy, &(((XEvent*)ev)->xcookie)) ? 1 : 0;
 }
 
 static inline void xi2_cookie_free_data(Display *dpy, void *ev) {
+  if (!dpy || !ev) return;
   XFreeEventData(dpy, &(((XEvent*)ev)->xcookie));
 }
 
 static inline int xi2_cookie_evtype(void *ev) {
+  if (!ev) return 0;
   return ((XEvent*)ev)->xcookie.evtype;
 }
 
 static inline void* xi2_cookie_data(void *ev) {
+  if (!ev) return 0;
   return ((XEvent*)ev)->xcookie.data;
 }
 
 static inline int xi2_raw_deviceid(void *data) {
+  if (!data) return 0;
   return ((XIRawEvent*)data)->deviceid;
+}
+
+static inline int xi2_mask_popcount(const unsigned char *mask, int mask_len) {
+  if (!mask || airlock_pos(mask_len) == 0) return 0;
+  int n = 0;
+  for (int i = 0; i < mask_len; i++) {
+    unsigned char b = (unsigned char)airlock_word(mask, i, mask_len);
+    while (b) { n += b & 1; b = (unsigned char)(b >> 1); }
+  }
+  return n;
 }
 
 static inline int xi2_raw_has_axis(void *data, int axis) {
   XIRawEvent *raw = (XIRawEvent*)data;
-  return (raw && axis >= 0 && XIMaskIsSet(raw->valuators.mask, axis)) ? 1 : 0;
+  return (raw && airlock_nat(axis) == axis && raw->valuators.mask &&
+          XIMaskIsSet(raw->valuators.mask, axis)) ? 1 : 0;
+}
+
+static inline double xi2_raw_axis_at(const double *vals, int idx, int nval) {
+  if (!vals || !airlock_below(idx, nval)) return 0.0;
+  return vals[idx];
 }
 
 static inline double xi2_raw_read_axis(void *data, int axis) {
   XIRawEvent *raw = (XIRawEvent*)data;
-  if (!raw || axis < 0 || !XIMaskIsSet(raw->valuators.mask, axis)) return 0.0;
+  if (!raw || airlock_nat(axis) != axis || !raw->valuators.mask ||
+      !XIMaskIsSet(raw->valuators.mask, axis)) return 0.0;
   int idx = 0;
   for (int a = 0; a < axis; a++) {
     if (XIMaskIsSet(raw->valuators.mask, a)) idx++;
   }
-  if (raw->valuators.values && raw->valuators.values[idx] > 0.0) {
-    return raw->valuators.values[idx];
-  }
-  if (raw->raw_values && raw->raw_values[idx] > 0.0) {
-    return raw->raw_values[idx];
-  }
-  if (raw->valuators.values) {
-    return raw->valuators.values[idx];
-  }
-  if (raw->raw_values) {
-    return raw->raw_values[idx];
-  }
+  int nval = xi2_mask_popcount((const unsigned char *)raw->valuators.mask, raw->valuators.mask_len);
+  double v = xi2_raw_axis_at(raw->valuators.values, idx, nval);
+  if (v > 0.0) return v;
+  double r = xi2_raw_axis_at(raw->raw_values, idx, nval);
+  if (r > 0.0) return r;
+  if (raw->valuators.values && airlock_below(idx, nval)) return v;
+  if (raw->raw_values && airlock_below(idx, nval)) return r;
   return 0.0;
 }
 

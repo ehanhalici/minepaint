@@ -7,7 +7,7 @@ endif()
 find_program(MINEPAINT_CLANG clang REQUIRED)
 set(CMAKE_C_COMPILER "${MINEPAINT_CLANG}" CACHE FILEPATH "clang" FORCE)
 set(CMAKE_EXE_LINKER_FLAGS "" CACHE STRING "" FORCE)
-set(CMAKE_C_FLAGS "-I${CMAKE_SOURCE_DIR}/src -include ${CMAKE_SOURCE_DIR}/src/sys/cprelude.h -Wno-implicit-function-declaration -Wno-format -U_FORTIFY_SOURCE" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS "-Wall -Wextra -Wshadow -pedantic -I${CMAKE_SOURCE_DIR}/src -include ${CMAKE_SOURCE_DIR}/src/sys/cprelude.h -Wno-implicit-function-declaration -Wno-format -U_FORTIFY_SOURCE" CACHE STRING "" FORCE)
 set(CMAKE_C_FLAGS_DEBUG "-O0 -g" CACHE STRING "" FORCE)
 set(CMAKE_C_FLAGS_RELEASE "-O3 -flto=thin -march=native -ffast-math -funroll-loops -fomit-frame-pointer -fvectorize -fslp-vectorize -DNDEBUG" CACHE STRING "" FORCE)
 

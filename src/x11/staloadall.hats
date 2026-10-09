@@ -1,1 +1,0 @@
-#staload "./x.sats"

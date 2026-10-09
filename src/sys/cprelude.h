@@ -58,17 +58,6 @@ static inline void mp_pset(void **p, int i, void *v) { p[i] = v; }
 static inline double mp_dget(const double *p, int i) { return p[i]; }
 static inline void mp_dset(double *p, int i, double v) { p[i] = v; }
 
-static inline int mp_rect_get_x(const void *p) { return ((const int *)p)[0]; }
-static inline int mp_rect_get_y(const void *p) { return ((const int *)p)[1]; }
-static inline int mp_rect_get_w(const void *p) { return ((const int *)p)[2]; }
-static inline int mp_rect_get_h(const void *p) { return ((const int *)p)[3]; }
-static inline void mp_rect_set(void *p, int x, int y, int w, int h) {
-  int *r = (int *)p;
-  r[0] = x;
-  r[1] = y;
-  r[2] = w;
-  r[3] = h;
-}
 
 static inline float airlock_fget(const void *p, int i) {
   if (!p || !airlock_below(i, MP_AIRLOCK_CAP)) return 0.f;
@@ -123,6 +112,17 @@ static inline double airlock_dget(const void *p, int i) {
 }
 static inline void airlock_dset(void *p, int i, double v) {
   airlock_dset_n(p, i, MP_AIRLOCK_CAP, v);
+}
+
+static inline int mp_rect_get_x(const void *p) { return airlock_iget_n(p, 0, 4); }
+static inline int mp_rect_get_y(const void *p) { return airlock_iget_n(p, 1, 4); }
+static inline int mp_rect_get_w(const void *p) { return airlock_iget_n(p, 2, 4); }
+static inline int mp_rect_get_h(const void *p) { return airlock_iget_n(p, 3, 4); }
+static inline void mp_rect_set(void *p, int x, int y, int w, int h) {
+  airlock_iset_n(p, 0, 4, x);
+  airlock_iset_n(p, 1, 4, y);
+  airlock_iset_n(p, 2, 4, w);
+  airlock_iset_n(p, 3, 4, h);
 }
 
 #endif
