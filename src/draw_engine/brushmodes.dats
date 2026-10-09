@@ -5,6 +5,10 @@
 #include "share/atspre_staload.hats"
 
 #include "./engine_safe.hats"
+staload "draw_engine/pixel_buf.sats"
+
+fn pix(p: U16Buf): ptr = u16buf_ptr(p)
+fn step(p: U16Buf, n: int): U16Buf = u16buf_add(p, n)
 
 fn i_add(a: int, b: int): int = g0int_add(a, b)
 fn i_sub(a: int, b: int): int = g0int_sub(a, b)
@@ -30,21 +34,21 @@ extern fun rgb_to_spectral(r: float, g: float, b: float, spectral: ptr): void = 
 extern fun spectral_to_rgb(spectral: ptr, rgb: ptr): void = "ext#spectral_to_rgb"
 
 // Helper inline getters/setters for 16-bit RGBA pixel components
-fn get_r(p: ptr): uint = g0uint2uint_uint16_uint(mp_arr_u16get(p, 0))
-fn get_g(p: ptr): uint = g0uint2uint_uint16_uint(mp_arr_u16get(p, 1))
-fn get_b(p: ptr): uint = g0uint2uint_uint16_uint(mp_arr_u16get(p, 2))
-fn get_a(p: ptr): uint = g0uint2uint_uint16_uint(mp_arr_u16get(p, 3))
+fn get_r(p: U16Buf): uint = g0uint2uint_uint16_uint(mp_arr_u16get(pix(p), 0))
+fn get_g(p: U16Buf): uint = g0uint2uint_uint16_uint(mp_arr_u16get(pix(p), 1))
+fn get_b(p: U16Buf): uint = g0uint2uint_uint16_uint(mp_arr_u16get(pix(p), 2))
+fn get_a(p: U16Buf): uint = g0uint2uint_uint16_uint(mp_arr_u16get(pix(p), 3))
 
-fn set_r(p: ptr, v: uint): void = mp_arr_u16set(p, 0, u16(v))
-fn set_g(p: ptr, v: uint): void = mp_arr_u16set(p, 1, u16(v))
-fn set_b(p: ptr, v: uint): void = mp_arr_u16set(p, 2, u16(v))
-fn set_a(p: ptr, v: uint): void = mp_arr_u16set(p, 3, u16(v))
+fn set_r(p: U16Buf, v: uint): void = mp_arr_u16set(pix(p), 0, u16(v))
+fn set_g(p: U16Buf, v: uint): void = mp_arr_u16set(pix(p), 1, u16(v))
+fn set_b(p: U16Buf, v: uint): void = mp_arr_u16set(pix(p), 2, u16(v))
+fn set_a(p: U16Buf, v: uint): void = mp_arr_u16set(pix(p), 3, u16(v))
 
-fn get_mask_val(m: ptr): uint = g0uint2uint_uint16_uint(mp_arr_u16get(m, 0))
+fn get_mask_val(m: U16Buf): uint = g0uint2uint_uint16_uint(mp_arr_u16get(pix(m), 0))
 
 // --- 1. NORMAL BLEND MODE ---
 extern fun draw_dab_pixels_BlendMode_Normal(
-  mask: ptr, rgba: ptr, color_r: uint16, color_g: uint16, color_b: uint16, opacity: uint16
+  mask: U16Buf, rgba: U16Buf, color_r: uint16, color_g: uint16, color_b: uint16, opacity: uint16
 ): void = "ext#draw_dab_pixels_BlendMode_Normal"
 implement draw_dab_pixels_BlendMode_Normal(mask, rgba, color_r, color_g, color_b, opacity) = let
   val cr = g0uint2uint_uint16_uint(color_r)
@@ -52,8 +56,8 @@ implement draw_dab_pixels_BlendMode_Normal(mask, rgba, color_r, color_g, color_b
   val cb = g0uint2uint_uint16_uint(color_b)
   val opacity_u = g0uint2uint_uint16_uint(opacity)
 
-  fun loop_outer(m: ptr, p: ptr): void = let
-    fun loop_inner(m_cur: ptr, p_cur: ptr): @(ptr, ptr) = let
+  fun loop_outer(m: U16Buf, p: U16Buf): void = let
+    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf): @(U16Buf, U16Buf) = let
       val mval = get_mask_val(m_cur)
     in
       if mval != 0U then let
@@ -69,18 +73,18 @@ implement draw_dab_pixels_BlendMode_Normal(mask, rgba, color_r, color_g, color_b
         val () = set_g(p_cur, (opa_a * cg + opa_b * cur_g) / 32768U)
         val () = set_b(p_cur, (opa_a * cb + opa_b * cur_b) / 32768U)
       in
-        loop_inner(ptr_add<uint16>(m_cur, 1), ptr_add<uint16>(p_cur, 4))
+        loop_inner(step(m_cur, 1), step(p_cur, 4))
       end else
         @(m_cur, p_cur)
     end
 
     val @(m_end, p_end) = loop_inner(m, p)
-    val skip = get_mask_val(ptr_add<uint16>(m_end, 1))
+    val skip = get_mask_val(step(m_end, 1))
   in
     if skip = 0U then ()
     else let
-      val next_p = ptr_add<uint16>(p_end, g0uint2int_uint_int(skip))
-      val next_m = ptr_add<uint16>(m_end, 2)
+      val next_p = step(p_end, g0uint2int_uint_int(skip))
+      val next_m = step(m_end, 2)
     in
       loop_outer(next_m, next_p)
     end
@@ -91,7 +95,7 @@ end
 
 // --- 2. NORMAL AND ERASER (SMUDGE / ERASE) ---
 extern fun draw_dab_pixels_BlendMode_Normal_and_Eraser(
-  mask: ptr, rgba: ptr, color_r: uint16, color_g: uint16, color_b: uint16, color_a: uint16, opacity: uint16
+  mask: U16Buf, rgba: U16Buf, color_r: uint16, color_g: uint16, color_b: uint16, color_a: uint16, opacity: uint16
 ): void = "ext#draw_dab_pixels_BlendMode_Normal_and_Eraser"
 implement draw_dab_pixels_BlendMode_Normal_and_Eraser(mask, rgba, color_r, color_g, color_b, color_a, opacity) = let
   val cr = g0uint2uint_uint16_uint(color_r)
@@ -100,8 +104,8 @@ implement draw_dab_pixels_BlendMode_Normal_and_Eraser(mask, rgba, color_r, color
   val ca = g0uint2uint_uint16_uint(color_a)
   val opacity_u = g0uint2uint_uint16_uint(opacity)
 
-  fun loop_outer(m: ptr, p: ptr): void = let
-    fun loop_inner(m_cur: ptr, p_cur: ptr): @(ptr, ptr) = let
+  fun loop_outer(m: U16Buf, p: U16Buf): void = let
+    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf): @(U16Buf, U16Buf) = let
       val mval = get_mask_val(m_cur)
     in
       if mval != 0U then let
@@ -118,18 +122,18 @@ implement draw_dab_pixels_BlendMode_Normal_and_Eraser(mask, rgba, color_r, color
         val () = set_g(p_cur, (opa_a * cg + opa_b * cur_g) / 32768U)
         val () = set_b(p_cur, (opa_a * cb + opa_b * cur_b) / 32768U)
       in
-        loop_inner(ptr_add<uint16>(m_cur, 1), ptr_add<uint16>(p_cur, 4))
+        loop_inner(step(m_cur, 1), step(p_cur, 4))
       end else
         @(m_cur, p_cur)
     end
 
     val @(m_end, p_end) = loop_inner(m, p)
-    val skip = get_mask_val(ptr_add<uint16>(m_end, 1))
+    val skip = get_mask_val(step(m_end, 1))
   in
     if skip = 0U then ()
     else let
-      val next_p = ptr_add<uint16>(p_end, g0uint2int_uint_int(skip))
-      val next_m = ptr_add<uint16>(m_end, 2)
+      val next_p = step(p_end, g0uint2int_uint_int(skip))
+      val next_m = step(m_end, 2)
     in
       loop_outer(next_m, next_p)
     end
@@ -140,7 +144,7 @@ end
 
 // --- 3. LOCK ALPHA BLEND MODE ---
 extern fun draw_dab_pixels_BlendMode_LockAlpha(
-  mask: ptr, rgba: ptr, color_r: uint16, color_g: uint16, color_b: uint16, opacity: uint16
+  mask: U16Buf, rgba: U16Buf, color_r: uint16, color_g: uint16, color_b: uint16, opacity: uint16
 ): void = "ext#draw_dab_pixels_BlendMode_LockAlpha"
 implement draw_dab_pixels_BlendMode_LockAlpha(mask, rgba, color_r, color_g, color_b, opacity) = let
   val cr = g0uint2uint_uint16_uint(color_r)
@@ -148,8 +152,8 @@ implement draw_dab_pixels_BlendMode_LockAlpha(mask, rgba, color_r, color_g, colo
   val cb = g0uint2uint_uint16_uint(color_b)
   val opacity_u = g0uint2uint_uint16_uint(opacity)
 
-  fun loop_outer(m: ptr, p: ptr): void = let
-    fun loop_inner(m_cur: ptr, p_cur: ptr): @(ptr, ptr) = let
+  fun loop_outer(m: U16Buf, p: U16Buf): void = let
+    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf): @(U16Buf, U16Buf) = let
       val mval = get_mask_val(m_cur)
     in
       if mval != 0U then let
@@ -165,18 +169,18 @@ implement draw_dab_pixels_BlendMode_LockAlpha(mask, rgba, color_r, color_g, colo
         val () = set_g(p_cur, (opa_a * cg + opa_b * cur_g) / 32768U)
         val () = set_b(p_cur, (opa_a * cb + opa_b * cur_b) / 32768U)
       in
-        loop_inner(ptr_add<uint16>(m_cur, 1), ptr_add<uint16>(p_cur, 4))
+        loop_inner(step(m_cur, 1), step(p_cur, 4))
       end else
         @(m_cur, p_cur)
     end
 
     val @(m_end, p_end) = loop_inner(m, p)
-    val skip = get_mask_val(ptr_add<uint16>(m_end, 1))
+    val skip = get_mask_val(step(m_end, 1))
   in
     if skip = 0U then ()
     else let
-      val next_p = ptr_add<uint16>(p_end, g0uint2int_uint_int(skip))
-      val next_m = ptr_add<uint16>(m_end, 2)
+      val next_p = step(p_end, g0uint2int_uint_int(skip))
+      val next_m = step(m_end, 2)
     in
       loop_outer(next_m, next_p)
     end
@@ -187,14 +191,14 @@ end
 
 // --- 4. POSTERIZE BLEND MODE ---
 extern fun draw_dab_pixels_BlendMode_Posterize(
-  mask: ptr, rgba: ptr, opacity: uint16, posterize_num: uint16
+  mask: U16Buf, rgba: U16Buf, opacity: uint16, posterize_num: uint16
 ): void = "ext#draw_dab_pixels_BlendMode_Posterize"
 implement draw_dab_pixels_BlendMode_Posterize(mask, rgba, opacity, posterize_num) = let
   val opacity_u = g0uint2uint_uint16_uint(opacity)
   val pnum_f = u2f(g0uint2uint_uint16_uint(posterize_num))
 
-  fun loop_outer(m: ptr, p: ptr): void = let
-    fun loop_inner(m_cur: ptr, p_cur: ptr): @(ptr, ptr) = let
+  fun loop_outer(m: U16Buf, p: U16Buf): void = let
+    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf): @(U16Buf, U16Buf) = let
       val mval = get_mask_val(m_cur)
     in
       if mval != 0U then let
@@ -221,18 +225,18 @@ implement draw_dab_pixels_BlendMode_Posterize(mask, rgba, opacity, posterize_num
         val () = set_g(p_cur, (opa_a * post_g + opa_b * cur_g) / 32768U)
         val () = set_b(p_cur, (opa_a * post_b + opa_b * cur_b) / 32768U)
       in
-        loop_inner(ptr_add<uint16>(m_cur, 1), ptr_add<uint16>(p_cur, 4))
+        loop_inner(step(m_cur, 1), step(p_cur, 4))
       end else
         @(m_cur, p_cur)
     end
 
     val @(m_end, p_end) = loop_inner(m, p)
-    val skip = get_mask_val(ptr_add<uint16>(m_end, 1))
+    val skip = get_mask_val(step(m_end, 1))
   in
     if skip = 0U then ()
     else let
-      val next_p = ptr_add<uint16>(p_end, g0uint2int_uint_int(skip))
-      val next_m = ptr_add<uint16>(m_end, 2)
+      val next_p = step(p_end, g0uint2int_uint_int(skip))
+      val next_m = step(m_end, 2)
     in
       loop_outer(next_m, next_p)
     end
@@ -295,7 +299,7 @@ fn set_rgb16_lum_from_rgb16(
 in () end
 
 extern fun draw_dab_pixels_BlendMode_Color(
-  mask: ptr, rgba: ptr, color_r: uint16, color_g: uint16, color_b: uint16, opacity: uint16
+  mask: U16Buf, rgba: U16Buf, color_r: uint16, color_g: uint16, color_b: uint16, opacity: uint16
 ): void = "ext#draw_dab_pixels_BlendMode_Color"
 implement draw_dab_pixels_BlendMode_Color(mask, rgba, color_r, color_g, color_b, opacity) = let
   val topr = g0uint2uint_uint16_uint(color_r)
@@ -303,8 +307,8 @@ implement draw_dab_pixels_BlendMode_Color(mask, rgba, color_r, color_g, color_b,
   val topb = g0uint2uint_uint16_uint(color_b)
   val opacity_u = g0uint2uint_uint16_uint(opacity)
 
-  fun loop_outer(m: ptr, p: ptr): void = let
-    fun loop_inner(m_cur: ptr, p_cur: ptr): @(ptr, ptr) = let
+  fun loop_outer(m: U16Buf, p: U16Buf): void = let
+    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf): @(U16Buf, U16Buf) = let
       val mval = get_mask_val(m_cur)
     in
       if mval != 0U then let
@@ -335,18 +339,18 @@ implement draw_dab_pixels_BlendMode_Color(mask, rgba, color_r, color_g, color_b,
         val () = set_g(p_cur, (opa_a * g_repre + opa_b * cur_g) / 32768U)
         val () = set_b(p_cur, (opa_a * b_repre + opa_b * cur_b) / 32768U)
       in
-        loop_inner(ptr_add<uint16>(m_cur, 1), ptr_add<uint16>(p_cur, 4))
+        loop_inner(step(m_cur, 1), step(p_cur, 4))
       end else
         @(m_cur, p_cur)
     end
 
     val @(m_end, p_end) = loop_inner(m, p)
-    val skip = get_mask_val(ptr_add<uint16>(m_end, 1))
+    val skip = get_mask_val(step(m_end, 1))
   in
     if skip = 0U then ()
     else let
-      val next_p = ptr_add<uint16>(p_end, g0uint2int_uint_int(skip))
-      val next_m = ptr_add<uint16>(m_end, 2)
+      val next_p = step(p_end, g0uint2int_uint_int(skip))
+      val next_m = step(m_end, 2)
     in
       loop_outer(next_m, next_p)
     end
@@ -357,19 +361,19 @@ end
 
 // --- 6. SPECTRAL PAINT BLEND MODES ---
 extern fun draw_dab_pixels_BlendMode_Normal_Paint(
-  mask: ptr, rgba: ptr, color_r: uint16, color_g: uint16, color_b: uint16, opacity: uint16
+  mask: U16Buf, rgba: U16Buf, color_r: uint16, color_g: uint16, color_b: uint16, opacity: uint16
 ): void = "ext#draw_dab_pixels_BlendMode_Normal_Paint"
 implement draw_dab_pixels_BlendMode_Normal_Paint(mask, rgba, color_r, color_g, color_b, opacity) =
   draw_dab_pixels_BlendMode_Normal(mask, rgba, color_r, color_g, color_b, opacity)
 
 extern fun draw_dab_pixels_BlendMode_Normal_and_Eraser_Paint(
-  mask: ptr, rgba: ptr, color_r: uint16, color_g: uint16, color_b: uint16, color_a: uint16, opacity: uint16
+  mask: U16Buf, rgba: U16Buf, color_r: uint16, color_g: uint16, color_b: uint16, color_a: uint16, opacity: uint16
 ): void = "ext#draw_dab_pixels_BlendMode_Normal_and_Eraser_Paint"
 implement draw_dab_pixels_BlendMode_Normal_and_Eraser_Paint(mask, rgba, color_r, color_g, color_b, color_a, opacity) =
   draw_dab_pixels_BlendMode_Normal_and_Eraser(mask, rgba, color_r, color_g, color_b, color_a, opacity)
 
 extern fun draw_dab_pixels_BlendMode_LockAlpha_Paint(
-  mask: ptr, rgba: ptr, color_r: uint16, color_g: uint16, color_b: uint16, opacity: uint16
+  mask: U16Buf, rgba: U16Buf, color_r: uint16, color_g: uint16, color_b: uint16, opacity: uint16
 ): void = "ext#draw_dab_pixels_BlendMode_LockAlpha_Paint"
 implement draw_dab_pixels_BlendMode_LockAlpha_Paint(mask, rgba, color_r, color_g, color_b, opacity) =
   draw_dab_pixels_BlendMode_LockAlpha(mask, rgba, color_r, color_g, color_b, opacity)
@@ -377,11 +381,11 @@ implement draw_dab_pixels_BlendMode_LockAlpha_Paint(mask, rgba, color_r, color_g
 
 // --- 7. LEGACY AND ACCUMULATE COLOR SAMPLING ---
 extern fun get_color_pixels_legacy(
-  mask: ptr, rgba: ptr, sum_weight: ptr, sum_r: ptr, sum_g: ptr, sum_b: ptr, sum_a: ptr
+  mask: U16Buf, rgba: U16Buf, sum_weight: ptr, sum_r: ptr, sum_g: ptr, sum_b: ptr, sum_a: ptr
 ): void = "ext#get_color_pixels_legacy"
 implement get_color_pixels_legacy(mask, rgba, sum_weight, sum_r, sum_g, sum_b, sum_a) = let
-  fun loop_outer(m: ptr, p: ptr, acc_w: uint, acc_r: uint, acc_g: uint, acc_b: uint, acc_a: uint): @(uint, uint, uint, uint, uint) = let
-    fun loop_inner(m_cur: ptr, p_cur: ptr, w: uint, r: uint, g: uint, b: uint, a: uint): @(ptr, ptr, uint, uint, uint, uint, uint) = let
+  fun loop_outer(m: U16Buf, p: U16Buf, acc_w: uint, acc_r: uint, acc_g: uint, acc_b: uint, acc_a: uint): @(uint, uint, uint, uint, uint) = let
+    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf, w: uint, r: uint, g: uint, b: uint, a: uint): @(U16Buf, U16Buf, uint, uint, uint, uint, uint) = let
       val mval = get_mask_val(m_cur)
     in
       if mval != 0U then let
@@ -392,18 +396,18 @@ implement get_color_pixels_legacy(mask, rgba, sum_weight, sum_r, sum_g, sum_b, s
         val b_next = b + (opa * get_b(p_cur)) / 32768U
         val a_next = a + (opa * get_a(p_cur)) / 32768U
       in
-        loop_inner(ptr_add<uint16>(m_cur, 1), ptr_add<uint16>(p_cur, 4), w_next, r_next, g_next, b_next, a_next)
+        loop_inner(step(m_cur, 1), step(p_cur, 4), w_next, r_next, g_next, b_next, a_next)
       end else
         @(m_cur, p_cur, w, r, g, b, a)
     end
 
     val @(m_end, p_end, w1, r1, g1, b1, a1) = loop_inner(m, p, acc_w, acc_r, acc_g, acc_b, acc_a)
-    val skip = get_mask_val(ptr_add<uint16>(m_end, 1))
+    val skip = get_mask_val(step(m_end, 1))
   in
     if skip = 0U then @(w1, r1, g1, b1, a1)
     else let
-      val next_p = ptr_add<uint16>(p_end, g0uint2int_uint_int(skip))
-      val next_m = ptr_add<uint16>(m_end, 2)
+      val next_p = step(p_end, g0uint2int_uint_int(skip))
+      val next_m = step(m_end, 2)
     in
       loop_outer(next_m, next_p, w1, r1, g1, b1, a1)
     end
@@ -420,7 +424,7 @@ implement get_color_pixels_legacy(mask, rgba, sum_weight, sum_r, sum_g, sum_b, s
 in () end
 
 extern fun get_color_pixels_accumulate(
-  mask: ptr, rgba: ptr, sum_weight: ptr, sum_r: ptr, sum_g: ptr, sum_b: ptr, sum_a: ptr,
+  mask: U16Buf, rgba: U16Buf, sum_weight: ptr, sum_r: ptr, sum_g: ptr, sum_b: ptr, sum_a: ptr,
   paint: float, sample_interval: uint16, random_sample_rate: float
 ): void = "ext#get_color_pixels_accumulate"
 implement get_color_pixels_accumulate(mask, rgba, sum_weight, sum_r, sum_g, sum_b, sum_a, paint, sample_interval, random_sample_rate) =

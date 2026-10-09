@@ -11,6 +11,7 @@ staload "./symmetry.dats"
 staload "./operationqueue.dats"
 staload "./dab.dats"
 staload "./brushmodes.dats"
+staload "draw_engine/pixel_buf.sats"
 staload "./surface.dats"
 staload "./helpers.dats"
 
@@ -342,11 +343,11 @@ fn apply_non_paint_normal(
     val cb = i2u16(op_rec.color_b)
   in
     if f_gte(op_rec.color_a, 1.0f) then
-      draw_dab_pixels_BlendMode_Normal(mask, rgba_p, cr, cg, cb, opaq_u16)
+      draw_dab_pixels_BlendMode_Normal(u16buf_of(mask), u16buf_of(rgba_p), cr, cg, cb, opaq_u16)
     else let
       val ca_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(f_mul(op_rec.color_a, 32768.0f))))
     in
-      draw_dab_pixels_BlendMode_Normal_and_Eraser(mask, rgba_p, cr, cg, cb, ca_u16, opaq_u16)
+      draw_dab_pixels_BlendMode_Normal_and_Eraser(u16buf_of(mask), u16buf_of(rgba_p), cr, cg, cb, ca_u16, opaq_u16)
     end
   end
 
@@ -358,7 +359,7 @@ fn apply_non_paint_lock_alpha(
     val la_norm = f_mul(f_mul(la_fac, f_sub(1.0f, paint)), 32768.0f)
     val la_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(la_norm)))
   in
-    draw_dab_pixels_BlendMode_LockAlpha(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
+    draw_dab_pixels_BlendMode_LockAlpha(u16buf_of(mask), u16buf_of(rgba_p), i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
   end
 
 fn apply_paint_normal(
@@ -372,11 +373,11 @@ fn apply_paint_normal(
     val cb = i2u16(op_rec.color_b)
   in
     if f_gte(op_rec.color_a, 1.0f) then
-      draw_dab_pixels_BlendMode_Normal_Paint(mask, rgba_p, cr, cg, cb, opaq_u16)
+      draw_dab_pixels_BlendMode_Normal_Paint(u16buf_of(mask), u16buf_of(rgba_p), cr, cg, cb, opaq_u16)
     else let
       val ca_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(f_mul(op_rec.color_a, 32768.0f))))
     in
-      draw_dab_pixels_BlendMode_Normal_and_Eraser_Paint(mask, rgba_p, cr, cg, cb, ca_u16, opaq_u16)
+      draw_dab_pixels_BlendMode_Normal_and_Eraser_Paint(u16buf_of(mask), u16buf_of(rgba_p), cr, cg, cb, ca_u16, opaq_u16)
     end
   end
 
@@ -388,7 +389,7 @@ fn apply_paint_lock_alpha(
     val la_norm = f_mul(f_mul(la_fac, paint), 32768.0f)
     val la_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(la_norm)))
   in
-    draw_dab_pixels_BlendMode_LockAlpha_Paint(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
+    draw_dab_pixels_BlendMode_LockAlpha_Paint(u16buf_of(mask), u16buf_of(rgba_p), i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), la_u16)
   end
 
 fn apply_colorize_posterize(mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab): void = let
@@ -397,7 +398,7 @@ fn apply_colorize_posterize(mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab
       val c_norm = f_mul(f_mul(op_rec.colorize, op_rec.opaque), 32768.0f)
       val c_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(c_norm)))
     in
-      draw_dab_pixels_BlendMode_Color(mask, rgba_p, i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), c_u16)
+      draw_dab_pixels_BlendMode_Color(u16buf_of(mask), u16buf_of(rgba_p), i2u16(op_rec.color_r), i2u16(op_rec.color_g), i2u16(op_rec.color_b), c_u16)
     end
   val () =
     if f_gt(op_rec.posterize, 0.0f) then let
@@ -405,7 +406,7 @@ fn apply_colorize_posterize(mask: ptr, rgba_p: ptr, op_rec: OperationDataDrawDab
       val p_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(p_norm)))
       val pnum_u16 = u16(g0int2uint_int_uint(g0float2int_float_int(op_rec.posterize_num)))
     in
-      draw_dab_pixels_BlendMode_Posterize(mask, rgba_p, p_u16, pnum_u16)
+      draw_dab_pixels_BlendMode_Posterize(u16buf_of(mask), u16buf_of(rgba_p), p_u16, pnum_u16)
     end
 in () end
 
@@ -793,7 +794,7 @@ in
     val ox = f_sub(x, g0int2float_int_float(tx * MINEPAINT_TILE_SIZE))
     val oy = f_sub(y, g0int2float_int_float(ty * MINEPAINT_TILE_SIZE))
     val () = render_dab_mask(mask, ox, oy, rad, 0.5f, 0.5f, 1.0f, 0.0f)
-    val () = get_color_pixels_accumulate(mask, rgba_p, pw, pr, pg, pb, pa, paint, s_u16, rate)
+    val () = get_color_pixels_accumulate(u16buf_of(mask), u16buf_of(rgba_p), pw, pr, pg, pb, pa, paint, s_u16, rate)
     val () = minepaint_tiled_surface_tile_request_end(surface, req_mem)
   in free(req_mem) end
   else free(req_mem)
