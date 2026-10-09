@@ -40,8 +40,11 @@ in
   if (i >= 0) * (i < 19) then mp_c_dset(base, i, v) else ()
 end
 
-fn mp_rng_get_buf_ptr(s: MpRng, i: int): ptr =
-  rng_ptr(rng_add_dbl(s, 10 + i))
+fn sdget(u: DblBuf, i: int): double = mp_arr_dget(dbl_ptr(u), i)
+fn sdset(u: DblBuf, i: int, v: double): void = mp_arr_dset(dbl_ptr(u), i, v)
+
+fn mp_rng_get_buf_ptr(s: MpRng, i: int): DblBuf =
+  dbl_of(rng_ptr(rng_add_dbl(s, 10 + i)))
 
 fn mp_rng_get_arr_pos(s: MpRng): int =
   mp_c_iget(rng_ptr(rng_add_byte(s, RNG_ARR_POS_BYTE_OFFSET)), 0)
@@ -59,89 +62,89 @@ end
 fn is_odd(s: lint): bool =
   g0int_mod_lint(s, 2L) != 0L
 
-extern fun rng_double_get_array(self: MpRng, aa: ptr, n: int): void = "ext#rng_double_get_array"
+extern fun rng_double_get_array(self: MpRng, aa: DblBuf, n: int): void = "ext#rng_double_get_array"
 implement rng_double_get_array(self, aa, n) = let
   fun loop1(j: int): void =
-    if j < KK then (mp_arr_dset(aa, j, mp_rng_get_u(self, j)); loop1(j + 1)) else ()
+    if j < KK then (sdset(aa, j, mp_rng_get_u(self, j)); loop1(j + 1)) else ()
   val () = loop1(0)
 
   fun loop2(j: int): int =
     if j < n then let
-      val v = mod_sum(mp_arr_dget(aa, j - KK), mp_arr_dget(aa, j - LL))
-      val () = mp_arr_dset(aa, j, v)
+      val v = mod_sum(sdget(aa, j - KK), sdget(aa, j - LL))
+      val () = sdset(aa, j, v)
     in loop2(j + 1) end else j
   val j_after2 = loop2(KK)
 
   fun loop3(i: int, j: int): @(int, int) =
     if i < LL then let
-      val v = mod_sum(mp_arr_dget(aa, j - KK), mp_arr_dget(aa, j - LL))
+      val v = mod_sum(sdget(aa, j - KK), sdget(aa, j - LL))
       val () = mp_rng_set_u(self, i, v)
     in loop3(i + 1, j + 1) end else @(i, j)
   val @(i3, j3) = loop3(0, j_after2)
 
   fun loop4(i: int, j: int): void =
     if i < KK then let
-      val v = mod_sum(mp_arr_dget(aa, j - KK), mp_rng_get_u(self, i - LL))
+      val v = mod_sum(sdget(aa, j - KK), mp_rng_get_u(self, i - LL))
       val () = mp_rng_set_u(self, i, v)
     in loop4(i + 1, j + 1) end else ()
   val () = loop4(i3, j3)
 in () end
 
-fn seed_init_u(u_ptr: ptr, ss_init: double, ulp: double): void = let
+fn seed_init_u(u_ptr: DblBuf, ss_init: double, ulp: double): void = let
   fun loop_boot(j: int, ss: double): void =
     if j < KK then let
-      val () = mp_arr_dset(u_ptr, j, ss)
+      val () = sdset(u_ptr, j, ss)
       val ss2 = ss + ss
       val ss_next = if ss2 >= 1.0 then ss2 - (1.0 - 2.0 * ulp) else ss2
     in loop_boot(j + 1, ss_next) end else ()
   val () = loop_boot(0, ss_init)
-  val () = mp_arr_dset(u_ptr, 1, mp_arr_dget(u_ptr, 1) + ulp)
+  val () = sdset(u_ptr, 1, sdget(u_ptr, 1) + ulp)
 in () end
 
-fn seed_square_and_fold(u_ptr: ptr): void = let
+fn seed_square_and_fold(u_ptr: DblBuf): void = let
   fun loop_sq(j: int): void =
     if j > 0 then let
-      val () = mp_arr_dset(u_ptr, j + j, mp_arr_dget(u_ptr, j))
-      val () = mp_arr_dset(u_ptr, j + j - 1, 0.0)
+      val () = sdset(u_ptr, j + j, sdget(u_ptr, j))
+      val () = sdset(u_ptr, j + j - 1, 0.0)
     in loop_sq(j - 1) end else ()
   val () = loop_sq(KK - 1)
 
   fun loop_fold(j: int): void =
     if j >= KK then let
-      val uj = mp_arr_dget(u_ptr, j)
-      val () = mp_arr_dset(u_ptr, j - (KK - LL), mod_sum(mp_arr_dget(u_ptr, j - (KK - LL)), uj))
-      val () = mp_arr_dset(u_ptr, j - KK, mod_sum(mp_arr_dget(u_ptr, j - KK), uj))
+      val uj = sdget(u_ptr, j)
+      val () = sdset(u_ptr, j - (KK - LL), mod_sum(sdget(u_ptr, j - (KK - LL)), uj))
+      val () = sdset(u_ptr, j - KK, mod_sum(sdget(u_ptr, j - KK), uj))
     in loop_fold(j - 1) end else ()
   val () = loop_fold(KK + KK - 2)
 in () end
 
-fn seed_shift_odd(u_ptr: ptr): void = let
+fn seed_shift_odd(u_ptr: DblBuf): void = let
   fun loop_shift(j: int): void =
-    if j > 0 then (mp_arr_dset(u_ptr, j, mp_arr_dget(u_ptr, j - 1)); loop_shift(j - 1)) else ()
+    if j > 0 then (sdset(u_ptr, j, sdget(u_ptr, j - 1)); loop_shift(j - 1)) else ()
   val () = loop_shift(KK)
-  val ukk = mp_arr_dget(u_ptr, KK)
-  val () = mp_arr_dset(u_ptr, 0, ukk)
-  val () = mp_arr_dset(u_ptr, LL, mod_sum(mp_arr_dget(u_ptr, LL), ukk))
+  val ukk = sdget(u_ptr, KK)
+  val () = sdset(u_ptr, 0, ukk)
+  val () = sdset(u_ptr, LL, mod_sum(sdget(u_ptr, LL), ukk))
 in () end
 
-fn seed_outer_step(u_ptr: ptr, s: lint, t: int): @(lint, int) = let
+fn seed_outer_step(u_ptr: DblBuf, s: lint, t: int): @(lint, int) = let
   val () = seed_square_and_fold(u_ptr)
   val () = if is_odd(s) then seed_shift_odd(u_ptr)
   val s_next = g0int_div_lint(s, 2L)
   val t_next = if s != 0L then t else t - 1
 in @(s_next, t_next) end
 
-fun seed_outer_loop(u_ptr: ptr, s: lint, t: int): void =
+fun seed_outer_loop(u_ptr: DblBuf, s: lint, t: int): void =
   if t > 0 then let
     val @(s_next, t_next) = seed_outer_step(u_ptr, s, t)
   in seed_outer_loop(u_ptr, s_next, t_next) end else ()
 
-fn seed_copy_to_ran_u(self: MpRng, u_ptr: ptr): void = let
+fn seed_copy_to_ran_u(self: MpRng, u_ptr: DblBuf): void = let
   fun loop1(j: int): void =
-    if j < LL then (mp_rng_set_u(self, j + KK - LL, mp_arr_dget(u_ptr, j)); loop1(j + 1)) else ()
+    if j < LL then (mp_rng_set_u(self, j + KK - LL, sdget(u_ptr, j)); loop1(j + 1)) else ()
   val () = loop1(0)
   fun loop2(j: int): void =
-    if j < KK then (mp_rng_set_u(self, j - LL, mp_arr_dget(u_ptr, j)); loop2(j + 1)) else ()
+    if j < KK then (mp_rng_set_u(self, j - LL, sdget(u_ptr, j)); loop2(j + 1)) else ()
   val () = loop2(LL)
   fun loop_warm(j: int): void =
     if j < 10 then (rng_double_get_array(self, u_ptr, KK + KK - 1); loop_warm(j + 1)) else ()
@@ -151,7 +154,7 @@ in () end
 extern fun rng_double_set_seed(self: MpRng, seed: lint): void = "ext#rng_double_set_seed"
 implement rng_double_set_seed(self, seed) = let
   var u_buf: @[double][19]
-  val u_ptr = addr@(u_buf)
+  val u_ptr = dbl_of(addr@(u_buf))
   val ulp: double = (1.0 / 1073741824.0) / 4194304.0
   val seed_masked = g0int_mod_lint(seed, 1073741824L)
   val seed_dbl = g0int2float_lint_double(seed_masked + 2L)
