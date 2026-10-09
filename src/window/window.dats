@@ -4,12 +4,13 @@
 #include "share/atspre_staload.hats"
 
 staload "x11/event.sats"
+staload "x11/display_box.sats"
 staload "x11/xi2.sats"
 staload "gl/glx.dats"
 staload "sys/libc.dats"
 
 typedef X11App = @{
-  dpy= ptr,
+  dpy= MpDisplay,
   win= ulint,
   glc= ptr,
   cursor= ulint,
@@ -31,7 +32,7 @@ fn event_mask(): lint =
   $extval(lint, "(ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | StructureNotifyMask)")
 
 fn create_window_with_hints(
-  dpy: ptr, root: ulint, vi: ptr, w: int, h: int, title: string
+  dpy: MpDisplay, root: ulint, vi: ptr, w: int, h: int, title: string
 ): ulint = let
   val cmap = XCreateColormap(dpy, root, mp_xvi_visual(vi), ALLOC_NONE)
   var swa = @[byte][256]()
@@ -52,13 +53,13 @@ fn create_window_with_hints(
   val _ = XStoreName(dpy, win, title)
 in win end
 
-fn setup_wm_protocols(dpy: ptr, win: ulint): ulint = let
+fn setup_wm_protocols(dpy: MpDisplay, win: ulint): ulint = let
   val wm = XInternAtom(dpy, "WM_DELETE_WINDOW", 0)
   var proto: ulint = wm
   val _ = XSetWMProtocols(dpy, win, addr@proto, 1)
 in wm end
 
-fn init_gl_and_cursor(dpy: ptr, win: ulint, vi: ptr): @(ptr, ulint) = let
+fn init_gl_and_cursor(dpy: MpDisplay, win: ulint, vi: ptr): @(ptr, ulint) = let
   val glc = glXCreateContext(dpy, vi, the_null_ptr, GL_TRUE)
 in
   if glc = the_null_ptr then (the_null_ptr, 0ul)
@@ -75,7 +76,7 @@ extern fun app_create(w: int, h: int, title: string): ptr = "ext#app_create"
 implement app_create(w, h, title) = let
   val dpy = mp_x_open_display()
 in
-  if dpy = the_null_ptr then let
+  if dpy_is_null(dpy) != 0 then let
     val () = fprintln!(stderr_ref, "HATA: X11 Display acilamadi!")
   in the_null_ptr end
   else let
@@ -154,7 +155,7 @@ in
   glXSwapBuffers(a->dpy, a->win)
 end
 
-extern fun app_dpy(app: ptr): ptr = "ext#app_dpy"
+extern fun app_dpy(app: ptr): MpDisplay = "ext#app_dpy"
 implement app_dpy(app) = let
   val a = app_ref(app)
 in

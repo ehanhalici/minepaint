@@ -5,16 +5,17 @@ staload "sys/libc.dats"
 staload "window/input.dats"
 staload "x11/xi2.sats"
 staload "x11/devtab.sats"
+staload "x11/display_box.sats"
 
 %{#
 #include "x11/xi2_raw.cats"
 %}
 
 // --- Düşük Seviye C Köprüsü Tanımları ---
-extern fun c_xi2_query_extension(dpy: ptr, opcode: ptr): int = "mac#xi2_query_extension"
-extern fun c_xi2_query_version(dpy: ptr, maj: int, min: int): int = "mac#xi2_query_version"
-extern fun c_xi2_select_root_events(dpy: ptr): int = "mac#xi2_select_root_events"
-extern fun c_xi2_query_devices(dpy: ptr, num: ptr): ptr = "mac#xi2_query_devices"
+extern fun c_xi2_query_extension(dpy: MpDisplay, opcode: ptr): int = "mac#xi2_query_extension"
+extern fun c_xi2_query_version(dpy: MpDisplay, maj: int, min: int): int = "mac#xi2_query_version"
+extern fun c_xi2_select_root_events(dpy: MpDisplay): int = "mac#xi2_select_root_events"
+extern fun c_xi2_query_devices(dpy: MpDisplay, num: ptr): ptr = "mac#xi2_query_devices"
 extern fun c_xi2_free_devices(devs: ptr): void = "mac#xi2_free_devices"
 extern fun c_xi2_device_id(devs: ptr, idx: int): int = "mac#xi2_device_id"
 extern fun c_xi2_device_is_master(devs: ptr, idx: int): int = "mac#xi2_device_is_master"
@@ -24,10 +25,10 @@ extern fun c_xi2_device_class_type(devs: ptr, dev_idx: int, class_idx: int): int
 extern fun c_xi2_device_class_val_axis(devs: ptr, dev_idx: int, class_idx: int): int = "mac#xi2_device_class_val_axis"
 extern fun c_xi2_device_class_val_min(devs: ptr, dev_idx: int, class_idx: int): double = "mac#xi2_device_class_val_min"
 extern fun c_xi2_device_class_val_max(devs: ptr, dev_idx: int, class_idx: int): double = "mac#xi2_device_class_val_max"
-extern fun c_xi2_device_class_val_label(dpy: ptr, devs: ptr, dev_idx: int, class_idx: int, buf: ptr, bufsz: int): int = "mac#xi2_device_class_val_label"
+extern fun c_xi2_device_class_val_label(dpy: MpDisplay, devs: ptr, dev_idx: int, class_idx: int, buf: ptr, bufsz: int): int = "mac#xi2_device_class_val_label"
 extern fun c_xi2_cookie_extension(ev: ptr): int = "mac#xi2_cookie_extension"
-extern fun c_xi2_cookie_get_data(dpy: ptr, ev: ptr): int = "mac#xi2_cookie_get_data"
-extern fun c_xi2_cookie_free_data(dpy: ptr, ev: ptr): void = "mac#xi2_cookie_free_data"
+extern fun c_xi2_cookie_get_data(dpy: MpDisplay, ev: ptr): int = "mac#xi2_cookie_get_data"
+extern fun c_xi2_cookie_free_data(dpy: MpDisplay, ev: ptr): void = "mac#xi2_cookie_free_data"
 extern fun c_xi2_cookie_evtype(ev: ptr): int = "mac#xi2_cookie_evtype"
 extern fun c_xi2_cookie_data(ev: ptr): ptr = "mac#xi2_cookie_data"
 extern fun c_xi2_raw_deviceid(data: ptr): int = "mac#xi2_raw_deviceid"
@@ -141,7 +142,7 @@ end
 
 // --- Valuator ve Eksen İnceleme ---
 fn xi2_inspect_valuator(
-  dpy: ptr, devs: ptr, dev_idx: int, class_idx: int, dev_p: ptr
+  dpy: MpDisplay, devs: ptr, dev_idx: int, class_idx: int, dev_p: ptr
 ): void = let
   val ctype = c_xi2_device_class_type(devs, dev_idx, class_idx)
 in
@@ -166,7 +167,7 @@ in
 end
 
 fn xi2_inspect_device_classes(
-  dpy: ptr, devs: ptr, dev_idx: int, num_classes: int, dev_p: ptr
+  dpy: MpDisplay, devs: ptr, dev_idx: int, num_classes: int, dev_p: ptr
 ): void = let
   fun loop(c: int): void =
     if c < num_classes then (xi2_inspect_valuator(dpy, devs, dev_idx, c, dev_p); loop(c + 1)) else ()
@@ -174,7 +175,7 @@ in
   loop(0)
 end
 
-fn xi2_inspect_single_device(dpy: ptr, devs: ptr, idx: int, base: MpDevTab): void = let
+fn xi2_inspect_single_device(dpy: MpDisplay, devs: ptr, idx: int, base: MpDevTab): void = let
   val did = c_xi2_device_id(devs, idx)
 in
   if (did < 0) || (did >= XI2_MAX_DEVICES) then ()
@@ -196,7 +197,7 @@ in
   end
 end
 
-fn xi2_refresh_devices_internal(dpy: ptr, base: MpDevTab): void = let
+fn xi2_refresh_devices_internal(dpy: MpDisplay, base: MpDevTab): void = let
   val () = xi2_clear_all_devices(base)
   var ndevs: int = 0
   val devs = c_xi2_query_devices(dpy, addr@ndevs)
@@ -223,7 +224,7 @@ end
 
 // --- XInput2 Başlatma ---
 implement xi2_init(dpy) =
-  if dpy = the_null_ptr then 0
+  if dpy_is_null(dpy) != 0 then 0
   else let
     val st = xi2_state_ref()
     var opcode: int = 0
@@ -280,7 +281,7 @@ in
 end
 
 fn xi2_handle_motion_event(
-  dpy: ptr, st: ref(XI2BackendState), raw_data: ptr, evtype: int
+  dpy: MpDisplay, st: ref(XI2BackendState), raw_data: ptr, evtype: int
 ): void =
   if raw_data = the_null_ptr then ()
   else let
@@ -301,7 +302,7 @@ fn xi2_handle_motion_event(
   end
 
 fn xi2_dispatch_event_type(
-  dpy: ptr, st: ref(XI2BackendState), p_xev: ptr, evtype: int
+  dpy: MpDisplay, st: ref(XI2BackendState), p_xev: ptr, evtype: int
 ): void =
   if (evtype = XI2_HIERARCHY_CHANGED) || (evtype = XI2_DEVICE_CHANGED) then
     xi2_refresh_devices_internal(dpy, st->devs)
@@ -310,7 +311,7 @@ fn xi2_dispatch_event_type(
   else ()
 
 implement xi2_process_raw_event(dpy, p_xev) =
-  if (dpy = the_null_ptr) || (p_xev = the_null_ptr) then 0
+  if (dpy_is_null(dpy) != 0) || (p_xev = the_null_ptr) then 0
   else let
     val st = xi2_state_ref()
   in

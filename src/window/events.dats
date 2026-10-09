@@ -3,6 +3,7 @@
 #include "share/atspre_staload.hats"
 
 staload "x11/event.sats"
+staload "x11/display_box.sats"
 staload "x11/xi2.sats"
 staload "window/input.dats"
 staload "gl/gl.dats"
@@ -33,7 +34,7 @@ extern fun app_wm_delete(app: ptr): ulint = "ext#app_wm_delete"
 extern fun app_pending(app: ptr): int = "ext#app_pending"
 extern fun app_next_event(app: ptr, ev: ptr): void = "ext#app_next_event"
 extern fun app_swap(app: ptr): void = "ext#app_swap"
-extern fun app_dpy(app: ptr): ptr = "ext#app_dpy"
+extern fun app_dpy(app: ptr): MpDisplay = "ext#app_dpy"
 
 macdef ConfigureNotify = $extval(int, "ConfigureNotify")
 macdef ClientMessage = $extval(int, "ClientMessage")
@@ -67,7 +68,7 @@ extern fun view_appstate(p: ptr): ref(AppState) = "mac#mp_id_ptr"
 extern fun mp_id_ptr(p: ptr): ptr = "mac#mp_id_ptr"
 
 // Boşluk Tuşu Otomatik Tekrar Kontrolü (Sıfır Heap Tahsisi, Stack Tabanlı)
-fn is_space_autorepeat(dpy: ptr, ev: ptr): int =
+fn is_space_autorepeat(dpy: MpDisplay, ev: ptr): int =
   if XEventsQueued(dpy, QueuedAfterReading) <= 0 then 0
   else let
     var nev: @[byte][256]
