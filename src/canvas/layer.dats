@@ -20,7 +20,7 @@ typedef CanvasTile = @{
 }
 
 typedef Layer_Record = @{
-  buckets= ptr,
+  buckets= MpBuckets,
   tiles= MpTile,
   tile_count= int
 }
@@ -31,6 +31,9 @@ extern fun view_tile(p: ptr): ref(CanvasTile) = "mac#mp_id_ptr"
 fn mp_slot_get(p: ptr): ptr = mp_arr_pget(p, 0)
 
 fn mp_slot_set(p: ptr, v: ptr): void = mp_arr_pset(p, 0, v)
+
+fn bucket_at(b: MpBuckets, i: int): ptr =
+  ptr_add<ptr>(buckets_ptr(b), i)
 
 // OpenGL Sabitleri
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
@@ -118,14 +121,15 @@ implement layer_create(w, h) = let
   val sz = g0int2uint_int_size(TILE_HASH_SIZE) * sizeof<ptr>
   val buckets_mem = malloc(sz)
   val () = assertloc(buckets_mem > the_null_ptr)
+  val buckets = buckets_of(buckets_mem)
 
   fun init_buckets(i: int): void =
     if i < TILE_HASH_SIZE then let
-      val () = mp_slot_set(ptr_add<ptr>(buckets_mem, i), the_null_ptr)
+      val () = mp_slot_set(bucket_at(buckets, i), the_null_ptr)
     in init_buckets(i + 1) end else ()
 
   val () = init_buckets(0)
-  val () = r->buckets := buckets_mem
+  val () = r->buckets := buckets
   val () = r->tiles := tile_none()
   val () = r->tile_count := 0
 in
@@ -148,7 +152,7 @@ implement layer_find_tile(layer, tx, ty) = let
   val () = assertloc(layer_is_null(layer) = 0)
   val lr = view_layer(layer_ptr(layer))
   val idx = tile_hash(tx, ty)
-  val head = tile_of(mp_slot_get(ptr_add<ptr>(lr->buckets, idx)))
+  val head = tile_of(mp_slot_get(bucket_at(lr->buckets, idx)))
 in
   find_tile_in_bucket(head, tx, ty)
 end
@@ -196,7 +200,7 @@ in
   if tile_is_null(found) = 0 then found
   else let
     val idx = tile_hash(tx, ty)
-    val slot = ptr_add<ptr>(lr->buckets, idx)
+    val slot = bucket_at(lr->buckets, idx)
     val old_head = tile_of(mp_slot_get(slot))
     val nt = alloc_tile(tx, ty, old_head, lr->tiles)
     val () = mp_slot_set(slot, tile_ptr(nt))
@@ -312,7 +316,7 @@ implement layer_clear(layer) = let
   val () = lr->tile_count := 0
   fun clear_buckets(i: int): void =
     if i < TILE_HASH_SIZE then let
-      val () = mp_slot_set(ptr_add<ptr>(lr->buckets, i), the_null_ptr)
+      val () = mp_slot_set(bucket_at(lr->buckets, i), the_null_ptr)
     in clear_buckets(i + 1) end else ()
 in
   clear_buckets(0)
@@ -321,7 +325,7 @@ end
 implement layer_destroy(layer) = let
   val lr = view_layer(layer_ptr(layer))
   val () = layer_clear(layer)
-  val () = free(lr->buckets)
+  val () = free(buckets_ptr(lr->buckets))
   val () = free(layer_ptr(layer))
 in () end
 

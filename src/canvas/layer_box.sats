@@ -10,3 +10,8 @@ fun tile_none(): MpTile = "mac#mp_null_ptr"
 fun tile_is_null(t: MpTile): int = "mac#mp_ptr_is_null"
 fun tile_of(p: ptr): MpTile = "mac#mp_id_ptr"
 fun tile_ptr(t: MpTile): ptr = "mac#mp_id_ptr"
+
+abst@ype MpBuckets = ptr
+
+fun buckets_of(p: ptr): MpBuckets = "mac#mp_id_ptr"
+fun buckets_ptr(b: MpBuckets): ptr = "mac#mp_id_ptr"
