@@ -3,6 +3,7 @@
 staload "x11/display_box.sats"
 staload "x11/visual_box.sats"
 staload "x11/xevent_box.sats"
+staload "x11/xvisual_box.sats"
 staload "x11/attr_box.sats"
 
 %{#
@@ -24,7 +25,7 @@ fun mp_xevent_motion_y(e: MpXEvent): int = "mac#"
 fun mp_xevent_motion_state(e: MpXEvent): uint = "mac#"
 
 fun mp_xvi_depth(vi: MpVisual): int = "mac#"
-fun mp_xvi_visual(vi: MpVisual): ptr = "mac#"
+fun mp_xvi_visual(vi: MpVisual): MpXVisual = "mac#"
 fun mp_swa_sizeof(): int = "mac#"
 fun mp_hints_sizeof(): int = "mac#"
 fun mp_swa_set(swa: MpSwa, cmap: ulint, mask: lint): void = "mac#"
@@ -37,11 +38,11 @@ fun mp_x_define_cursor(d: MpDisplay, w: ulint, c: ulint): void = "mac#"
 fun mp_x_destroy_window(d: MpDisplay, w: ulint): void = "mac#"
 fun mp_x_close_display(d: MpDisplay): void = "mac#"
 
-fun XCreateColormap(dpy: MpDisplay, w: ulint, visual: ptr, alloc: int): ulint = "mac#"
+fun XCreateColormap(dpy: MpDisplay, w: ulint, visual: MpXVisual, alloc: int): ulint = "mac#"
 fun mp_XCreateWindow(
   dpy: MpDisplay, parent: ulint, x: int, y: int,
   width: uint, height: uint, border: uint,
-  depth: int, klass: uint, visual: ptr,
+  depth: int, klass: uint, visual: MpXVisual,
   valuemask: ulint, swa: MpSwa
 ): ulint = "mac#XCreateWindow"
 fun XStoreName(dpy: MpDisplay, w: ulint, name: string): int = "mac#"

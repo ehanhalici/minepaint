@@ -5,6 +5,7 @@ staload "sys/libc.dats"
 staload "window/input.dats"
 staload "x11/xi2.sats"
 staload "x11/devtab.sats"
+staload "x11/dev_box.sats"
 staload "x11/devlist.sats"
 staload "x11/raw_box.sats"
 staload "x11/display_box.sats"
@@ -119,11 +120,11 @@ val g_xi = ref<XI2BackendState>(@{
 
 fn xi2_state_ref(): ref(XI2BackendState) = g_xi
 
-fn xi2_dev_ptr(base: MpDevTab, id: int): ptr =
-  ptr_add<XI2DevInfo>(devtab_ptr(base), id)
+fn xi2_dev_ptr(base: MpDevTab, id: int): MpDev =
+  dev_of(ptr_add<XI2DevInfo>(devtab_ptr(base), id))
 
 fn xi2_dev_ref(base: MpDevTab, id: int): ref(XI2DevInfo) =
-  view_dev(xi2_dev_ptr(base, id))
+  view_dev(dev_ptr(xi2_dev_ptr(base, id)))
 
 fn xi2_clear_device(base: MpDevTab, id: int): void = let
   val dev = xi2_dev_ref(base, id)
@@ -146,7 +147,7 @@ end
 
 // --- Valuator ve Eksen İnceleme ---
 fn xi2_inspect_valuator(
-  dpy: MpDisplay, devs: MpDevList, dev_idx: int, class_idx: int, dev_p: ptr
+  dpy: MpDisplay, devs: MpDevList, dev_idx: int, class_idx: int, dev_p: MpDev
 ): void = let
   val ctype = c_xi2_device_class_type(devs, dev_idx, class_idx)
 in
@@ -158,7 +159,7 @@ in
     val is_press = if ok > 0 then str_has_substr_ci(addr2str(text_ptr(p_buf)), "pressure") else false
   in
     if is_press then let
-      val dev = view_dev(dev_p)
+      val dev = view_dev(dev_ptr(dev_p))
       val axis = c_xi2_device_class_val_axis(devs, dev_idx, class_idx)
       val min_v = c_xi2_device_class_val_min(devs, dev_idx, class_idx)
       val max_v = c_xi2_device_class_val_max(devs, dev_idx, class_idx)
@@ -171,7 +172,7 @@ in
 end
 
 fn xi2_inspect_device_classes(
-  dpy: MpDisplay, devs: MpDevList, dev_idx: int, num_classes: int, dev_p: ptr
+  dpy: MpDisplay, devs: MpDevList, dev_idx: int, num_classes: int, dev_p: MpDev
 ): void = let
   fun loop(c: int): void =
     if c < num_classes then (xi2_inspect_valuator(dpy, devs, dev_idx, c, dev_p); loop(c + 1)) else ()
@@ -266,9 +267,9 @@ in
 end
 
 fn xi2_process_stylus_event(
-  raw_data: MpRaw, dev_p: ptr, evtype: int, now: double
+  raw_data: MpRaw, dev_p: MpDev, evtype: int, now: double
 ): void = let
-  val dev = view_dev(dev_p)
+  val dev = view_dev(dev_ptr(dev_p))
   val axis = dev->pressure_axis
 in
   if axis >= 0 then let
