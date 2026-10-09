@@ -5,8 +5,7 @@
 #include "share/atspre_staload.hats"
 
 staload "canvas/gl_surface.dats"
-
-#define MINEPAINT_BRUSH_SETTING_SLOW_TRACKING 31
+staload "draw_engine/setting_id.sats"
 
 extern fun minepaint_brush_stroke_to(
   brush: int, surf: ptr,
@@ -16,8 +15,8 @@ extern fun minepaint_brush_stroke_to(
 ): int = "ext#minepaint_brush_stroke_to"
 extern fun minepaint_brush_reset(brush: int): void = "ext#minepaint_brush_reset"
 extern fun minepaint_brush_new_stroke(brush: int): void = "ext#minepaint_brush_new_stroke"
-extern fun minepaint_brush_set_base_value(brush: int, setting: int, value: float): void = "ext#minepaint_brush_set_base_value"
-extern fun minepaint_brush_get_base_value(brush: int, setting: int): float = "ext#minepaint_brush_get_base_value"
+extern fun minepaint_brush_set_base_value(brush: int, setting: SettingId, value: float): void = "ext#minepaint_brush_set_base_value"
+extern fun minepaint_brush_get_base_value(brush: int, setting: SettingId): float = "ext#minepaint_brush_get_base_value"
 
 extern fun sqrtf(x: float): float = "mac#"
 extern fun powf(x: float, y: float): float = "mac#"
@@ -225,12 +224,12 @@ end
 // --- Dışa Aktarılan Stroke Queue API'si ---
 extern fun stroke_queue_teleport(brush: int, surf: ptr, x: float, y: float): void = "ext#stroke_queue_teleport"
 implement stroke_queue_teleport(brush, surf, x, y) = let
-  val saved_tracking = minepaint_brush_get_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING)
-  val () = minepaint_brush_set_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING, 0.0f)
+  val saved_tracking = minepaint_brush_get_base_value(brush, SetSlowTracking())
+  val () = minepaint_brush_set_base_value(brush, SetSlowTracking(), 0.0f)
   val () = minepaint_brush_reset(brush)
   val _ = minepaint_brush_stroke_to(brush, surf, x, y, 0.0f, 0.0f, 0.0f, 0.0, 1.0f, 0.0f, 0.0f, 0)
   val () = minepaint_brush_new_stroke(brush)
-  val () = minepaint_brush_set_base_value(brush, MINEPAINT_BRUSH_SETTING_SLOW_TRACKING, saved_tracking)
+  val () = minepaint_brush_set_base_value(brush, SetSlowTracking(), saved_tracking)
 in () end
 
 extern fun stroke_queue_start(wx: float, wy: float, pressure: float): int = "ext#stroke_queue_start"

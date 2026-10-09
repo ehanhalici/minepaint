@@ -7,14 +7,15 @@ staload "./settings.dats"
 staload "./helpers.dats"
 staload "./surface.dats"
 staload "./brush.dats"
+staload "draw_engine/setting_id.sats"
 
 // --- Fırça Motoru Fonksiyon Bildirimleri ---
 extern fun draw_engine_brush_new(): int = "ext#draw_engine_brush_new"
 extern fun draw_engine_brush_free(b: int): void = "ext#draw_engine_brush_free"
 extern fun draw_engine_brush_reset(b: int): void = "ext#draw_engine_brush_reset"
 extern fun draw_engine_brush_new_stroke(b: int): void = "ext#draw_engine_brush_new_stroke"
-extern fun draw_engine_brush_set_base_value(b: int, id: int, v: float): void = "ext#draw_engine_brush_set_base_value"
-extern fun draw_engine_brush_get_base_value(b: int, id: int): float = "ext#draw_engine_brush_get_base_value"
+extern fun draw_engine_brush_set_base_value(b: int, id: SettingId, v: float): void = "ext#draw_engine_brush_set_base_value"
+extern fun draw_engine_brush_get_base_value(b: int, id: SettingId): float = "ext#draw_engine_brush_get_base_value"
 extern fun draw_engine_brush_apply_startup(b: int): void = "ext#draw_engine_brush_apply_startup"
 extern fun draw_engine_brush_stroke_to(
     b: int, surf: ptr,
@@ -39,10 +40,10 @@ implement minepaint_brush_reset(b) = draw_engine_brush_reset(b)
 extern fun minepaint_brush_new_stroke(b: int): void = "ext#minepaint_brush_new_stroke"
 implement minepaint_brush_new_stroke(b) = draw_engine_brush_new_stroke(b)
 
-extern fun minepaint_brush_set_base_value(b: int, id: int, v: float): void = "ext#minepaint_brush_set_base_value"
+extern fun minepaint_brush_set_base_value(b: int, id: SettingId, v: float): void = "ext#minepaint_brush_set_base_value"
 implement minepaint_brush_set_base_value(b, id, v) = draw_engine_brush_set_base_value(b, id, v)
 
-extern fun minepaint_brush_get_base_value(b: int, id: int): float = "ext#minepaint_brush_get_base_value"
+extern fun minepaint_brush_get_base_value(b: int, id: SettingId): float = "ext#minepaint_brush_get_base_value"
 implement minepaint_brush_get_base_value(b, id) = draw_engine_brush_get_base_value(b, id)
 
 extern fun minepaint_brush_apply_startup(b: int): void = "ext#minepaint_brush_apply_startup"

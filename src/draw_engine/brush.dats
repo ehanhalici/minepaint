@@ -5,6 +5,7 @@
 #include "./minepaint_types.hats"
 
 staload "./settings.dats"
+staload "draw_engine/setting_id.sats"
 staload "./helpers.dats"
 staload "./surface.dats"
 #include "./brushsettings_gen.hats"
@@ -280,32 +281,41 @@ implement draw_engine_brush_reset(b) =
 extern fun draw_engine_brush_new_stroke(b: int): void = "ext#draw_engine_brush_new_stroke"
 implement draw_engine_brush_new_stroke(b) = ()
 
-extern fun draw_engine_brush_set_base_value(b: int, id: int, v: float): void = "ext#draw_engine_brush_set_base_value"
-implement draw_engine_brush_set_base_value(b, id, v) =
+extern fun draw_engine_brush_set_base_value(b: int, id: SettingId, v: float): void = "ext#draw_engine_brush_set_base_value"
+implement draw_engine_brush_set_base_value(b, id, v) = let
+  val ix = setting_ix(id)
+in
   if b >= 0 then
-    if (id >= 0) * (id < 65) then let
-      val m = mp_brush_get_mapping(b, id)
-      val () = mp_brush_set_base(b, id, v)
-      val () = mp_brush_set_val(b, id, v)
+    if (ix >= 0) * (ix < 65) then let
+      val m = mp_brush_get_mapping(b, ix)
+      val () = mp_brush_set_base(b, ix, v)
+      val () = mp_brush_set_val(b, ix, v)
     in
       if m != MAPPING_NONE then minepaint_mapping_set_base_value(m, v)
     end
+end
 
 extern fun draw_engine_brush_set_mapping_n(
-  b: int, setting: int, input: int, n: int
+  b: int, setting: SettingId, input: int, n: int
 ): void = "ext#draw_engine_brush_set_mapping_n"
-implement draw_engine_brush_set_mapping_n(b, setting, input, n) =
+implement draw_engine_brush_set_mapping_n(b, setting, input, n) = let
+  val ix = setting_ix(setting)
+in
   if b >= 0 then
-    if (setting >= 0) * (setting < 65) * (input >= 0) * (input < 18) * (n >= 0) * (n <= 64) * (n != 1) then
-      minepaint_mapping_set_n(mp_brush_get_mapping(b, setting), input, n)
+    if (ix >= 0) * (ix < 65) * (input >= 0) * (input < 18) * (n >= 0) * (n <= 64) * (n != 1) then
+      minepaint_mapping_set_n(mp_brush_get_mapping(b, ix), input, n)
+end
 
 extern fun draw_engine_brush_set_mapping_point(
-  b: int, setting: int, input: int, index: int, x: float, y: float
+  b: int, setting: SettingId, input: int, index: int, x: float, y: float
 ): void = "ext#draw_engine_brush_set_mapping_point"
-implement draw_engine_brush_set_mapping_point(b, setting, input, index, x, y) =
+implement draw_engine_brush_set_mapping_point(b, setting, input, index, x, y) = let
+  val ix = setting_ix(setting)
+in
   if b >= 0 then
-    if (setting >= 0) * (setting < 65) * (input >= 0) * (input < 18) then
-      minepaint_mapping_set_point(mp_brush_get_mapping(b, setting), input, index, x, y)
+    if (ix >= 0) * (ix < 65) * (input >= 0) * (input < 18) then
+      minepaint_mapping_set_point(mp_brush_get_mapping(b, ix), input, index, x, y)
+end
 
 extern fun draw_engine_brush_prepare_load(b: int): void = "ext#draw_engine_brush_prepare_load"
 implement draw_engine_brush_prepare_load(b) =
@@ -317,35 +327,35 @@ implement draw_engine_brush_prepare_load(b) =
 
 fn apply_startup_base_values(b: int): void = let
   val () = reset_settings(b, 0)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_OPAQUE, 1.0f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_OPAQUE_LINEARIZE, 1.0f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 1.0f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 1.2f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_HARDNESS, 0.1f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS, 5.0f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_DABS_PER_SECOND, 40.0f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_SLOW_TRACKING, 3.0f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_TRACKING_NOISE, 0.0f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_ANTI_ALIASING, 1.0f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_COLOR_H, 1.0f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_COLOR_S, 0.0f)
-  val () = draw_engine_brush_set_base_value(b, BRUSH_SETTING_COLOR_V, 0.729f)
+  val () = draw_engine_brush_set_base_value(b, SetOpaque(), 1.0f)
+  val () = draw_engine_brush_set_base_value(b, SetOpaqueLinearize(), 1.0f)
+  val () = draw_engine_brush_set_base_value(b, SetOpaqueMultiply(), 1.0f)
+  val () = draw_engine_brush_set_base_value(b, SetRadiusLogarithmic(), 1.2f)
+  val () = draw_engine_brush_set_base_value(b, SetHardness(), 0.1f)
+  val () = draw_engine_brush_set_base_value(b, SetDabsPerActualRadius(), 5.0f)
+  val () = draw_engine_brush_set_base_value(b, SetDabsPerSecond(), 40.0f)
+  val () = draw_engine_brush_set_base_value(b, SetSlowTracking(), 3.0f)
+  val () = draw_engine_brush_set_base_value(b, SetTrackingNoise(), 0.0f)
+  val () = draw_engine_brush_set_base_value(b, SetAntiAliasing(), 1.0f)
+  val () = draw_engine_brush_set_base_value(b, SetColorH(), 1.0f)
+  val () = draw_engine_brush_set_base_value(b, SetColorS(), 0.0f)
+  val () = draw_engine_brush_set_base_value(b, SetColorV(), 0.729f)
 in
-  draw_engine_brush_set_base_value(b, BRUSH_SETTING_PAINT_MODE, 0.0f)
+  draw_engine_brush_set_base_value(b, SetPaintMode(), 0.0f)
 end
 
 fn apply_startup_dynamics(b: int): void = let
-  val () = draw_engine_brush_set_mapping_n(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 4)
-  val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 0, 0.0f, ~1.4f)
-  val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 1, 0.8f, 0.0f)
-  val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 2, 1.0f, 0.35f)
-  val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_RADIUS_LOGARITHMIC, 0, 3, 2.0f, 0.7f)
+  val () = draw_engine_brush_set_mapping_n(b, SetRadiusLogarithmic(), 0, 4)
+  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), 0, 0, 0.0f, ~1.4f)
+  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), 0, 1, 0.8f, 0.0f)
+  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), 0, 2, 1.0f, 0.35f)
+  val () = draw_engine_brush_set_mapping_point(b, SetRadiusLogarithmic(), 0, 3, 2.0f, 0.7f)
 
-  val () = draw_engine_brush_set_mapping_n(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 0, 4)
-  val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 0, 0, 0.0f, ~1.0f)
-  val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 0, 1, 0.8f, 0.0f)
-  val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 0, 2, 1.0f, 0.0f)
-  val () = draw_engine_brush_set_mapping_point(b, BRUSH_SETTING_OPAQUE_MULTIPLY, 0, 3, 2.0f, 0.0f)
+  val () = draw_engine_brush_set_mapping_n(b, SetOpaqueMultiply(), 0, 4)
+  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), 0, 0, 0.0f, ~1.0f)
+  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), 0, 1, 0.8f, 0.0f)
+  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), 0, 2, 1.0f, 0.0f)
+  val () = draw_engine_brush_set_mapping_point(b, SetOpaqueMultiply(), 0, 3, 2.0f, 0.0f)
 in
   mp_brush_set_reset(b, 1)
 end
@@ -358,11 +368,14 @@ implement draw_engine_brush_apply_startup(b) =
     apply_startup_dynamics(b)
   end
 
-extern fun draw_engine_brush_get_base_value(b: int, id: int): float = "ext#draw_engine_brush_get_base_value"
-implement draw_engine_brush_get_base_value(b, id) =
+extern fun draw_engine_brush_get_base_value(b: int, id: SettingId): float = "ext#draw_engine_brush_get_base_value"
+implement draw_engine_brush_get_base_value(b, id) = let
+  val ix = setting_ix(id)
+in
   if b >= 0 then
-    if (id >= 0) * (id < 65) then mp_brush_get_base(b, id) else 0.0f
+    if (ix >= 0) * (ix < 65) then mp_brush_get_base(b, ix) else 0.0f
   else 0.0f
+end
 
 extern fun draw_engine_brush_get_state(b: int, i: int): float = "ext#draw_engine_brush_get_state"
 implement draw_engine_brush_get_state(b, i) =
@@ -394,15 +407,15 @@ fn calc_dab_rates(b: int): @(float, float, float) = let
   val dabs_bas_st = mp_brush_get_state(b, BRUSH_STATE_DABS_PER_BASIC_RADIUS)
   val dabs_sec_st = mp_brush_get_state(b, BRUSH_STATE_DABS_PER_SECOND)
   val is_zero = (dabs_act_st = 0.0f) * (dabs_bas_st = 0.0f) * (dabs_sec_st = 0.0f)
-  val dabs_actual = if is_zero then mp_brush_get_val(b, BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS) else dabs_act_st
-  val dabs_basic = if is_zero then mp_brush_get_val(b, BRUSH_SETTING_DABS_PER_BASIC_RADIUS) else dabs_bas_st
-  val dabs_sec = if is_zero then mp_brush_get_val(b, BRUSH_SETTING_DABS_PER_SECOND) else dabs_sec_st
+  val dabs_actual = if is_zero then mp_brush_get_val(b, setting_ix(SetDabsPerActualRadius())) else dabs_act_st
+  val dabs_basic = if is_zero then mp_brush_get_val(b, setting_ix(SetDabsPerBasicRadius())) else dabs_bas_st
+  val dabs_sec = if is_zero then mp_brush_get_val(b, setting_ix(SetDabsPerSecond())) else dabs_sec_st
 in
   @(dabs_actual, dabs_basic, dabs_sec)
 end
 
 fun count_dabs_to(b: int, x: float, y: float, dt: float): float = let
-  val base_radius = clamp_radius(expf(mp_brush_get_base(b, BRUSH_SETTING_RADIUS_LOGARITHMIC)))
+  val base_radius = clamp_radius(expf(mp_brush_get_base(b, setting_ix(SetRadiusLogarithmic()))))
   val actual_rad = calc_actual_rad(b, base_radius)
   val dx = f_sub(x, mp_brush_get_state(b, BRUSH_STATE_X))
   val dy = f_sub(y, mp_brush_get_state(b, BRUSH_STATE_Y))
@@ -464,16 +477,16 @@ end
 fn populate_input_buffer(
   b: int, in_p: &(@[float][MAPPING_INPUTS]), cur_p: float, viewzoom: float, base_radius_log: float
 ): void = let
-  val gain = expf(mp_brush_get_base(b, BRUSH_SETTING_PRESSURE_GAIN_LOG))
+  val gain = expf(mp_brush_get_base(b, setting_ix(SetPressureGainLog())))
   val zoom_lin = if viewzoom < 0.01f then 0.01f else viewzoom
-  val gscale = expf(mp_brush_get_val(b, BRUSH_SETTING_GRIDMAP_SCALE))
+  val gscale = expf(mp_brush_get_val(b, setting_ix(SetGridmapScale())))
   val () = in_set(in_p, 0, f_mul(cur_p, gain))
   val () = in_set(in_p, 1, g0float2float_double_float(rng_double_next(jitter_rng(b))))
   val () = in_set(in_p, 2, mp_brush_get_state(b, BRUSH_STATE_STROKE))
-  val () = in_set(in_p, 6, speed_input(mp_brush_get_base(b, BRUSH_SETTING_SPEED1_GAMMA), mp_brush_get_state(b, BRUSH_STATE_NORM_SPEED1_SLOW)))
-  val () = in_set(in_p, 7, speed_input(mp_brush_get_base(b, BRUSH_SETTING_SPEED2_GAMMA), mp_brush_get_state(b, BRUSH_STATE_NORM_SPEED2_SLOW)))
-  val () = in_set(in_p, 13, grid_coord(mp_brush_get_state(b, BRUSH_STATE_ACTUAL_X), gscale, mp_brush_get_val(b, BRUSH_SETTING_GRIDMAP_SCALE_X)))
-  val () = in_set(in_p, 14, grid_coord(mp_brush_get_state(b, BRUSH_STATE_ACTUAL_Y), gscale, mp_brush_get_val(b, BRUSH_SETTING_GRIDMAP_SCALE_Y)))
+  val () = in_set(in_p, 6, speed_input(mp_brush_get_base(b, setting_ix(SetSpeed1Gamma())), mp_brush_get_state(b, BRUSH_STATE_NORM_SPEED1_SLOW)))
+  val () = in_set(in_p, 7, speed_input(mp_brush_get_base(b, setting_ix(SetSpeed2Gamma())), mp_brush_get_state(b, BRUSH_STATE_NORM_SPEED2_SLOW)))
+  val () = in_set(in_p, 13, grid_coord(mp_brush_get_state(b, BRUSH_STATE_ACTUAL_X), gscale, mp_brush_get_val(b, setting_ix(SetGridmapScaleX()))))
+  val () = in_set(in_p, 14, grid_coord(mp_brush_get_state(b, BRUSH_STATE_ACTUAL_Y), gscale, mp_brush_get_val(b, setting_ix(SetGridmapScaleY()))))
   val () = in_set(in_p, 15, viewzoom_input(base_radius_log, zoom_lin))
 in
   in_set(in_p, 16, base_radius_log)
@@ -495,19 +508,19 @@ fn eval_mappings(b: int, in_p: &(@[float][MAPPING_INPUTS])): void =
 fn update_tracking_speed(
   b: int, cur_x: float, cur_y: float, norm_speed: float, step_ddab: float, dt: float
 ): void = let
-  val slow_tracking_per_dab = mp_brush_get_val(b, BRUSH_SETTING_SLOW_TRACKING_PER_DAB)
+  val slow_tracking_per_dab = mp_brush_get_val(b, setting_ix(SetSlowTrackingPerDab()))
   val fac = f_sub(1.0f, engine_exp_decay(slow_tracking_per_dab, step_ddab))
   val old_act_x = mp_brush_get_state(b, BRUSH_STATE_ACTUAL_X)
   val old_act_y = mp_brush_get_state(b, BRUSH_STATE_ACTUAL_Y)
   val () = mp_brush_set_state(b, BRUSH_STATE_ACTUAL_X, f_add(old_act_x, f_mul(f_sub(cur_x, old_act_x), fac)))
   val () = mp_brush_set_state(b, BRUSH_STATE_ACTUAL_Y, f_add(old_act_y, f_mul(f_sub(cur_y, old_act_y), fac)))
 
-  val s1_slowness = mp_brush_get_val(b, BRUSH_SETTING_SPEED1_SLOWNESS)
+  val s1_slowness = mp_brush_get_val(b, setting_ix(SetSpeed1Slowness()))
   val fac1 = f_sub(1.0f, engine_exp_decay(s1_slowness, dt))
   val old_s1 = mp_brush_get_state(b, BRUSH_STATE_NORM_SPEED1_SLOW)
   val () = mp_brush_set_state(b, BRUSH_STATE_NORM_SPEED1_SLOW, f_add(old_s1, f_mul(f_sub(norm_speed, old_s1), fac1)))
 
-  val s2_slowness = mp_brush_get_val(b, BRUSH_SETTING_SPEED2_SLOWNESS)
+  val s2_slowness = mp_brush_get_val(b, setting_ix(SetSpeed2Slowness()))
   val fac2 = f_sub(1.0f, engine_exp_decay(s2_slowness, dt))
   val old_s2 = mp_brush_get_state(b, BRUSH_STATE_NORM_SPEED2_SLOW)
 in
@@ -515,12 +528,12 @@ in
 end
 
 fn update_actual_geometry(b: int): void = let
-  val rad_log = mp_brush_get_val(b, BRUSH_SETTING_RADIUS_LOGARITHMIC)
+  val rad_log = mp_brush_get_val(b, setting_ix(SetRadiusLogarithmic()))
   val rad_clamped = clamp_radius(expf(rad_log))
   val () = mp_brush_set_state(b, BRUSH_STATE_ACTUAL_RADIUS, rad_clamped)
-  val () = mp_brush_set_state(b, BRUSH_STATE_ACTUAL_ELLIPTICAL_DAB_RATIO, mp_brush_get_val(b, BRUSH_SETTING_ELLIPTICAL_DAB_RATIO))
+  val () = mp_brush_set_state(b, BRUSH_STATE_ACTUAL_ELLIPTICAL_DAB_RATIO, mp_brush_get_val(b, setting_ix(SetEllipticalDabRatio())))
 in
-  mp_brush_set_state(b, BRUSH_STATE_ACTUAL_ELLIPTICAL_DAB_ANGLE, mp_brush_get_val(b, BRUSH_SETTING_ELLIPTICAL_DAB_ANGLE))
+  mp_brush_set_state(b, BRUSH_STATE_ACTUAL_ELLIPTICAL_DAB_ANGLE, mp_brush_get_val(b, setting_ix(SetEllipticalDabAngle())))
 end
 
 fun update_states(
@@ -539,7 +552,7 @@ fun update_states(
   val () = mp_brush_set_state(b, BRUSH_STATE_PRESSURE, cur_p)
   val () = mp_brush_set_state(b, BRUSH_STATE_VIEWZOOM, viewzoom)
 
-  val base_radius_log = mp_brush_get_base(b, BRUSH_SETTING_RADIUS_LOGARITHMIC)
+  val base_radius_log = mp_brush_get_base(b, setting_ix(SetRadiusLogarithmic()))
   val norm_dx = f_mul(f_div(step_dx, dt), viewzoom)
   val norm_dy = f_mul(f_div(step_dy, dt), viewzoom)
   val norm_speed = hypotf(norm_dx, norm_dy)
@@ -548,9 +561,9 @@ fun update_states(
   val () = populate_input_buffer(b, inbuf, cur_p, viewzoom, base_radius_log)
   val () = eval_mappings(b, inbuf)
 
-  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_BASIC_RADIUS, mp_brush_get_val(b, BRUSH_SETTING_DABS_PER_BASIC_RADIUS))
-  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_ACTUAL_RADIUS, mp_brush_get_val(b, BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS))
-  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_SECOND, mp_brush_get_val(b, BRUSH_SETTING_DABS_PER_SECOND))
+  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_BASIC_RADIUS, mp_brush_get_val(b, setting_ix(SetDabsPerBasicRadius())))
+  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_ACTUAL_RADIUS, mp_brush_get_val(b, setting_ix(SetDabsPerActualRadius())))
+  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_SECOND, mp_brush_get_val(b, setting_ix(SetDabsPerSecond())))
 
   val () = update_tracking_speed(b, cur_x, cur_y, norm_speed, step_ddab, dt)
 in
@@ -558,12 +571,12 @@ in
 end
 
 fn compute_opaque_final(b: int): float = let
-  val opaque_fac = mp_brush_get_val(b, BRUSH_SETTING_OPAQUE_MULTIPLY)
-  val opaque_raw0 = mp_brush_get_val(b, BRUSH_SETTING_OPAQUE)
+  val opaque_fac = mp_brush_get_val(b, setting_ix(SetOpaqueMultiply()))
+  val opaque_raw0 = mp_brush_get_val(b, setting_ix(SetOpaque()))
   val opaque_pos = if opaque_raw0 < 0.0f then 0.0f else opaque_raw0
   val opaque_mult = f_mul(opaque_pos, if opaque_fac > 0.0f then opaque_fac else 1.0f)
   val opaque_clamped = if opaque_mult > 1.0f then 1.0f else if opaque_mult < 0.0f then 0.0f else opaque_mult
-  val opaque_linearize = mp_brush_get_base(b, BRUSH_SETTING_OPAQUE_LINEARIZE)
+  val opaque_linearize = mp_brush_get_base(b, setting_ix(SetOpaqueLinearize()))
 in
   if opaque_linearize > 0.001f then let
     val sum_dabs = f_add(mp_brush_get_state(b, BRUSH_STATE_DABS_PER_ACTUAL_RADIUS), mp_brush_get_state(b, BRUSH_STATE_DABS_PER_BASIC_RADIUS))
@@ -595,9 +608,9 @@ end
 
 fun prepare_and_draw_dab(b: int, surf: ptr): int = let
   val opaque_final = compute_opaque_final(b)
-  val jitter = mp_brush_get_val(b, BRUSH_SETTING_OFFSET_BY_RANDOM)
+  val jitter = mp_brush_get_val(b, setting_ix(SetOffsetByRandom()))
   val amp = if g0float_gt(jitter, 0.0f) then jitter else 0.0f
-  val base_r = expf(mp_brush_get_base(b, BRUSH_SETTING_RADIUS_LOGARITHMIC))
+  val base_r = expf(mp_brush_get_base(b, setting_ix(SetRadiusLogarithmic())))
   val spread = f_mul(amp, base_r)
   val use_jitter = g0float_gt(amp, 0.0f)
   val jx = if use_jitter then f_mul(rand_gauss(jitter_rng(b)), spread) else 0.0f
@@ -607,32 +620,32 @@ fun prepare_and_draw_dab(b: int, surf: ptr): int = let
   val radius_raw = mp_brush_get_state(b, BRUSH_STATE_ACTUAL_RADIUS)
 
   val @(color_r, color_g, color_b) = engine_hsv_to_rgb(
-    mp_brush_get_base(b, BRUSH_SETTING_COLOR_H),
-    mp_brush_get_base(b, BRUSH_SETTING_COLOR_S),
-    mp_brush_get_base(b, BRUSH_SETTING_COLOR_V)
+    mp_brush_get_base(b, setting_ix(SetColorH())),
+    mp_brush_get_base(b, setting_ix(SetColorS())),
+    mp_brush_get_base(b, setting_ix(SetColorV()))
   )
 
-  val hardness_raw = mp_brush_get_val(b, BRUSH_SETTING_HARDNESS)
+  val hardness_raw = mp_brush_get_val(b, setting_ix(SetHardness()))
   val hardness = if hardness_raw < 0.0f then 0.0f else if hardness_raw > 1.0f then 1.0f else hardness_raw
-  val softness = mp_brush_get_val(b, BRUSH_SETTING_SOFTNESS)
-  val min_fadeout = mp_brush_get_val(b, BRUSH_SETTING_ANTI_ALIASING)
+  val softness = mp_brush_get_val(b, setting_ix(SetSoftness()))
+  val min_fadeout = mp_brush_get_val(b, setting_ix(SetAntiAliasing()))
   val @(final_radius, final_hardness) = compute_anti_aliased_dab(radius_raw, hardness, min_fadeout)
 
-  val eraser_val = mp_brush_get_val(b, BRUSH_SETTING_ERASER)
+  val eraser_val = mp_brush_get_val(b, setting_ix(SetEraser()))
   val eraser_target_alpha = if eraser_val > 0.0f then f_sub(1.0f, eraser_val) else 1.0f
   val dab_ratio = mp_brush_get_state(b, BRUSH_STATE_ACTUAL_ELLIPTICAL_DAB_RATIO)
   val aspect = if dab_ratio < 1.0f then 1.0f else dab_ratio
   val angle = mp_brush_get_state(b, BRUSH_STATE_ACTUAL_ELLIPTICAL_DAB_ANGLE)
-  val paint_raw = mp_brush_get_val(b, BRUSH_SETTING_PAINT_MODE)
+  val paint_raw = mp_brush_get_val(b, setting_ix(SetPaintMode()))
   val paint_mode = if paint_raw < 0.0f then 0.0f else if paint_raw > 1.0f then 1.0f else paint_raw
 in
   draw_engine_surface_draw_dab(
     surf, x, y, final_radius, color_r, color_g, color_b,
     opaque_final, final_hardness, softness, eraser_target_alpha,
-    aspect, angle, mp_brush_get_val(b, BRUSH_SETTING_LOCK_ALPHA),
-    mp_brush_get_val(b, BRUSH_SETTING_COLORIZE),
-    mp_brush_get_val(b, BRUSH_SETTING_POSTERIZE),
-    mp_brush_get_val(b, BRUSH_SETTING_POSTERIZE_NUM),
+    aspect, angle, mp_brush_get_val(b, setting_ix(SetLockAlpha())),
+    mp_brush_get_val(b, setting_ix(SetColorize())),
+    mp_brush_get_val(b, setting_ix(SetPosterize())),
+    mp_brush_get_val(b, setting_ix(SetPosterizeNum())),
     paint_mode
   )
 end
@@ -646,11 +659,11 @@ fn reset_stroke_state(b: int, x: float, y: float, p_clean: float): int = let
   val () = mp_brush_set_state(b, BRUSH_STATE_ACTUAL_Y, y)
   val () = mp_brush_set_state(b, BRUSH_STATE_PRESSURE, p_clean)
   val () = mp_brush_set_state(b, BRUSH_STATE_STROKE, 1.0f)
-  val base_rad = clamp_radius(expf(mp_brush_get_base(b, BRUSH_SETTING_RADIUS_LOGARITHMIC)))
+  val base_rad = clamp_radius(expf(mp_brush_get_base(b, setting_ix(SetRadiusLogarithmic()))))
   val () = mp_brush_set_state(b, BRUSH_STATE_ACTUAL_RADIUS, base_rad)
-  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_BASIC_RADIUS, mp_brush_get_base(b, BRUSH_SETTING_DABS_PER_BASIC_RADIUS))
-  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_ACTUAL_RADIUS, mp_brush_get_base(b, BRUSH_SETTING_DABS_PER_ACTUAL_RADIUS))
-  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_SECOND, mp_brush_get_base(b, BRUSH_SETTING_DABS_PER_SECOND))
+  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_BASIC_RADIUS, mp_brush_get_base(b, setting_ix(SetDabsPerBasicRadius())))
+  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_ACTUAL_RADIUS, mp_brush_get_base(b, setting_ix(SetDabsPerActualRadius())))
+  val () = mp_brush_set_state(b, BRUSH_STATE_DABS_PER_SECOND, mp_brush_get_base(b, setting_ix(SetDabsPerSecond())))
 in
   1
 end
@@ -702,7 +715,7 @@ implement draw_engine_brush_stroke_to(
   in
     if (dtime > 5.0) || (is_reset > 0) then reset_stroke_state(b, x, y, p_clean)
     else let
-      val tracking = mp_brush_get_val(b, BRUSH_SETTING_SLOW_TRACKING)
+      val tracking = mp_brush_get_val(b, setting_ix(SetSlowTracking()))
       val fac = f_sub(1.0f, engine_exp_decay(tracking, f_mul(100.0f, dt_float)))
       val old_x = mp_brush_get_state(b, BRUSH_STATE_X)
       val old_y = mp_brush_get_state(b, BRUSH_STATE_Y)

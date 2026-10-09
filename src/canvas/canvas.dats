@@ -8,6 +8,7 @@ staload "canvas/stroke_queue.dats"
 staload "canvas/gl_surface.dats"
 staload "canvas/layer.dats"
 staload "brushes/brush_group.sats"
+staload "draw_engine/setting_id.sats"
 
 typedef canvas_state_record = @{
   brush= int,
@@ -82,8 +83,8 @@ extern fun glTranslatef(x: float, y: float, z: float): void = "mac#"
 extern fun glScalef(x: float, y: float, z: float): void = "mac#"
 
 extern fun minepaint_brush_reset(brush: int): void = "ext#minepaint_brush_reset"
-extern fun minepaint_brush_set_base_value(brush: int, setting: int, value: float): void = "ext#minepaint_brush_set_base_value"
-extern fun minepaint_brush_get_base_value(brush: int, setting: int): float = "ext#minepaint_brush_get_base_value"
+extern fun minepaint_brush_set_base_value(brush: int, setting: SettingId, value: float): void = "ext#minepaint_brush_set_base_value"
+extern fun minepaint_brush_get_base_value(brush: int, setting: SettingId): float = "ext#minepaint_brush_get_base_value"
 
 extern fun get_time_seconds(): double = "ext#get_time_seconds"
 fn i2f(i: int): float = g0int2float_int_float(i)
@@ -289,9 +290,9 @@ implement canvas_set_brush_color(ch, r, g, b) = let
   val st = cget(ch)
 in
   if st.brush >= 0 then {
-    val () = minepaint_brush_set_base_value(st.brush, MINEPAINT_BRUSH_SETTING_COLOR_H, hue)
-    val () = minepaint_brush_set_base_value(st.brush, MINEPAINT_BRUSH_SETTING_COLOR_S, sat)
-    val () = minepaint_brush_set_base_value(st.brush, MINEPAINT_BRUSH_SETTING_COLOR_V, vv)
+    val () = minepaint_brush_set_base_value(st.brush, SetColorH(), hue)
+    val () = minepaint_brush_set_base_value(st.brush, SetColorS(), sat)
+    val () = minepaint_brush_set_base_value(st.brush, SetColorV(), vv)
   } else ()
 end
 
@@ -299,7 +300,7 @@ extern fun canvas_set_brush_setting(h: int, id: int, v: float): void = "ext#canv
 implement canvas_set_brush_setting(h, id, v) = let
   val st = cget(h)
 in
-  if st.brush >= 0 then minepaint_brush_set_base_value(st.brush, id, v) else ()
+  if st.brush >= 0 then minepaint_brush_set_base_value(st.brush, setting_of(id), v) else ()
 end
 
 extern fun canvas_apply_startup(h: int): void = "ext#canvas_apply_startup"
@@ -320,7 +321,7 @@ extern fun canvas_get_brush_setting(h: int, id: int): float = "ext#canvas_get_br
 implement canvas_get_brush_setting(h, id) = let
   val st = cget(h)
 in
-  if st.brush >= 0 then minepaint_brush_get_base_value(st.brush, id) else 0.0f
+  if st.brush >= 0 then minepaint_brush_get_base_value(st.brush, setting_of(id)) else 0.0f
 end
 
 extern fun canvas_state_create(brush: int): int = "ext#canvas_state_create"

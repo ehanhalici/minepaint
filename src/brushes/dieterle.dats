@@ -4,10 +4,6 @@
 
 #include "brushes/brush_helpers.hats"
 
-extern fun draw_engine_brush_set_base_value(b: int, id: int, v: float): void = "ext#draw_engine_brush_set_base_value"
-extern fun draw_engine_brush_set_mapping_n(b: int, setting: int, input: int, n: int): void = "ext#draw_engine_brush_set_mapping_n"
-extern fun draw_engine_brush_set_mapping_point(b: int, setting: int, input: int, index: int, x: float, y: float): void = "ext#draw_engine_brush_set_mapping_point"
-
 extern fun dieterle_brush_count(): int = "ext#dieterle_brush_count"
 implement dieterle_brush_count() = 19
 
