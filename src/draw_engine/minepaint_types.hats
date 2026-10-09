@@ -8,6 +8,7 @@
 
 staload "draw_engine/surface_box.sats"
 staload "draw_engine/req_box.sats"
+staload "draw_engine/fn_box.sats"
 
 // Dynamics mapping arena. A mapping is an integer handle into mapping.dats.
 #define MAPPING_NONE (~1)
@@ -42,12 +43,12 @@ typedef MinePaintSurfaceBeginAtomicFunction = (MpSurface) -> void
 typedef MinePaintSurfaceEndAtomicFunction = (MpSurface, MpRoi) -> void
 
 typedef MinePaintSurface = @{
-  draw_dab= ptr,
-  get_color= ptr,
-  begin_atomic= ptr,
-  end_atomic= ptr,
-  destroy= ptr,
-  save_png= ptr,
+  draw_dab= MpFn,
+  get_color= MpFn,
+  begin_atomic= MpFn,
+  end_atomic= MpFn,
+  destroy= MpFn,
+  save_png= MpFn,
   refcount= int
 }
 
@@ -75,8 +76,8 @@ typedef MinePaintTileRequestEndFunction = (MpSurface, MpReq) -> void
 
 typedef MinePaintTiledSurface = @{
   parent= MinePaintSurface,
-  tile_request_start= ptr,
-  tile_request_end= ptr,
+  tile_request_start= MpFn,
+  tile_request_end= MpFn,
   symmetry_data= int,
   operation_queue= int,
   num_bboxes= int,

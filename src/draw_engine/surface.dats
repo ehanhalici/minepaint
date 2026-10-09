@@ -74,7 +74,7 @@ implement minepaint_surface_unref(self) =
     val () =
       if rc <= 0 then let
         val d = s->destroy
-        val () = if d != the_null_ptr then call_surface_destroy(d, self)
+        val () = if fn_is_null(d) = 0 then call_surface_destroy(fn_ptr(d), self)
       in () end
   in () end
 
@@ -103,9 +103,9 @@ implement minepaint_surface_draw_dab(
     val s = view_mpsurf(self)
     val f = s->draw_dab
   in
-    if f != the_null_ptr then
+    if fn_is_null(f) = 0 then
       call_surface_draw_dab(
-        f, self, x, y, radius, r, g, b,
+        fn_ptr(f), self, x, y, radius, r, g, b,
         opaque, hardness, softness, alpha_eraser,
         aspect_ratio, angle, lock_alpha,
         colorize, posterize, posterize_num, paint
@@ -163,9 +163,9 @@ in
     val s = view_mpsurf(self)
     val f = s->get_color
   in
-    if f != the_null_ptr then
+    if fn_is_null(f) = 0 then
       call_surface_get_color(
-        f, self, x, y, radius,
+        fn_ptr(f), self, x, y, radius,
         addr@(color_r),
         addr@(color_g),
         addr@(color_b),
@@ -194,7 +194,7 @@ implement minepaint_surface_begin_atomic(self) =
     val s = view_mpsurf(self)
     val f = s->begin_atomic
   in
-    if f != the_null_ptr then call_surface_begin_atomic(f, self)
+    if fn_is_null(f) = 0 then call_surface_begin_atomic(fn_ptr(f), self)
   end
 
 extern fun minepaint_surface_end_atomic(self: MpSurface, roi: MpRoi): void = "ext#minepaint_surface_end_atomic"
@@ -203,7 +203,7 @@ implement minepaint_surface_end_atomic(self, roi) =
     val s = view_mpsurf(self)
     val f = s->end_atomic
   in
-    if f != the_null_ptr then call_surface_end_atomic(f, self, roi)
+    if fn_is_null(f) = 0 then call_surface_end_atomic(fn_ptr(f), self, roi)
   end
 
 extern fun minepaint_surface_save_png(self: MpSurface, path: string, x: int, y: int, w: int, h: int): void = "ext#minepaint_surface_save_png"
@@ -212,5 +212,5 @@ implement minepaint_surface_save_png(self, path, x, y, w, h) =
     val s = view_mpsurf(self)
     val f = s->save_png
   in
-    if f != the_null_ptr then call_surface_save_png(f, self, path, x, y, w, h)
+    if fn_is_null(f) = 0 then call_surface_save_png(fn_ptr(f), self, path, x, y, w, h)
   end

@@ -128,11 +128,11 @@ in
     val self = view_fixed(self_p)
     val () = minepaint_tiled_surface_init(
       mp_surface_of_ptr(self_p),
-      req_fn2ptr(fixed_tile_request_start),
-      req_fn2ptr(fixed_tile_request_end)
+      fn_of(req_fn2ptr(fixed_tile_request_start)),
+      fn_of(req_fn2ptr(fixed_tile_request_end))
     )
     val ts = self->parent.tile_size
-    val () = self->parent.parent.destroy := destroy_fn2ptr(free_simple_tiledsurf)
+    val () = self->parent.parent.destroy := fn_of(destroy_fn2ptr(free_simple_tiledsurf))
     val tw = calc_tiles_dim(width, ts)
     val th = calc_tiles_dim(height, ts)
     val single_bytes = mul_size_size(int2size(g0int_mul(ts, ts)), int2size(8))

@@ -108,7 +108,7 @@ implement minepaint_tiled_surface_tile_request_start(self_p, req_p) =
   if (mp_surface_is_null(self_p) = 0) * (req_is_null(req_p) = 0) then let
     val self = tiled_ref(self_p)
   in
-    call_tile_request_start(self->tile_request_start, self_p, req_p)
+    call_tile_request_start(fn_ptr(self->tile_request_start), self_p, req_p)
   end
 
 extern fun minepaint_tiled_surface_tile_request_end(self_p: MpSurface, req_p: MpReq): void = "ext#minepaint_tiled_surface_tile_request_end"
@@ -116,7 +116,7 @@ implement minepaint_tiled_surface_tile_request_end(self_p, req_p) =
   if (mp_surface_is_null(self_p) = 0) * (req_is_null(req_p) = 0) then let
     val self = tiled_ref(self_p)
   in
-    call_tile_request_end(self->tile_request_end, self_p, req_p)
+    call_tile_request_end(fn_ptr(self->tile_request_end), self_p, req_p)
   end
 
 // Geometry & antialiasing calculations
@@ -897,16 +897,16 @@ in
 end
 
 extern fun minepaint_tiled_surface_init(
-  self_p: MpSurface, tile_request_start: ptr, tile_request_end: ptr
+  self_p: MpSurface, tile_request_start: MpFn, tile_request_end: MpFn
 ): void = "ext#minepaint_tiled_surface_init"
 implement minepaint_tiled_surface_init(self_p, tile_request_start, tile_request_end) =
   if mp_surface_is_null(self_p) = 0 then let
     val self = tiled_ref(self_p)
     val () = minepaint_surface_init(self_p)
-    val () = self->parent.draw_dab := store_draw_dab(tiled_surface_draw_dab)
-    val () = self->parent.get_color := store_get_color(tiled_surface_get_color)
-    val () = self->parent.begin_atomic := store_begin(minepaint_tiled_surface_begin_atomic)
-    val () = self->parent.end_atomic := store_end(minepaint_tiled_surface_end_atomic)
+    val () = self->parent.draw_dab := fn_of(store_draw_dab(tiled_surface_draw_dab))
+    val () = self->parent.get_color := fn_of(store_get_color(tiled_surface_get_color))
+    val () = self->parent.begin_atomic := fn_of(store_begin(minepaint_tiled_surface_begin_atomic))
+    val () = self->parent.end_atomic := fn_of(store_end(minepaint_tiled_surface_end_atomic))
     val () = self->tile_request_start := tile_request_start
     val () = self->tile_request_end := tile_request_end
     val () = self->tile_size := MINEPAINT_TILE_SIZE
