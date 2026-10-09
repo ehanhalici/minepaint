@@ -33,6 +33,7 @@ static inline void mp_iset(int *p, int i, int v) { p[i] = v; }
 static inline unsigned short mp_u16get(const unsigned short *p, int i) { return p[i]; }
 static inline void *mp_u16_add(void *p, int n) { return (void *)((unsigned short *)p + n); }
 static inline void *mp_dbl_add(void *p, int n) { return (void *)((double *)p + n); }
+static inline void *mp_flt_add(void *p, int n) { return (void *)((float *)p + n); }
 static inline void *mp_byte_add(void *p, int n) { return (void *)((unsigned char *)p + n); }
 static inline void mp_u16set(unsigned short *p, int i, unsigned short v) { p[i] = v; }
 static inline void *mp_pget(void **p, int i) { return p[i]; }

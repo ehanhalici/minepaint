@@ -6,6 +6,7 @@
 
 #include "./engine_safe.hats"
 staload "draw_engine/pixel_buf.sats"
+staload "draw_engine/fcell.sats"
 
 fn pix(p: U16Buf): ptr = u16buf_ptr(p)
 fn step(p: U16Buf, n: int): U16Buf = u16buf_add(p, n)
@@ -381,7 +382,7 @@ implement draw_dab_pixels_BlendMode_LockAlpha_Paint(mask, rgba, color_r, color_g
 
 // --- 7. LEGACY AND ACCUMULATE COLOR SAMPLING ---
 extern fun get_color_pixels_legacy(
-  mask: U16Buf, rgba: U16Buf, sum_weight: ptr, sum_r: ptr, sum_g: ptr, sum_b: ptr, sum_a: ptr
+  mask: U16Buf, rgba: U16Buf, sum_weight: FCell, sum_r: FCell, sum_g: FCell, sum_b: FCell, sum_a: FCell
 ): void = "ext#get_color_pixels_legacy"
 implement get_color_pixels_legacy(mask, rgba, sum_weight, sum_r, sum_g, sum_b, sum_a) = let
   fun loop_outer(m: U16Buf, p: U16Buf, acc_w: uint, acc_r: uint, acc_g: uint, acc_b: uint, acc_a: uint): @(uint, uint, uint, uint, uint) = let
@@ -414,8 +415,12 @@ implement get_color_pixels_legacy(mask, rgba, sum_weight, sum_r, sum_g, sum_b, s
   end
 
   val @(w, r, g, b, a) = loop_outer(mask, rgba, 0U, 0U, 0U, 0U, 0U)
-  fn add_accum(p: ptr, val_u: uint): void =
-    if p != the_null_ptr then mp_arr_fset(p, 0, f_add(mp_arr_fget(p, 0), u2f(val_u)))
+  fn add_accum(c: FCell, val_u: uint): void =
+    if fcell_is_null(c) = 0 then let
+      val p = fcell_ptr(c)
+    in
+      mp_arr_fset(p, 0, f_add(mp_arr_fget(p, 0), u2f(val_u)))
+    end
   val () = add_accum(sum_weight, w)
   val () = add_accum(sum_r, r)
   val () = add_accum(sum_g, g)
@@ -424,7 +429,7 @@ implement get_color_pixels_legacy(mask, rgba, sum_weight, sum_r, sum_g, sum_b, s
 in () end
 
 extern fun get_color_pixels_accumulate(
-  mask: U16Buf, rgba: U16Buf, sum_weight: ptr, sum_r: ptr, sum_g: ptr, sum_b: ptr, sum_a: ptr,
+  mask: U16Buf, rgba: U16Buf, sum_weight: FCell, sum_r: FCell, sum_g: FCell, sum_b: FCell, sum_a: FCell,
   paint: float, sample_interval: uint16, random_sample_rate: float
 ): void = "ext#get_color_pixels_accumulate"
 implement get_color_pixels_accumulate(mask, rgba, sum_weight, sum_r, sum_g, sum_b, sum_a, paint, sample_interval, random_sample_rate) =

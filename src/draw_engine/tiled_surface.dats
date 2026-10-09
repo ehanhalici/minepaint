@@ -12,6 +12,7 @@ staload "./operationqueue.dats"
 staload "./dab.dats"
 staload "./brushmodes.dats"
 staload "draw_engine/pixel_buf.sats"
+staload "draw_engine/fcell.sats"
 staload "./surface.dats"
 staload "./helpers.dats"
 
@@ -780,7 +781,7 @@ end
 
 fn sample_tile_color(
   surface: ptr, tx: int, ty: int, x: float, y: float, rad: float,
-  mask: ptr, pw: ptr, pr: ptr, pg: ptr, pb: ptr, pa: ptr,
+  mask: ptr, pw: FCell, pr: FCell, pg: FCell, pb: FCell, pa: FCell,
   paint: float, s_u16: uint16, rate: float
 ): void = let
   val () = process_tile(surface, tx, ty)
@@ -803,7 +804,7 @@ end
 fun collect_color_samples(
   surface: ptr, ty: int, ty2: int, tx1: int, tx2: int,
   x: float, y: float, rad: float, mask: ptr,
-  pw: ptr, pr: ptr, pg: ptr, pb: ptr, pa: ptr,
+  pw: FCell, pr: FCell, pg: FCell, pb: FCell, pa: FCell,
   paint: float, s_u16: uint16, rate: float
 ): void =
   if ty <= ty2 then let
@@ -817,14 +818,14 @@ fun collect_color_samples(
   end
 
 fn finalize_sampled_color(
-  pw: ptr, pr: ptr, pg: ptr, pb: ptr, pa: ptr, paint: float,
+  pw: FCell, pr: FCell, pg: FCell, pb: FCell, pa: FCell, paint: float,
   cr: &float? >> float, cg: &float? >> float, cb: &float? >> float, ca: &float? >> float
 ): void = let
-  val sum_w = mp_arr_fget(pw, 0)
-  val sum_r = mp_arr_fget(pr, 0)
-  val sum_g = mp_arr_fget(pg, 0)
-  val sum_b = mp_arr_fget(pb, 0)
-  val sum_a = mp_arr_fget(pa, 0)
+  val sum_w = mp_arr_fget(fcell_ptr(pw), 0)
+  val sum_r = mp_arr_fget(fcell_ptr(pr), 0)
+  val sum_g = mp_arr_fget(fcell_ptr(pg), 0)
+  val sum_b = mp_arr_fget(fcell_ptr(pb), 0)
+  val sum_a = mp_arr_fget(fcell_ptr(pa), 0)
 in
   if f_gt(sum_w, 0.0f) then let
     val sa = f_clamp(f_div(sum_a, sum_w), 0.0f, 1.0f)
@@ -855,11 +856,11 @@ implement tiled_surface_get_color(surface, x, y, radius, color_r, color_g, color
   val acc_mem = malloc(int2size(20))
   val () = assertloc(acc_mem > the_null_ptr)
   val _ = memset(acc_mem, 0, int2size(20))
-  val pw = acc_mem
-  val pr = ptr_add<float>(acc_mem, int2size(1))
-  val pg = ptr_add<float>(acc_mem, int2size(2))
-  val pb = ptr_add<float>(acc_mem, int2size(3))
-  val pa = ptr_add<float>(acc_mem, int2size(4))
+  val pw = fcell_of(acc_mem)
+  val pr = fcell_add(pw, 1)
+  val pg = fcell_add(pw, 2)
+  val pb = fcell_add(pw, 3)
+  val pa = fcell_add(pw, 4)
 
   val s_int = if f_lte(rad, 2.0f) then 1 else g0float2int_float_int(f_mul(rad, 7.0f))
   val s_u16 = u16(g0int2uint_int_uint(s_int))
