@@ -15,6 +15,7 @@ staload "./brushmodes.dats"
 staload "draw_engine/pixel_buf.sats"
 staload "draw_engine/fcell.sats"
 staload "./surface.dats"
+staload "draw_engine/surface_box.sats"
 staload "./helpers.dats"
 
 #include "./minepaint_types.hats"
@@ -888,7 +889,7 @@ extern fun minepaint_tiled_surface_init(
 implement minepaint_tiled_surface_init(self_p, tile_request_start, tile_request_end) =
   if self_p != the_null_ptr then let
     val self = view_tiled(self_p)
-    val () = minepaint_surface_init(self_p)
+    val () = minepaint_surface_init(mp_surface_of_ptr(self_p))
     val () = self->parent.draw_dab := store_draw_dab(tiled_surface_draw_dab)
     val () = self->parent.get_color := store_get_color(tiled_surface_get_color)
     val () = self->parent.begin_atomic := store_begin(minepaint_tiled_surface_begin_atomic)

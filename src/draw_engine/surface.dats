@@ -10,7 +10,6 @@ staload "draw_engine/surface_box.sats"
 
 typedef MinePaintSurface_struct = MinePaintSurface
 
-extern fun view_surface(p: ptr): ref(MinePaintSurface_struct) = "mac#mp_id_ptr"
 extern fun view_mpsurf(s: MpSurface): ref(MinePaintSurface_struct) = "mac#mp_id_ptr"
 extern fun load_destroy(p: ptr): MinePaintSurfaceDestroyFunction = "mac#mp_id_ptr"
 extern fun load_draw_dab(p: ptr): MinePaintSurfaceDrawDabFunction = "mac#mp_id_ptr"
@@ -52,30 +51,30 @@ fn call_surface_end_atomic(f: ptr, self: ptr, roi: ptr): void =
 fn call_surface_save_png(f: ptr, self: ptr, path: string, x: int, y: int, w: int, h: int): void =
   load_png(f)(self, path, x, y, w, h)
 
-extern fun minepaint_surface_init(self: ptr): void = "ext#minepaint_surface_init"
+extern fun minepaint_surface_init(self: MpSurface): void = "ext#minepaint_surface_init"
 implement minepaint_surface_init(self) =
-  if self != the_null_ptr then let
-    val s = view_surface(self)
+  if mp_surface_is_null(self) = 0 then let
+    val s = view_mpsurf(self)
     val () = s->refcount := 1
   in () end
 
-extern fun minepaint_surface_ref(self: ptr): void = "ext#minepaint_surface_ref"
+extern fun minepaint_surface_ref(self: MpSurface): void = "ext#minepaint_surface_ref"
 implement minepaint_surface_ref(self) =
-  if self != the_null_ptr then let
-    val s = view_surface(self)
+  if mp_surface_is_null(self) = 0 then let
+    val s = view_mpsurf(self)
     val () = s->refcount := s->refcount + 1
   in () end
 
-extern fun minepaint_surface_unref(self: ptr): void = "ext#minepaint_surface_unref"
+extern fun minepaint_surface_unref(self: MpSurface): void = "ext#minepaint_surface_unref"
 implement minepaint_surface_unref(self) =
-  if self != the_null_ptr then let
-    val s = view_surface(self)
+  if mp_surface_is_null(self) = 0 then let
+    val s = view_mpsurf(self)
     val rc = s->refcount - 1
     val () = s->refcount := rc
     val () =
       if rc <= 0 then let
         val d = s->destroy
-        val () = if d != the_null_ptr then call_surface_destroy(d, self)
+        val () = if d != the_null_ptr then call_surface_destroy(d, mp_surface_to_ptr(self))
       in () end
   in () end
 
@@ -144,7 +143,7 @@ implement draw_engine_surface_draw_dab(
   )
 
 extern fun minepaint_surface_get_color(
-    self: ptr,
+    self: MpSurface,
     x: float, y: float,
     radius: float,
     color_r: &float? >> float,
@@ -160,13 +159,13 @@ implement minepaint_surface_get_color(self, x, y, radius, color_r, color_g, colo
   val () = color_b := 0.0f
   val () = color_a := 0.0f
 in
-  if self != the_null_ptr then let
-    val s = view_surface(self)
+  if mp_surface_is_null(self) = 0 then let
+    val s = view_mpsurf(self)
     val f = s->get_color
   in
     if f != the_null_ptr then
       call_surface_get_color(
-        f, self, x, y, radius,
+        f, mp_surface_to_ptr(self), x, y, radius,
         addr@(color_r),
         addr@(color_g),
         addr@(color_b),
@@ -178,7 +177,7 @@ in
   else ()
 end
 
-extern fun minepaint_surface_get_alpha(self: ptr, x: float, y: float, radius: float): float = "ext#minepaint_surface_get_alpha"
+extern fun minepaint_surface_get_alpha(self: MpSurface, x: float, y: float, radius: float): float = "ext#minepaint_surface_get_alpha"
 implement minepaint_surface_get_alpha(self, x, y, radius) = let
   var r: float
   var g: float
@@ -189,29 +188,29 @@ in
   a
 end
 
-extern fun minepaint_surface_begin_atomic(self: ptr): void = "ext#minepaint_surface_begin_atomic"
+extern fun minepaint_surface_begin_atomic(self: MpSurface): void = "ext#minepaint_surface_begin_atomic"
 implement minepaint_surface_begin_atomic(self) =
-  if self != the_null_ptr then let
-    val s = view_surface(self)
+  if mp_surface_is_null(self) = 0 then let
+    val s = view_mpsurf(self)
     val f = s->begin_atomic
   in
-    if f != the_null_ptr then call_surface_begin_atomic(f, self)
+    if f != the_null_ptr then call_surface_begin_atomic(f, mp_surface_to_ptr(self))
   end
 
-extern fun minepaint_surface_end_atomic(self: ptr, roi: ptr): void = "ext#minepaint_surface_end_atomic"
+extern fun minepaint_surface_end_atomic(self: MpSurface, roi: ptr): void = "ext#minepaint_surface_end_atomic"
 implement minepaint_surface_end_atomic(self, roi) =
-  if self != the_null_ptr then let
-    val s = view_surface(self)
+  if mp_surface_is_null(self) = 0 then let
+    val s = view_mpsurf(self)
     val f = s->end_atomic
   in
-    if f != the_null_ptr then call_surface_end_atomic(f, self, roi)
+    if f != the_null_ptr then call_surface_end_atomic(f, mp_surface_to_ptr(self), roi)
   end
 
-extern fun minepaint_surface_save_png(self: ptr, path: string, x: int, y: int, w: int, h: int): void = "ext#minepaint_surface_save_png"
+extern fun minepaint_surface_save_png(self: MpSurface, path: string, x: int, y: int, w: int, h: int): void = "ext#minepaint_surface_save_png"
 implement minepaint_surface_save_png(self, path, x, y, w, h) =
-  if self != the_null_ptr then let
-    val s = view_surface(self)
+  if mp_surface_is_null(self) = 0 then let
+    val s = view_mpsurf(self)
     val f = s->save_png
   in
-    if f != the_null_ptr then call_surface_save_png(f, self, path, x, y, w, h)
+    if f != the_null_ptr then call_surface_save_png(f, mp_surface_to_ptr(self), path, x, y, w, h)
   end
