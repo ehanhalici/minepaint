@@ -6,6 +6,7 @@
 #include "./engine_safe.hats"
 
 staload "./rectangle.dats"
+staload "draw_engine/rect_box.sats"
 staload "./bbox.dats"
 staload "./symmetry.dats"
 staload "./operationqueue.dats"
@@ -493,7 +494,7 @@ fun clean_bounding_boxes(bboxes: int, i: int, n: int): void =
 fun clean_roi_rects(rects: ptr, i: int, n: int): void =
   if i < n then let
     val dest = ptr_add<byte>(rects, int2size(g0int_mul(i, 16)))
-    val () = minepaint_rectangle_clear(dest)
+    val () = minepaint_rectangle_clear(rect_of(dest))
   in
     clean_roi_rects(rects, i + 1, n)
   end
@@ -540,7 +541,7 @@ fun export_roi_rects(
         i_min(roi_rects - 1, g0float2int_float_int(roundf(f_div(g0int2float_int_float(i), factor))))
       else i
     val dest_p = ptr_add<byte>(roi->rectangles, int2size(g0int_mul(out_idx, 16)))
-    val () = minepaint_rectangle_expand_to_include_value(dest_p, bbox_get(bboxes, i))
+    val () = minepaint_rectangle_expand_to_include_value(rect_of(dest_p), bbox_get(bboxes, i))
   in
     export_roi_rects(roi, bboxes, i + 1, num_dirty, roi_rects, factor)
   end
