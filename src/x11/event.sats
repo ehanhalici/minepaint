@@ -1,6 +1,7 @@
 (* XEvent alanları ve ats-X11'de olmayan Xlib çağrıları. *)
 
 staload "x11/display_box.sats"
+staload "x11/visual_box.sats"
 
 %{#
 #include "x11/event.cats"
@@ -20,8 +21,8 @@ fun mp_xevent_motion_x(e: ptr): int = "mac#"
 fun mp_xevent_motion_y(e: ptr): int = "mac#"
 fun mp_xevent_motion_state(e: ptr): uint = "mac#"
 
-fun mp_xvi_depth(vi: ptr): int = "mac#"
-fun mp_xvi_visual(vi: ptr): ptr = "mac#"
+fun mp_xvi_depth(vi: MpVisual): int = "mac#"
+fun mp_xvi_visual(vi: MpVisual): ptr = "mac#"
 fun mp_swa_sizeof(): int = "mac#"
 fun mp_hints_sizeof(): int = "mac#"
 fun mp_swa_set(swa: ptr, cmap: ulint, mask: lint): void = "mac#"

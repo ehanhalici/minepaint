@@ -6,6 +6,8 @@
 staload "x11/event.sats"
 staload "x11/display_box.sats"
 staload "window/app_box.sats"
+staload "x11/visual_box.sats"
+staload "gl/glctx_box.sats"
 staload "x11/xi2.sats"
 staload "gl/glx.dats"
 staload "sys/libc.dats"
@@ -13,7 +15,7 @@ staload "sys/libc.dats"
 typedef X11App = @{
   dpy= MpDisplay,
   win= ulint,
-  glc= ptr,
+  glc= MpGlCtx,
   cursor= ulint,
   wm_delete= ulint
 }
@@ -33,7 +35,7 @@ fn event_mask(): lint =
   $extval(lint, "(ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | StructureNotifyMask)")
 
 fn create_window_with_hints(
-  dpy: MpDisplay, root: ulint, vi: ptr, w: int, h: int, title: string
+  dpy: MpDisplay, root: ulint, vi: MpVisual, w: int, h: int, title: string
 ): ulint = let
   val cmap = XCreateColormap(dpy, root, mp_xvi_visual(vi), ALLOC_NONE)
   var swa = @[byte][256]()
@@ -60,13 +62,13 @@ fn setup_wm_protocols(dpy: MpDisplay, win: ulint): ulint = let
   val _ = XSetWMProtocols(dpy, win, addr@proto, 1)
 in wm end
 
-fn init_gl_and_cursor(dpy: MpDisplay, win: ulint, vi: ptr): @(ptr, ulint) = let
-  val glc = glXCreateContext(dpy, vi, the_null_ptr, GL_TRUE)
+fn init_gl_and_cursor(dpy: MpDisplay, win: ulint, vi: MpVisual): @(MpGlCtx, ulint) = let
+  val glc = glXCreateContext(dpy, vi, glctx_none(), GL_TRUE)
 in
-  if glc = the_null_ptr then (the_null_ptr, 0ul)
+  if glctx_is_null(glc) != 0 then (glctx_none(), 0ul)
   else let
     val _ = glXMakeCurrent(dpy, win, glc)
-    val _ = XFree(vi)
+    val _ = XFree(visual_ptr(vi))
     val cursor = XCreateFontCursor(dpy, XC_CROSSHAIR)
     val () = mp_x_define_cursor(dpy, win, cursor)
     val _ = xi2_init(dpy)
@@ -86,7 +88,7 @@ in
     var att = @[int][5](GLX_RGBA, GLX_DEPTH_SIZE, 16, GLX_DOUBLEBUFFER, 0)
     val vi = glXChooseVisual(dpy, screen, addr@att)
   in
-    if vi = the_null_ptr then let
+    if visual_is_null(vi) != 0 then let
       val () = fprintln!(stderr_ref, "HATA: Uygun GLX Visual bulunamadi!")
       val () = mp_x_close_display(dpy)
     in app_none() end
@@ -95,9 +97,9 @@ in
       val wm = setup_wm_protocols(dpy, win)
       val @(glc, cursor) = init_gl_and_cursor(dpy, win, vi)
     in
-      if glc = the_null_ptr then let
+      if glctx_is_null(glc) != 0 then let
         val () = fprintln!(stderr_ref, "HATA: GLX Context olusturulamadi!")
-        val _ = XFree(vi)
+        val _ = XFree(visual_ptr(vi))
         val () = mp_x_destroy_window(dpy, win)
         val () = mp_x_close_display(dpy)
       in app_none() end
@@ -121,7 +123,7 @@ implement app_destroy(app) =
     val a = view_app(app_ptr(app))
     val dpy = a->dpy
     val _ = XFreeCursor(dpy, a->cursor)
-    val _ = glXMakeCurrent(dpy, 0ul, the_null_ptr)
+    val _ = glXMakeCurrent(dpy, 0ul, glctx_none())
     val () = glXDestroyContext(dpy, a->glc)
     val () = mp_x_destroy_window(dpy, a->win)
     val () = mp_x_close_display(dpy)
