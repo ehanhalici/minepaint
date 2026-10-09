@@ -6,10 +6,6 @@ staload "x11/xevent_box.sats"
 staload "x11/xvisual_box.sats"
 staload "x11/attr_box.sats"
 
-%{#
-#include "x11/event.cats"
-%}
-
 fun mp_xevent_sizeof(): int = "mac#"
 fun mp_xevent_type(e: MpXEvent): int = "mac#"
 fun mp_xevent_config_w(e: MpXEvent): int = "mac#"

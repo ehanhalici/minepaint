@@ -12,10 +12,6 @@ staload "x11/display_box.sats"
 staload "x11/xevent_box.sats"
 staload "sys/io_box.sats"
 
-%{#
-#include "x11/xi2_raw.cats"
-%}
-
 // --- Düşük Seviye C Köprüsü Tanımları ---
 extern fun c_xi2_query_extension(dpy: MpDisplay, opcode: ptr): int = "mac#xi2_query_extension"
 extern fun c_xi2_query_version(dpy: MpDisplay, maj: int, min: int): int = "mac#xi2_query_version"

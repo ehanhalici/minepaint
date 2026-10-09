@@ -160,4 +160,7 @@ static inline void mp_rect_set(void *p, int x, int y, int w, int h) {
   airlock_iset_n(p, 3, 4, h);
 }
 
+#include "x11/event.cats"
+#include "x11/xi2_raw.cats"
+
 #endif
