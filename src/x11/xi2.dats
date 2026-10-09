@@ -6,6 +6,7 @@ staload "window/input.dats"
 staload "x11/xi2.sats"
 staload "x11/devtab.sats"
 staload "x11/devlist.sats"
+staload "x11/raw_box.sats"
 staload "x11/display_box.sats"
 staload "x11/xevent_box.sats"
 staload "sys/io_box.sats"
@@ -33,10 +34,10 @@ extern fun c_xi2_cookie_extension(ev: MpXEvent): int = "mac#xi2_cookie_extension
 extern fun c_xi2_cookie_get_data(dpy: MpDisplay, ev: MpXEvent): int = "mac#xi2_cookie_get_data"
 extern fun c_xi2_cookie_free_data(dpy: MpDisplay, ev: MpXEvent): void = "mac#xi2_cookie_free_data"
 extern fun c_xi2_cookie_evtype(ev: MpXEvent): int = "mac#xi2_cookie_evtype"
-extern fun c_xi2_cookie_data(ev: MpXEvent): ptr = "mac#xi2_cookie_data"
-extern fun c_xi2_raw_deviceid(data: ptr): int = "mac#xi2_raw_deviceid"
-extern fun c_xi2_raw_has_axis(data: ptr, axis: int): int = "mac#xi2_raw_has_axis"
-extern fun c_xi2_raw_read_axis(data: ptr, axis: int): double = "mac#xi2_raw_read_axis"
+extern fun c_xi2_cookie_data(ev: MpXEvent): MpRaw = "mac#xi2_cookie_data"
+extern fun c_xi2_raw_deviceid(data: MpRaw): int = "mac#xi2_raw_deviceid"
+extern fun c_xi2_raw_has_axis(data: MpRaw, axis: int): int = "mac#xi2_raw_has_axis"
+extern fun c_xi2_raw_read_axis(data: MpRaw, axis: int): double = "mac#xi2_raw_read_axis"
 
 // POSIX string search helper (no pointer crawling required)
 extern fun strcasestr(haystack: string, needle: string): ptr = "mac#strcasestr"
@@ -250,7 +251,7 @@ implement xi2_init(dpy) =
   end
 
 // --- Ham Olay İşleme ---
-fn xi2_compute_norm(raw_data: ptr, dev: ref(XI2DevInfo), axis: int, evtype: int): float = let
+fn xi2_compute_norm(raw_data: MpRaw, dev: ref(XI2DevInfo), axis: int, evtype: int): float = let
   val has_press = c_xi2_raw_has_axis(raw_data, axis)
   val norm = if has_press > 0 then let
     val raw_val = c_xi2_raw_read_axis(raw_data, axis)
@@ -265,7 +266,7 @@ in
 end
 
 fn xi2_process_stylus_event(
-  raw_data: ptr, dev_p: ptr, evtype: int, now: double
+  raw_data: MpRaw, dev_p: ptr, evtype: int, now: double
 ): void = let
   val dev = view_dev(dev_p)
   val axis = dev->pressure_axis
@@ -284,9 +285,9 @@ in
 end
 
 fn xi2_handle_motion_event(
-  dpy: MpDisplay, st: ref(XI2BackendState), raw_data: ptr, evtype: int
+  dpy: MpDisplay, st: ref(XI2BackendState), raw_data: MpRaw, evtype: int
 ): void =
-  if raw_data = the_null_ptr then ()
+  if raw_is_null(raw_data) != 0 then ()
   else let
     val did = c_xi2_raw_deviceid(raw_data)
   in
