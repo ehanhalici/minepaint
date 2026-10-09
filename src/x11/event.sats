@@ -3,6 +3,7 @@
 staload "x11/display_box.sats"
 staload "x11/visual_box.sats"
 staload "x11/xevent_box.sats"
+staload "x11/attr_box.sats"
 
 %{#
 #include "x11/event.cats"
@@ -26,8 +27,8 @@ fun mp_xvi_depth(vi: MpVisual): int = "mac#"
 fun mp_xvi_visual(vi: MpVisual): ptr = "mac#"
 fun mp_swa_sizeof(): int = "mac#"
 fun mp_hints_sizeof(): int = "mac#"
-fun mp_swa_set(swa: ptr, cmap: ulint, mask: lint): void = "mac#"
-fun mp_hints_set_min(h: ptr, w: int, ht: int): void = "mac#"
+fun mp_swa_set(swa: MpSwa, cmap: ulint, mask: lint): void = "mac#"
+fun mp_hints_set_min(h: MpHints, w: int, ht: int): void = "mac#"
 fun mp_x_open_display(): MpDisplay = "mac#"
 fun mp_x_default_screen(d: MpDisplay): int = "mac#"
 fun mp_x_root_window(d: MpDisplay, s: int): ulint = "mac#"
@@ -41,12 +42,12 @@ fun mp_XCreateWindow(
   dpy: MpDisplay, parent: ulint, x: int, y: int,
   width: uint, height: uint, border: uint,
   depth: int, klass: uint, visual: ptr,
-  valuemask: ulint, swa: ptr
+  valuemask: ulint, swa: MpSwa
 ): ulint = "mac#XCreateWindow"
 fun XStoreName(dpy: MpDisplay, w: ulint, name: string): int = "mac#"
 fun XInternAtom(dpy: MpDisplay, name: string, only_if_exists: int): ulint = "mac#"
 fun XSetWMProtocols(dpy: MpDisplay, w: ulint, atoms: ptr, n: int): int = "mac#"
-fun XSetWMNormalHints(dpy: MpDisplay, w: ulint, hints: ptr): void = "mac#"
+fun XSetWMNormalHints(dpy: MpDisplay, w: ulint, hints: MpHints): void = "mac#"
 fun XCreateFontCursor(dpy: MpDisplay, shape: uint): ulint = "mac#"
 fun XFreeCursor(dpy: MpDisplay, cursor: ulint): int = "mac#"
 fun XPending(dpy: MpDisplay): int = "mac#"

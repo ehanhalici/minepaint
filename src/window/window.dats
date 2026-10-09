@@ -7,6 +7,7 @@ staload "x11/event.sats"
 staload "x11/display_box.sats"
 staload "window/app_box.sats"
 staload "x11/xevent_box.sats"
+staload "x11/attr_box.sats"
 staload "x11/visual_box.sats"
 staload "gl/glctx_box.sats"
 staload "x11/xi2.sats"
@@ -40,8 +41,9 @@ fn create_window_with_hints(
 ): ulint = let
   val cmap = XCreateColormap(dpy, root, mp_xvi_visual(vi), ALLOC_NONE)
   var swa = @[byte][256]()
-  val p_swa = mp_id_ptr(addr@(swa))
-  val _ = memset(p_swa, 0, g0int2uint_int_size(256))
+  val raw_swa = mp_id_ptr(addr@(swa))
+  val _ = memset(raw_swa, 0, g0int2uint_int_size(256))
+  val p_swa = swa_of(raw_swa)
   val () = mp_swa_set(p_swa, cmap, event_mask())
   val win = mp_XCreateWindow(
     dpy, root, 0, 0, i2u(w), i2u(h), 0u,
@@ -49,8 +51,9 @@ fn create_window_with_hints(
     $extval(ulint, "(CWColormap | CWEventMask)"), p_swa
   )
   var hints = @[byte][256]()
-  val p_hints = mp_id_ptr(addr@(hints))
-  val _ = memset(p_hints, 0, g0int2uint_int_size(256))
+  val raw_hints = mp_id_ptr(addr@(hints))
+  val _ = memset(raw_hints, 0, g0int2uint_int_size(256))
+  val p_hints = hints_of(raw_hints)
   val () = mp_hints_set_min(p_hints, 450, 350)
   val () = XSetWMNormalHints(dpy, win, p_hints)
   val () = mp_x_map_window(dpy, win)
