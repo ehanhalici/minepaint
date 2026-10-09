@@ -6,6 +6,8 @@
 #define MINEPAINT_TILE_SIZE 64
 #define NUM_BBOXES_DEFAULT 32
 
+staload "draw_engine/surface_box.sats"
+
 // Dynamics mapping arena. A mapping is an integer handle into mapping.dats.
 #define MAPPING_NONE (~1)
 #define MAPPING_INPUTS 18
@@ -24,19 +26,19 @@ typedef MinePaintRectangles = @{
 }
 
 typedef MinePaintSurfaceGetColorFunction = (
-  ptr, float, float, float, ptr, ptr, ptr, ptr, float
+  MpSurface, float, float, float, ptr, ptr, ptr, ptr, float
 ) -> void
 
 typedef MinePaintSurfaceDrawDabFunction = (
-  ptr, float, float, float, float, float, float,
+  MpSurface, float, float, float, float, float, float,
   float, float, float, float, float, float,
   float, float, float, float, float
 ) -> int
 
-typedef MinePaintSurfaceDestroyFunction = (ptr) -> void
-typedef MinePaintSurfaceSavePngFunction = (ptr, string, int, int, int, int) -> void
-typedef MinePaintSurfaceBeginAtomicFunction = (ptr) -> void
-typedef MinePaintSurfaceEndAtomicFunction = (ptr, ptr) -> void
+typedef MinePaintSurfaceDestroyFunction = (MpSurface) -> void
+typedef MinePaintSurfaceSavePngFunction = (MpSurface, string, int, int, int, int) -> void
+typedef MinePaintSurfaceBeginAtomicFunction = (MpSurface) -> void
+typedef MinePaintSurfaceEndAtomicFunction = (MpSurface, ptr) -> void
 
 typedef MinePaintSurface = @{
   draw_dab= ptr,

@@ -23,8 +23,8 @@ typedef MinePaintFixedTiledSurface_struct = @{
 
 extern fun view_fixed(p: ptr): ref(MinePaintFixedTiledSurface_struct) = "mac#mp_id_ptr"
 extern fun view_tile_req(p: ptr): ref(MinePaintTileRequest) = "mac#mp_id_ptr"
-extern fun req_fn2ptr(f: (ptr, ptr) -> void): ptr = "mac#mp_id_ptr"
-extern fun destroy_fn2ptr(f: (ptr) -> void): ptr = "mac#mp_id_ptr"
+extern fun req_fn2ptr(f: (MpSurface, ptr) -> void): ptr = "mac#mp_id_ptr"
+extern fun destroy_fn2ptr(f: (MpSurface) -> void): ptr = "mac#mp_id_ptr"
 
 extern fun malloc(sz: size_t): ptr = "mac#malloc"
 extern fun free(p: ptr): void = "mac#free"
@@ -36,9 +36,9 @@ fn int2size(x: int): size_t = g0int2uint_int_size(x)
 fn mul_size_size(a: size_t, b: size_t): size_t = g0uint_mul_size(a, b)
 fn add_size_size(a: size_t, b: size_t): size_t = g0uint_add_size(a, b)
 
-extern fun fixed_tile_request_start(tiled_surface: ptr, request: ptr): void = "ext#fixed_tile_request_start"
-extern fun fixed_tile_request_end(tiled_surface: ptr, request: ptr): void = "ext#fixed_tile_request_end"
-extern fun free_simple_tiledsurf(surface: ptr): void = "ext#free_simple_tiledsurf"
+extern fun fixed_tile_request_start(tiled_surface: MpSurface, request: ptr): void = "ext#fixed_tile_request_start"
+extern fun fixed_tile_request_end(tiled_surface: MpSurface, request: ptr): void = "ext#fixed_tile_request_end"
+extern fun free_simple_tiledsurf(surface: MpSurface): void = "ext#free_simple_tiledsurf"
 
 extern fun minepaint_fixed_tiled_surface_new(width: int, height: int): MpSurface = "ext#minepaint_fixed_tiled_surface_new"
 extern fun minepaint_fixed_tiled_surface_get_width(self: MpSurface): int = "ext#minepaint_fixed_tiled_surface_get_width"
@@ -48,8 +48,8 @@ extern fun minepaint_fixed_tiled_surface_interface(self: MpSurface): MpSurface =
 fn is_out_of_bounds(tx: int, ty: int, w: int, h: int): bool =
   (tx < 0) || (ty < 0) || (tx >= w) || (ty >= h)
 
-fn reset_null_tile(self_p: ptr): void = let
-  val self = view_fixed(self_p)
+fn reset_null_tile(self_p: MpSurface): void = let
+  val self = view_fixed(mp_surface_to_ptr(self_p))
   val _ = memset(self->null_tile, 0, self->tile_size)
 in () end
 
@@ -61,7 +61,7 @@ in
 end
 
 implement fixed_tile_request_start(tiled_surface, request) = let
-  val self = view_fixed(tiled_surface)
+  val self = view_fixed(mp_surface_to_ptr(tiled_surface))
   val req = view_tile_req(request)
   val tx = req->tx
   val ty = req->ty
@@ -76,7 +76,7 @@ in
 end
 
 implement fixed_tile_request_end(tiled_surface, request) = let
-  val self = view_fixed(tiled_surface)
+  val self = view_fixed(mp_surface_to_ptr(tiled_surface))
   val req = view_tile_req(request)
 in
   if is_out_of_bounds(req->tx, req->ty, self->tiles_width, self->tiles_height) then
@@ -92,13 +92,13 @@ implement minepaint_fixed_tiled_surface_get_height(self) =
   if mp_surface_is_null(self) != 0 then 0 else (view_fixed(mp_surface_to_ptr(self)))->height
 
 implement free_simple_tiledsurf(surface) =
-  if surface != the_null_ptr then let
-    val self = view_fixed(surface)
+  if mp_surface_is_null(surface) = 0 then let
+    val self = view_fixed(mp_surface_to_ptr(surface))
     val () = minepaint_tiled_surface_destroy(surface)
     val () = if self->tile_buffer != the_null_ptr then free(self->tile_buffer)
     val () = if self->null_tile != the_null_ptr then free(self->null_tile)
   in
-    free(surface)
+    free(mp_surface_to_ptr(surface))
   end
 
 fn calc_tiles_dim(dim: int, tile_size: int): int =
@@ -125,7 +125,7 @@ in
   else let
     val self = view_fixed(self_p)
     val () = minepaint_tiled_surface_init(
-      self_p,
+      mp_surface_of_ptr(self_p),
       req_fn2ptr(fixed_tile_request_start),
       req_fn2ptr(fixed_tile_request_end)
     )
@@ -145,7 +145,7 @@ in
       val null_t = malloc(single_bytes)
       val () = assertloc(null_t > the_null_ptr)
       val () = setup_fixed_surface(self, width, height, tw, th, single_bytes, buf, null_t)
-      val () = reset_null_tile(self_p)
+      val () = reset_null_tile(mp_surface_of_ptr(self_p))
     in
       mp_surface_of_ptr(self_p)
     end

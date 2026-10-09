@@ -53,7 +53,7 @@ extern fun layer_unbind_tile(): void = "ext#layer_unbind_tile"
 
 // LibMinePaint Tipleri
 typedef MinePaintDrawDabFunc = (
-  ptr, float, float, float, float, float, float, 
+  MpSurface, float, float, float, float, float, float, 
   float, float, float, float, float, float, 
   float, float, float, float, float
 ) -> int
@@ -162,7 +162,7 @@ end
 
 // --- Dab Çizim Callback'i ---
 implement draw_dab_callback(self, x, y, radius, r, g, b, opaque, hardness, softness, alpha_eraser, aspect, angle, lock_alpha, colorize, posterize, posterize_num, paint): int = let
-  val surf = view_glsurf(self)
+  val surf = view_glsurf(mp_surface_to_ptr(self))
   val layer = surf->layer
   val is_erasing = surf->is_erasing
 in

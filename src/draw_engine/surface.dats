@@ -18,11 +18,11 @@ extern fun load_begin(p: ptr): MinePaintSurfaceBeginAtomicFunction = "mac#mp_id_
 extern fun load_end(p: ptr): MinePaintSurfaceEndAtomicFunction = "mac#mp_id_ptr"
 extern fun load_png(p: ptr): MinePaintSurfaceSavePngFunction = "mac#mp_id_ptr"
 
-fn call_surface_destroy(f: ptr, self: ptr): void =
+fn call_surface_destroy(f: ptr, self: MpSurface): void =
   load_destroy(f)(self)
 
 fn call_surface_draw_dab(
-  f: ptr, self: ptr,
+  f: ptr, self: MpSurface,
   x: float, y: float, radius: float, r: float, g: float, b: float,
   opaque: float, hardness: float, softness: float, alpha_eraser: float,
   aspect_ratio: float, angle: float, lock_alpha: float,
@@ -36,19 +36,19 @@ fn call_surface_draw_dab(
   )
 
 fn call_surface_get_color(
-  f: ptr, self: ptr,
+  f: ptr, self: MpSurface,
   x: float, y: float, radius: float,
   r: ptr, g: ptr, b: ptr, a: ptr, paint: float
 ): void =
   load_get_color(f)(self, x, y, radius, r, g, b, a, paint)
 
-fn call_surface_begin_atomic(f: ptr, self: ptr): void =
+fn call_surface_begin_atomic(f: ptr, self: MpSurface): void =
   load_begin(f)(self)
 
-fn call_surface_end_atomic(f: ptr, self: ptr, roi: ptr): void =
+fn call_surface_end_atomic(f: ptr, self: MpSurface, roi: ptr): void =
   load_end(f)(self, roi)
 
-fn call_surface_save_png(f: ptr, self: ptr, path: string, x: int, y: int, w: int, h: int): void =
+fn call_surface_save_png(f: ptr, self: MpSurface, path: string, x: int, y: int, w: int, h: int): void =
   load_png(f)(self, path, x, y, w, h)
 
 extern fun minepaint_surface_init(self: MpSurface): void = "ext#minepaint_surface_init"
@@ -74,7 +74,7 @@ implement minepaint_surface_unref(self) =
     val () =
       if rc <= 0 then let
         val d = s->destroy
-        val () = if d != the_null_ptr then call_surface_destroy(d, mp_surface_to_ptr(self))
+        val () = if d != the_null_ptr then call_surface_destroy(d, self)
       in () end
   in () end
 
@@ -105,7 +105,7 @@ implement minepaint_surface_draw_dab(
   in
     if f != the_null_ptr then
       call_surface_draw_dab(
-        f, mp_surface_to_ptr(self), x, y, radius, r, g, b,
+        f, self, x, y, radius, r, g, b,
         opaque, hardness, softness, alpha_eraser,
         aspect_ratio, angle, lock_alpha,
         colorize, posterize, posterize_num, paint
@@ -165,7 +165,7 @@ in
   in
     if f != the_null_ptr then
       call_surface_get_color(
-        f, mp_surface_to_ptr(self), x, y, radius,
+        f, self, x, y, radius,
         addr@(color_r),
         addr@(color_g),
         addr@(color_b),
@@ -194,7 +194,7 @@ implement minepaint_surface_begin_atomic(self) =
     val s = view_mpsurf(self)
     val f = s->begin_atomic
   in
-    if f != the_null_ptr then call_surface_begin_atomic(f, mp_surface_to_ptr(self))
+    if f != the_null_ptr then call_surface_begin_atomic(f, self)
   end
 
 extern fun minepaint_surface_end_atomic(self: MpSurface, roi: ptr): void = "ext#minepaint_surface_end_atomic"
@@ -203,7 +203,7 @@ implement minepaint_surface_end_atomic(self, roi) =
     val s = view_mpsurf(self)
     val f = s->end_atomic
   in
-    if f != the_null_ptr then call_surface_end_atomic(f, mp_surface_to_ptr(self), roi)
+    if f != the_null_ptr then call_surface_end_atomic(f, self, roi)
   end
 
 extern fun minepaint_surface_save_png(self: MpSurface, path: string, x: int, y: int, w: int, h: int): void = "ext#minepaint_surface_save_png"
@@ -212,5 +212,5 @@ implement minepaint_surface_save_png(self, path, x, y, w, h) =
     val s = view_mpsurf(self)
     val f = s->save_png
   in
-    if f != the_null_ptr then call_surface_save_png(f, mp_surface_to_ptr(self), path, x, y, w, h)
+    if f != the_null_ptr then call_surface_save_png(f, self, path, x, y, w, h)
   end
