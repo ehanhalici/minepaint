@@ -16,9 +16,9 @@ fn f2d(v: float): double = g0float2float_float_double(v)
 fn build_session_path(buf: MpText, cap: size_t, suffix: string): bool = let
   val home = getenv("HOME")
 in
-  if home = the_null_ptr then false
+  if text_is_null(home) != 0 then false
   else let
-    val home_str = addr2str(home)
+    val home_str = addr2str(text_ptr(home))
     val s1 = g1ofg0_string(home_str)
   in
     if string_isnot_atend(s1, i2sz(0)) then let
