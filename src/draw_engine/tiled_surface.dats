@@ -72,12 +72,10 @@ fn f_clamp(x: float, min_v: float, max_v: float): float =
 fn i_min(a: int, b: int): int = if a < b then a else b
 fn i_max(a: int, b: int): int = if a > b then a else b
 
-fn get_dirty_tile(dirty_tiles: IntBuf, idx: int): @(int, int) = let
+fn get_dirty_tile(dirty_tiles: IntBuf, idx: int, nints: int): @(int, int) = let
   val p = intbuf_ptr(dirty_tiles)
-  val x = mp_arr_iget(p, idx * 2)
-  val y = mp_arr_iget(p, idx * 2 + 1)
 in
-  @(x, y)
+  @(airlock_iget_n(p, idx * 2, nints), airlock_iget_n(p, idx * 2 + 1, nints))
 end
 
 // minepaint_tile_request_init
@@ -219,9 +217,10 @@ in
   @(x0, y0, x1, y1)
 end
 
-fn u16s(m: U16Buf, i: int, v: uint16): void = mp_arr_u16set(u16buf_ptr(m), i, v)
-fn fsetm(m: FltBuf, i: int, v: float): void = mp_arr_fset(flt_ptr(m), i, v)
-fn fgetm(m: FltBuf, i: int): float = mp_arr_fget(flt_ptr(m), i)
+#define DAB_BUF_N (MINEPAINT_TILE_SIZE * MINEPAINT_TILE_SIZE + 2 * MINEPAINT_TILE_SIZE)
+fn u16s(m: U16Buf, i: int, v: uint16): void = airlock_u16set_n(u16buf_ptr(m), i, DAB_BUF_N, v)
+fn fsetm(m: FltBuf, i: int, v: float): void = airlock_fset_n(flt_ptr(m), i, DAB_BUF_N, v)
+fn fgetm(m: FltBuf, i: int): float = airlock_fget_n(flt_ptr(m), i, DAB_BUF_N)
 
 fun fill_rr_aa(
   rr_mask: FltBuf, x0: int, y0: int, x1: int, y1: int,
@@ -530,7 +529,7 @@ implement minepaint_tiled_surface_begin_atomic(self_p) =
 
 fun process_dirty_tile_list(self_p: MpSurface, t_ptr: IntBuf, i: int, n: int): void =
   if i < n then let
-    val t = get_dirty_tile(t_ptr, i)
+    val t = get_dirty_tile(t_ptr, i, n * 2)
     val () = process_tile(self_p, t.0, t.1)
   in
     process_dirty_tile_list(self_p, t_ptr, i + 1, n)
@@ -555,9 +554,9 @@ extern fun minepaint_tiled_surface_end_atomic(self_p: MpSurface, roi_p: MpRoi): 
 implement minepaint_tiled_surface_end_atomic(self_p, roi_p) =
   if mp_surface_is_null(self_p) = 0 then let
     val self = tiled_ref(self_p)
-    var tiles_ptr: ptr
-    val tiles_n = operation_queue_get_dirty_tiles(self->operation_queue, tiles_ptr)
-    val () = process_dirty_tile_list(self_p, intbuf_of(tiles_ptr), 0, tiles_n)
+    var tiles_slot: ptr = the_null_ptr
+    val tiles_n = operation_queue_get_dirty_tiles(self->operation_queue, addr@(tiles_slot))
+    val () = process_dirty_tile_list(self_p, intbuf_of(tiles_slot), 0, tiles_n)
     val () = operation_queue_clear_dirty_tiles(self->operation_queue)
     val () =
       if roi_is_null(roi_p) = 0 then let
@@ -828,11 +827,11 @@ fn finalize_sampled_color(
   pw: FCell, pr: FCell, pg: FCell, pb: FCell, pa: FCell, paint: float,
   cr: &float? >> float, cg: &float? >> float, cb: &float? >> float, ca: &float? >> float
 ): void = let
-  val sum_w = mp_arr_fget(fcell_ptr(pw), 0)
-  val sum_r = mp_arr_fget(fcell_ptr(pr), 0)
-  val sum_g = mp_arr_fget(fcell_ptr(pg), 0)
-  val sum_b = mp_arr_fget(fcell_ptr(pb), 0)
-  val sum_a = mp_arr_fget(fcell_ptr(pa), 0)
+  val sum_w = airlock_fget_n(fcell_ptr(pw), 0, 1)
+  val sum_r = airlock_fget_n(fcell_ptr(pr), 0, 1)
+  val sum_g = airlock_fget_n(fcell_ptr(pg), 0, 1)
+  val sum_b = airlock_fget_n(fcell_ptr(pb), 0, 1)
+  val sum_a = airlock_fget_n(fcell_ptr(pa), 0, 1)
 in
   if f_gt(sum_w, 0.0f) then let
     val sa = f_clamp(f_div(sum_a, sum_w), 0.0f, 1.0f)

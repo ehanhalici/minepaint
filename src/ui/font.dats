@@ -3,6 +3,7 @@
 #include "share/atspre_staload.hats"
 
 staload "gl/gl.dats"
+#include "draw_engine/engine_safe.hats"
 
 fn f_add(a: float, b: float): float = g0float_add_float(a, b)
 fn f_mul(a: float, b: float): float = g0float_mul_float(a, b)
@@ -103,17 +104,17 @@ extern fun gl_draw_string(x: float, y: float, scale: float, str: string, r: floa
 implement gl_draw_string(x, y, scale, str, r, g, b) = let
   val () = glColor3f(r, g, b)
   val () = glBegin(GL_POINTS)
-  val s1 = g1ofg0_string(str)
+  val n = airlock_cstr_len(str)
   val char_advance = f_mul(7.0f, scale)
 
-  fun loop{n:int}{i:nat | i <= n}(s: string(n), i: size_t(i), cur_x: float): void =
-    if string_isnot_atend(s, i) then let
-      val ch = string_get_at(s, i)
+  fun loop(i: int, cur_x: float): void =
+    if i < n then let
+      val ch = int2char0(airlock_cstr_at(str, i, n))
       val () = gl_draw_char(cur_x, y, scale, ch)
     in
-      loop(s, i + i2sz(1), f_add(cur_x, char_advance))
+      loop(i + 1, f_add(cur_x, char_advance))
     end else ()
 
-  val () = loop(s1, i2sz(0), x)
+  val () = loop(0, x)
   val () = glEnd()
 in () end

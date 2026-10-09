@@ -29,9 +29,9 @@ typedef Layer_Record = @{
 extern fun view_layer(p: ptr): ref(Layer_Record) = "mac#mp_id_ptr"
 extern fun view_tile(p: ptr): ref(CanvasTile) = "mac#mp_id_ptr"
 
-fn mp_slot_get(p: MpSlot): ptr = mp_arr_pget(slot_ptr(p), 0)
+fn mp_slot_get(p: MpSlot): ptr = airlock_pget_n(slot_ptr(p), 0, 1)
 
-fn mp_slot_set(p: MpSlot, v: ptr): void = mp_arr_pset(slot_ptr(p), 0, v)
+fn mp_slot_set(p: MpSlot, v: ptr): void = airlock_pset_n(slot_ptr(p), 0, 1, v)
 
 fn bucket_at(b: MpBuckets, i: int): MpSlot =
   slot_of(ptr_add<ptr>(buckets_ptr(b), i))

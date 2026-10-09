@@ -3,6 +3,7 @@
 #include "share/atspre_staload.hats"
 
 staload "sys/libc.dats"
+#include "draw_engine/engine_safe.hats"
 staload "sys/io_box.sats"
 staload "ui/state.dats"
 staload "brushes/brush_group.sats"
@@ -19,9 +20,8 @@ in
   if text_is_null(home) != 0 then false
   else let
     val home_str = addr2str(text_ptr(home))
-    val s1 = g1ofg0_string(home_str)
   in
-    if string_isnot_atend(s1, i2sz(0)) then let
+    if airlock_cstr_len(home_str) > 0 then let
       val _ = mp_format_path(buf, cap, home_str, suffix)
     in true end
     else false

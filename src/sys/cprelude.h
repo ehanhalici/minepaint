@@ -110,13 +110,28 @@ static inline void airlock_iset(void *p, int i, int v) {
   if (!p || !airlock_below(i, MP_AIRLOCK_CAP)) return;
   mp_iset((int *)p, i, v);
 }
-static inline unsigned short airlock_u16get(const void *p, int i) {
-  if (!p || !airlock_below(i, MP_AIRLOCK_CAP)) return 0;
+static inline unsigned short airlock_u16get_n(const void *p, int i, int n) {
+  if (!p || !airlock_below(i, n)) return 0;
   return mp_u16get((const unsigned short *)p, i);
 }
-static inline void airlock_u16set(void *p, int i, unsigned short v) {
-  if (!p || !airlock_below(i, MP_AIRLOCK_CAP)) return;
+static inline void airlock_u16set_n(void *p, int i, int n, unsigned short v) {
+  if (!p || !airlock_below(i, n)) return;
   mp_u16set((unsigned short *)p, i, v);
+}
+static inline unsigned short airlock_u16get(const void *p, int i) {
+  return airlock_u16get_n(p, i, MP_AIRLOCK_CAP);
+}
+static inline void airlock_u16set(void *p, int i, unsigned short v) {
+  airlock_u16set_n(p, i, MP_AIRLOCK_CAP, v);
+}
+static inline int airlock_cstr_len(const char *s) {
+  if (!s) return 0;
+  int n = 0;
+  while (n < MP_AIRLOCK_CAP && s[n]) n++;
+  return n;
+}
+static inline int airlock_cstr_at(const char *s, int i, int n) {
+  return airlock_word(s, i, n);
 }
 static inline void *airlock_pget(void *p, int i) {
   if (!p || !airlock_below(i, MP_AIRLOCK_CAP)) return 0;

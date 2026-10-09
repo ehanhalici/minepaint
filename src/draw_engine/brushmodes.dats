@@ -31,17 +31,17 @@ extern fun rgb_to_spectral(r: float, g: float, b: float, spectral: ptr): void = 
 extern fun spectral_to_rgb(spectral: ptr, rgb: ptr): void = "ext#spectral_to_rgb"
 
 // Helper inline getters/setters for 16-bit RGBA pixel components
-fn get_r(p: U16Buf): uint = g0uint2uint_uint16_uint(mp_arr_u16get(pix(p), 0))
-fn get_g(p: U16Buf): uint = g0uint2uint_uint16_uint(mp_arr_u16get(pix(p), 1))
-fn get_b(p: U16Buf): uint = g0uint2uint_uint16_uint(mp_arr_u16get(pix(p), 2))
-fn get_a(p: U16Buf): uint = g0uint2uint_uint16_uint(mp_arr_u16get(pix(p), 3))
+fn get_r(p: U16Buf): uint = g0uint2uint_uint16_uint(airlock_u16get_n(pix(p), 0, 4))
+fn get_g(p: U16Buf): uint = g0uint2uint_uint16_uint(airlock_u16get_n(pix(p), 1, 4))
+fn get_b(p: U16Buf): uint = g0uint2uint_uint16_uint(airlock_u16get_n(pix(p), 2, 4))
+fn get_a(p: U16Buf): uint = g0uint2uint_uint16_uint(airlock_u16get_n(pix(p), 3, 4))
 
-fn set_r(p: U16Buf, v: uint): void = mp_arr_u16set(pix(p), 0, u16(v))
-fn set_g(p: U16Buf, v: uint): void = mp_arr_u16set(pix(p), 1, u16(v))
-fn set_b(p: U16Buf, v: uint): void = mp_arr_u16set(pix(p), 2, u16(v))
-fn set_a(p: U16Buf, v: uint): void = mp_arr_u16set(pix(p), 3, u16(v))
+fn set_r(p: U16Buf, v: uint): void = airlock_u16set_n(pix(p), 0, 4, u16(v))
+fn set_g(p: U16Buf, v: uint): void = airlock_u16set_n(pix(p), 1, 4, u16(v))
+fn set_b(p: U16Buf, v: uint): void = airlock_u16set_n(pix(p), 2, 4, u16(v))
+fn set_a(p: U16Buf, v: uint): void = airlock_u16set_n(pix(p), 3, 4, u16(v))
 
-fn get_mask_val(m: U16Buf): uint = g0uint2uint_uint16_uint(mp_arr_u16get(pix(m), 0))
+fn get_mask_val(m: U16Buf): uint = g0uint2uint_uint16_uint(airlock_u16get_n(pix(m), 0, 1))
 
 // --- 1. NORMAL BLEND MODE ---
 extern fun draw_dab_pixels_BlendMode_Normal(
@@ -415,7 +415,7 @@ implement get_color_pixels_legacy(mask, rgba, sum_weight, sum_r, sum_g, sum_b, s
     if fcell_is_null(c) = 0 then let
       val p = fcell_ptr(c)
     in
-      mp_arr_fset(p, 0, f_add(mp_arr_fget(p, 0), u2f(val_u)))
+      airlock_fset_n(p, 0, 1, f_add(airlock_fget_n(p, 0, 1), u2f(val_u)))
     end
   val () = add_accum(sum_weight, w)
   val () = add_accum(sum_r, r)

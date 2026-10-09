@@ -38,8 +38,8 @@ in
   airlock_dset_n(base, i, 19, v)
 end
 
-fn sdget(u: DblBuf, i: int): double = mp_arr_dget(dbl_ptr(u), i)
-fn sdset(u: DblBuf, i: int, v: double): void = mp_arr_dset(dbl_ptr(u), i, v)
+fn sdget(u: DblBuf, i: int): double = airlock_dget_n(dbl_ptr(u), i, 19)
+fn sdset(u: DblBuf, i: int, v: double): void = airlock_dset_n(dbl_ptr(u), i, 19, v)
 
 fn mp_rng_get_buf_ptr(s: MpRng, i: int): DblBuf =
   dbl_of(rng_ptr(rng_add_dbl(s, 10 + i)))

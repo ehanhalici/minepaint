@@ -74,13 +74,13 @@ in () end
 fn free_op_func(item: int): void =
   if item >= 0 then dab_release(item)
 
-fn get_dirty_tile(p: IntBuf, idx: int): @(int, int) =
-  @(mp_arr_iget(intbuf_ptr(p), idx * 2), mp_arr_iget(intbuf_ptr(p), idx * 2 + 1))
+fn get_dirty_tile(p: IntBuf, idx: int, nints: int): @(int, int) =
+  @(airlock_iget_n(intbuf_ptr(p), idx * 2, nints), airlock_iget_n(intbuf_ptr(p), idx * 2 + 1, nints))
 
-fn set_dirty_tile(p: IntBuf, idx: int, x: int, y: int): void = let
-  val () = mp_arr_iset(intbuf_ptr(p), idx * 2, x)
+fn set_dirty_tile(p: IntBuf, idx: int, x: int, y: int, nints: int): void = let
+  val () = airlock_iset_n(intbuf_ptr(p), idx * 2, nints, x)
 in
-  mp_arr_iset(intbuf_ptr(p), idx * 2 + 1, y)
+  airlock_iset_n(intbuf_ptr(p), idx * 2 + 1, nints, y)
 end
 
 fn remove_duplicate_tiles(array_ptr: IntBuf, len: int): int =
@@ -88,17 +88,17 @@ fn remove_duplicate_tiles(array_ptr: IntBuf, len: int): int =
   else let
     fun loop_i(i: int, new_len: int): int =
       if i < len then let
-        val @(ix, iy) = get_dirty_tile(array_ptr, i)
+        val @(ix, iy) = get_dirty_tile(array_ptr, i, len * 2)
         fun loop_j(j: int): bool =
           if j < new_len then let
-            val @(jx, jy) = get_dirty_tile(array_ptr, j)
+            val @(jx, jy) = get_dirty_tile(array_ptr, j, len * 2)
           in
             if (ix = jx) * (iy = jy) then true else loop_j(j + 1)
           end else false
         val found = loop_j(0)
       in
         if not(found) then let
-          val () = set_dirty_tile(array_ptr, new_len, ix, iy)
+          val () = set_dirty_tile(array_ptr, new_len, ix, iy, len * 2)
         in
           loop_i(i + 1, new_len + 1)
         end else loop_i(i + 1, new_len)
@@ -110,8 +110,8 @@ fn remove_duplicate_tiles(array_ptr: IntBuf, len: int): int =
 fn copy_dirty_array(old_dirty: IntBuf, new_dirty: IntBuf, n: int): void = let
   fun loop(i: int): void =
     if i < n then let
-      val @(x, y) = get_dirty_tile(old_dirty, i)
-      val () = set_dirty_tile(new_dirty, i, x, y)
+      val @(x, y) = get_dirty_tile(old_dirty, i, n * 2)
+      val () = set_dirty_tile(new_dirty, i, x, y, n * 2)
     in
       loop(i + 1)
     end else ()
@@ -181,7 +181,7 @@ implement operation_queue_get_dirty_tiles(h, tiles_out) =
     val dirty = dirty_get(h)
     val n0 = remove_duplicate_tiles(dirty, n_get(h))
     val () = n_set(h, n0)
-    val () = if tiles_out != the_null_ptr then mp_arr_pset(tiles_out, 0, intbuf_ptr(dirty))
+    val () = if tiles_out != the_null_ptr then airlock_pset_n(tiles_out, 0, 1, intbuf_ptr(dirty))
   in
     n0
   end
@@ -213,7 +213,7 @@ fn add_dirty_tile(h: int, tm: int, ix: int, iy: int): void = let
     in
       p_len
     end else cur_n
-  val () = set_dirty_tile(dt, n_pruned, ix, iy)
+  val () = set_dirty_tile(dt, n_pruned, ix, iy, cap * 2)
 in
   n_set(h, g0int_add_int(n_pruned, 1))
 end
