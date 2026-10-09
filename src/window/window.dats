@@ -5,6 +5,7 @@
 
 staload "x11/event.sats"
 staload "x11/display_box.sats"
+staload "window/app_box.sats"
 staload "x11/xi2.sats"
 staload "gl/glx.dats"
 staload "sys/libc.dats"
@@ -20,7 +21,7 @@ typedef X11App = @{
 extern fun view_app(p: ptr): ref(X11App) = "mac#mp_id_ptr"
 extern fun mp_id_ptr(p: ptr): ptr = "mac#mp_id_ptr"
 
-fn app_ref(app: ptr): ref(X11App) = view_app(app)
+fn app_ref(app: MpApp): ref(X11App) = view_app(app_ptr(app))
 
 fn i2u(i: int): uint = g0int2uint_int_uint(i)
 
@@ -72,13 +73,13 @@ in
   in (glc, cursor) end
 end
 
-extern fun app_create(w: int, h: int, title: string): ptr = "ext#app_create"
+extern fun app_create(w: int, h: int, title: string): MpApp = "ext#app_create"
 implement app_create(w, h, title) = let
   val dpy = mp_x_open_display()
 in
   if dpy_is_null(dpy) != 0 then let
     val () = fprintln!(stderr_ref, "HATA: X11 Display acilamadi!")
-  in the_null_ptr end
+  in app_none() end
   else let
     val screen = mp_x_default_screen(dpy)
     val root = mp_x_root_window(dpy, screen)
@@ -88,7 +89,7 @@ in
     if vi = the_null_ptr then let
       val () = fprintln!(stderr_ref, "HATA: Uygun GLX Visual bulunamadi!")
       val () = mp_x_close_display(dpy)
-    in the_null_ptr end
+    in app_none() end
     else let
       val win = create_window_with_hints(dpy, root, vi, w, h, title)
       val wm = setup_wm_protocols(dpy, win)
@@ -99,7 +100,7 @@ in
         val _ = XFree(vi)
         val () = mp_x_destroy_window(dpy, win)
         val () = mp_x_close_display(dpy)
-      in the_null_ptr end
+      in app_none() end
       else let
         val app = malloc(sizeof<X11App>)
         val a = view_app(app)
@@ -108,16 +109,16 @@ in
         val () = a->glc := glc
         val () = a->cursor := cursor
         val () = a->wm_delete := wm
-      in app end
+      in app_of(app) end
     end
   end
 end
 
-extern fun app_destroy(app: ptr): void = "ext#app_destroy"
+extern fun app_destroy(app: MpApp): void = "ext#app_destroy"
 implement app_destroy(app) =
-  if app = the_null_ptr then ()
+  if app_is_null(app) != 0 then ()
   else let
-    val a = view_app(app)
+    val a = view_app(app_ptr(app))
     val dpy = a->dpy
     val _ = XFreeCursor(dpy, a->cursor)
     val _ = glXMakeCurrent(dpy, 0ul, the_null_ptr)
@@ -125,37 +126,37 @@ implement app_destroy(app) =
     val () = mp_x_destroy_window(dpy, a->win)
     val () = mp_x_close_display(dpy)
   in
-    free(app)
+    free(app_ptr(app))
   end
 
-extern fun app_wm_delete(app: ptr): ulint = "ext#app_wm_delete"
+extern fun app_wm_delete(app: MpApp): ulint = "ext#app_wm_delete"
 implement app_wm_delete(app) = let
   val a = app_ref(app)
 in
   a->wm_delete
 end
 
-extern fun app_pending(app: ptr): int = "ext#app_pending"
+extern fun app_pending(app: MpApp): int = "ext#app_pending"
 implement app_pending(app) = let
   val a = app_ref(app)
 in
   XPending(a->dpy)
 end
 
-extern fun app_next_event(app: ptr, ev: ptr): void = "ext#app_next_event"
+extern fun app_next_event(app: MpApp, ev: ptr): void = "ext#app_next_event"
 implement app_next_event(app, ev) = let
   val a = app_ref(app)
   val _ = XNextEvent(a->dpy, ev)
 in () end
 
-extern fun app_swap(app: ptr): void = "ext#app_swap"
+extern fun app_swap(app: MpApp): void = "ext#app_swap"
 implement app_swap(app) = let
-  val a = view_app(app)
+  val a = view_app(app_ptr(app))
 in
   glXSwapBuffers(a->dpy, a->win)
 end
 
-extern fun app_dpy(app: ptr): MpDisplay = "ext#app_dpy"
+extern fun app_dpy(app: MpApp): MpDisplay = "ext#app_dpy"
 implement app_dpy(app) = let
   val a = app_ref(app)
 in

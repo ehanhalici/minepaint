@@ -4,6 +4,7 @@
 
 staload "x11/event.sats"
 staload "x11/display_box.sats"
+staload "window/app_box.sats"
 staload "x11/xi2.sats"
 staload "window/input.dats"
 staload "gl/gl.dats"
@@ -28,13 +29,13 @@ extern fun widgets_render_floating_toggle(win_w: float, cur_time: double): void 
 extern fun widgets_restore_session(canvas_ptr: int): void = "ext#widgets_restore_session"
 extern fun widgets_save_session(): void = "ext#widgets_save_session"
 
-extern fun app_create(w: int, h: int, title: string): ptr = "ext#app_create"
-extern fun app_destroy(app: ptr): void = "ext#app_destroy"
-extern fun app_wm_delete(app: ptr): ulint = "ext#app_wm_delete"
-extern fun app_pending(app: ptr): int = "ext#app_pending"
-extern fun app_next_event(app: ptr, ev: ptr): void = "ext#app_next_event"
-extern fun app_swap(app: ptr): void = "ext#app_swap"
-extern fun app_dpy(app: ptr): MpDisplay = "ext#app_dpy"
+extern fun app_create(w: int, h: int, title: string): MpApp = "ext#app_create"
+extern fun app_destroy(app: MpApp): void = "ext#app_destroy"
+extern fun app_wm_delete(app: MpApp): ulint = "ext#app_wm_delete"
+extern fun app_pending(app: MpApp): int = "ext#app_pending"
+extern fun app_next_event(app: MpApp, ev: ptr): void = "ext#app_next_event"
+extern fun app_swap(app: MpApp): void = "ext#app_swap"
+extern fun app_dpy(app: MpApp): MpDisplay = "ext#app_dpy"
 
 macdef ConfigureNotify = $extval(int, "ConfigureNotify")
 macdef ClientMessage = $extval(int, "ClientMessage")
@@ -88,7 +89,7 @@ fn handle_configure(st: ref(AppState), p_xev: ptr): void = let
   val () = st->win_h := mp_xevent_config_h(p_xev)
 in () end
 
-fn handle_client_message(st: ref(AppState), app: ptr, p_xev: ptr): void = let
+fn handle_client_message(st: ref(AppState), app: MpApp, p_xev: ptr): void = let
   val d0 = mp_xevent_client_data0(p_xev)
   val wm_del = ulint2lint(app_wm_delete(app))
 in
@@ -103,7 +104,7 @@ in
   else ()
 end
 
-fn handle_key_release(st: ref(AppState), app: ptr, p_xev: ptr): void = let
+fn handle_key_release(st: ref(AppState), app: MpApp, p_xev: ptr): void = let
   val ks = mp_xevent_keysym(p_xev)
 in
   if ks = XK_space then let
@@ -206,7 +207,7 @@ in
   end
 end
 
-fn render_frame(st: ref(AppState), app: ptr, canvas_ptr: int): void = let
+fn render_frame(st: ref(AppState), app: MpApp, canvas_ptr: int): void = let
   val s_vis = widgets_get_sidebar_visible()
   val cur_time = get_time_seconds()
   val canvas_w =
@@ -250,7 +251,7 @@ fn xev_kind_of(t: int): xev_kind =
   else if t = MotionNotify then XevMotion()
   else XevOther()
 
-fn dispatch_xev(k: xev_kind, st: ref(AppState), app: ptr, p_xev: ptr, canvas_ptr: int): void =
+fn dispatch_xev(k: xev_kind, st: ref(AppState), app: MpApp, p_xev: ptr, canvas_ptr: int): void =
   case+ k of
   | XevConfigure() => handle_configure(st, p_xev)
   | XevClient() => handle_client_message(st, app, p_xev)
@@ -264,7 +265,7 @@ fn dispatch_xev(k: xev_kind, st: ref(AppState), app: ptr, p_xev: ptr, canvas_ptr
   | XevMotion() => handle_motion_notify(st, canvas_ptr, p_xev)
   | XevOther() => ()
 
-fun event_loop(st: ref(AppState), app: ptr, p_xev: ptr, canvas_ptr: int): void = let
+fun event_loop(st: ref(AppState), app: MpApp, p_xev: ptr, canvas_ptr: int): void = let
 in
   if st->running > 0 then let
     fun drain(): void =
@@ -285,7 +286,7 @@ extern fun window_create_and_run(canvas_ptr: int): int = "ext#window_create_and_
 implement window_create_and_run(canvas_ptr) = let
   val app = app_create(1000, 600, "MinePaint")
 in
-  if app = the_null_ptr then 1
+  if app_is_null(app) != 0 then 1
   else let
     var xev_buf: @[byte][256]
     val p_xev = mp_id_ptr(addr@(xev_buf))
