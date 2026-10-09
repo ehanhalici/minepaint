@@ -8,6 +8,7 @@
 staload "./surface.dats"
 staload "./tiled_surface.dats"
 staload "draw_engine/surface_box.sats"
+staload "draw_engine/req_box.sats"
 #include "./minepaint_types.hats"
 
 typedef MinePaintFixedTiledSurface_struct = @{
@@ -23,7 +24,7 @@ typedef MinePaintFixedTiledSurface_struct = @{
 
 extern fun view_fixed(p: ptr): ref(MinePaintFixedTiledSurface_struct) = "mac#mp_id_ptr"
 extern fun view_tile_req(p: ptr): ref(MinePaintTileRequest) = "mac#mp_id_ptr"
-extern fun req_fn2ptr(f: (MpSurface, ptr) -> void): ptr = "mac#mp_id_ptr"
+extern fun req_fn2ptr(f: (MpSurface, MpReq) -> void): ptr = "mac#mp_id_ptr"
 extern fun destroy_fn2ptr(f: (MpSurface) -> void): ptr = "mac#mp_id_ptr"
 
 extern fun malloc(sz: size_t): ptr = "mac#malloc"
@@ -36,8 +37,8 @@ fn int2size(x: int): size_t = g0int2uint_int_size(x)
 fn mul_size_size(a: size_t, b: size_t): size_t = g0uint_mul_size(a, b)
 fn add_size_size(a: size_t, b: size_t): size_t = g0uint_add_size(a, b)
 
-extern fun fixed_tile_request_start(tiled_surface: MpSurface, request: ptr): void = "ext#fixed_tile_request_start"
-extern fun fixed_tile_request_end(tiled_surface: MpSurface, request: ptr): void = "ext#fixed_tile_request_end"
+extern fun fixed_tile_request_start(tiled_surface: MpSurface, request: MpReq): void = "ext#fixed_tile_request_start"
+extern fun fixed_tile_request_end(tiled_surface: MpSurface, request: MpReq): void = "ext#fixed_tile_request_end"
 extern fun free_simple_tiledsurf(surface: MpSurface): void = "ext#free_simple_tiledsurf"
 
 extern fun minepaint_fixed_tiled_surface_new(width: int, height: int): MpSurface = "ext#minepaint_fixed_tiled_surface_new"
@@ -62,7 +63,7 @@ end
 
 implement fixed_tile_request_start(tiled_surface, request) = let
   val self = view_fixed(mp_surface_to_ptr(tiled_surface))
-  val req = view_tile_req(request)
+  val req = view_tile_req(req_ptr(request))
   val tx = req->tx
   val ty = req->ty
 in
@@ -77,7 +78,7 @@ end
 
 implement fixed_tile_request_end(tiled_surface, request) = let
   val self = view_fixed(mp_surface_to_ptr(tiled_surface))
-  val req = view_tile_req(request)
+  val req = view_tile_req(req_ptr(request))
 in
   if is_out_of_bounds(req->tx, req->ty, self->tiles_width, self->tiles_height) then
     reset_null_tile(tiled_surface)

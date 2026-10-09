@@ -45,7 +45,7 @@ fn call_surface_get_color(
 fn call_surface_begin_atomic(f: ptr, self: MpSurface): void =
   load_begin(f)(self)
 
-fn call_surface_end_atomic(f: ptr, self: MpSurface, roi: ptr): void =
+fn call_surface_end_atomic(f: ptr, self: MpSurface, roi: MpRoi): void =
   load_end(f)(self, roi)
 
 fn call_surface_save_png(f: ptr, self: MpSurface, path: string, x: int, y: int, w: int, h: int): void =
@@ -197,7 +197,7 @@ implement minepaint_surface_begin_atomic(self) =
     if f != the_null_ptr then call_surface_begin_atomic(f, self)
   end
 
-extern fun minepaint_surface_end_atomic(self: MpSurface, roi: ptr): void = "ext#minepaint_surface_end_atomic"
+extern fun minepaint_surface_end_atomic(self: MpSurface, roi: MpRoi): void = "ext#minepaint_surface_end_atomic"
 implement minepaint_surface_end_atomic(self, roi) =
   if mp_surface_is_null(self) = 0 then let
     val s = view_mpsurf(self)
