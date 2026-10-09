@@ -83,7 +83,7 @@ extern fun glsurface_create(): glsurface_vtype = "ext#glsurface_create"
 extern fun glsurface_destroy(s: glsurface_vtype): void = "ext#glsurface_destroy"
 extern fun glsurface_set_erasing(s: glsurface_vtype, v: int): void = "ext#glsurface_set_erasing"
 extern fun mygl_surface_set_layer(s: glsurface_vtype, layer: MpLayer): void = "ext#mygl_surface_set_layer"
-extern fun mygl_surface_flush_batch(s: ptr): void = "ext#mygl_surface_flush_batch"
+extern fun mygl_surface_flush_batch(s: MpSurface): void = "ext#mygl_surface_flush_batch"
 implement mygl_surface_flush_batch(s) = ()
 
 // --- Nokta Cizim Mantigi ---

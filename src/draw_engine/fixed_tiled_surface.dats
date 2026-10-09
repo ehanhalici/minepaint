@@ -7,6 +7,7 @@
 
 staload "./surface.dats"
 staload "./tiled_surface.dats"
+staload "draw_engine/surface_box.sats"
 #include "./minepaint_types.hats"
 
 typedef MinePaintFixedTiledSurface_struct = @{
@@ -39,10 +40,10 @@ extern fun fixed_tile_request_start(tiled_surface: ptr, request: ptr): void = "e
 extern fun fixed_tile_request_end(tiled_surface: ptr, request: ptr): void = "ext#fixed_tile_request_end"
 extern fun free_simple_tiledsurf(surface: ptr): void = "ext#free_simple_tiledsurf"
 
-extern fun minepaint_fixed_tiled_surface_new(width: int, height: int): ptr = "ext#minepaint_fixed_tiled_surface_new"
-extern fun minepaint_fixed_tiled_surface_get_width(self: ptr): int = "ext#minepaint_fixed_tiled_surface_get_width"
-extern fun minepaint_fixed_tiled_surface_get_height(self: ptr): int = "ext#minepaint_fixed_tiled_surface_get_height"
-extern fun minepaint_fixed_tiled_surface_interface(self: ptr): ptr = "ext#minepaint_fixed_tiled_surface_interface"
+extern fun minepaint_fixed_tiled_surface_new(width: int, height: int): MpSurface = "ext#minepaint_fixed_tiled_surface_new"
+extern fun minepaint_fixed_tiled_surface_get_width(self: MpSurface): int = "ext#minepaint_fixed_tiled_surface_get_width"
+extern fun minepaint_fixed_tiled_surface_get_height(self: MpSurface): int = "ext#minepaint_fixed_tiled_surface_get_height"
+extern fun minepaint_fixed_tiled_surface_interface(self: MpSurface): MpSurface = "ext#minepaint_fixed_tiled_surface_interface"
 
 fn is_out_of_bounds(tx: int, ty: int, w: int, h: int): bool =
   (tx < 0) || (ty < 0) || (tx >= w) || (ty >= h)
@@ -85,10 +86,10 @@ end
 implement minepaint_fixed_tiled_surface_interface(self) = self
 
 implement minepaint_fixed_tiled_surface_get_width(self) =
-  if self != the_null_ptr then (view_fixed(self))->width else 0
+  if mp_surface_is_null(self) != 0 then 0 else (view_fixed(mp_surface_to_ptr(self)))->width
 
 implement minepaint_fixed_tiled_surface_get_height(self) =
-  if self != the_null_ptr then (view_fixed(self))->height else 0
+  if mp_surface_is_null(self) != 0 then 0 else (view_fixed(mp_surface_to_ptr(self)))->height
 
 implement free_simple_tiledsurf(surface) =
   if surface != the_null_ptr then let
@@ -120,7 +121,7 @@ implement minepaint_fixed_tiled_surface_new(width, height) = let
   val () = assertloc(width > 0 && height > 0)
   val self_p = malloc(sizeof<MinePaintFixedTiledSurface_struct>)
 in
-  if self_p = the_null_ptr then the_null_ptr
+  if self_p = the_null_ptr then mp_surface_none()
   else let
     val self = view_fixed(self_p)
     val () = minepaint_tiled_surface_init(
@@ -138,7 +139,7 @@ in
   in
     if buf = the_null_ptr then let
       val () = free(self_p)
-    in the_null_ptr end
+    in mp_surface_none() end
     else let
       val _ = memset(buf, 255, total_bytes)
       val null_t = malloc(single_bytes)
@@ -146,7 +147,7 @@ in
       val () = setup_fixed_surface(self, width, height, tw, th, single_bytes, buf, null_t)
       val () = reset_null_tile(self_p)
     in
-      self_p
+      mp_surface_of_ptr(self_p)
     end
   end
 end
