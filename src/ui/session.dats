@@ -142,11 +142,14 @@ in
     else let
       var line_buf = @[byte][256]()
       val p_line = text_of(addr@(line_buf))
-      fun loop(): void =
-        if text_is_null(fgets(p_line, 256, f)) = 0 then let
-          val () = apply_line(addr2str(text_ptr(p_line)))
-        in loop() end else ()
-      val () = loop()
+      fnx loop {k:nat} .<k>. (k: int(k)): void =
+        if k > 0 then
+          if text_is_null(fgets(p_line, 256, f)) = 0 then let
+            val () = apply_line(addr2str(text_ptr(p_line)))
+          in loop(k - 1) end
+          else ()
+        else ()
+      val () = loop(MP_REC_FUEL)
       val _ = fclose(f)
     in 1 end
   end
@@ -158,14 +161,15 @@ in () end
 
 fn save_palette_and_state(f: MpFile, buf: MpText, cap: size_t): void = let
   val u = ui_get()
-  fun swatches(i: int): void =
-    if i < 12 then let
+  fnx swatches {i:nat | i <= 12} .<12 - i>. (i: int(i)): void =
+    if i >= 12 then ()
+    else let
       val r = pal_get(i, 0)
       val g = pal_get(i, 1)
       val b = pal_get(i, 2)
       val _ = mp_snprintf_ifff(buf, cap, "swatch %d %.6f %.6f %.6f\n", i, f2d(r), f2d(g), f2d(b))
       val () = put_line(f, buf)
-    in swatches(i + 1) end else ()
+    in swatches(i + 1) end
   val () = swatches(0)
   val _ = mp_snprintf_i(buf, cap, "active_swatch %d\n", u->active_swatch)
   val () = put_line(f, buf)

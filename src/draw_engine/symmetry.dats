@@ -84,7 +84,7 @@ in
   mat_set(h, idx, 8, t.r8)
 end
 
-fun find_free(i: int): int =
+fnx find_free {i:nat | i <= SYMM_CAP} .<SYMM_CAP - i>. (i: int(i)): int =
   if i >= SYMM_CAP then SYMMETRY_NONE
   else if alive_get(i) then find_free(i + 1)
   else i
@@ -139,21 +139,31 @@ in
   reflect_into(h, 2, m1, f_sub(0.0f, angle_rad))
 end
 
-fun snow_branch(h: int, m: MinePaintTransform, num_l: int, rot: float, ang: float, i: int): void =
-  if i < num_l then let
+fnx snow_branch {i:nat | i <= SYMM_MAX_MATRICES} .<SYMM_MAX_MATRICES - i>. (
+  h: int, m: MinePaintTransform, num_l: int, rot: float, ang: float, i: int(i)
+): void =
+  if i >= SYMM_MAX_MATRICES then ()
+  else if i >= num_l then ()
+  else let
     val cur = f_mul(rot, g0int2float_int_float(i))
     val turned = mat_mul(mat_rot_cw_factor(cur), m)
     val ref_angle = f_sub(f_sub(0.0f, cur), ang)
     val () = reflect_into(h, (num_l - 1) + i, turned, ref_angle)
-  in snow_branch(h, m, num_l, rot, ang, i + 1) end
-  else ()
+  in
+    snow_branch(h, m, num_l, rot, ang, i + 1)
+  end
 
-fun rot_branch(h: int, m: MinePaintTransform, num_l: int, rot: float, i: int): void =
-  if i < num_l then let
+fnx rot_branch {i:nat | i <= SYMM_MAX_MATRICES} .<SYMM_MAX_MATRICES - i>. (
+  h: int, m: MinePaintTransform, num_l: int, rot: float, i: int(i)
+): void =
+  if i >= SYMM_MAX_MATRICES then ()
+  else if i >= num_l then ()
+  else let
     val cur = f_mul(rot, g0int2float_int_float(i))
     val () = rotate_into(h, i - 1, m, cur)
-  in rot_branch(h, m, num_l, rot, i + 1) end
-  else ()
+  in
+    rot_branch(h, m, num_l, rot, i + 1)
+  end
 
 fn apply_snow(h: int, m: MinePaintTransform, num_l: int, rot: float, ang: float): void = let
   val () = snow_branch(h, m, num_l, rot, ang, 0)
@@ -164,12 +174,17 @@ end
 fn apply_rot(h: int, m: MinePaintTransform, num_l: int, rot: float): void =
   rot_branch(h, m, num_l, rot, 1)
 
-fun translate_back(h: int, n: int, cx: float, cy: float, i: int): void =
-  if i < n then let
+fnx translate_back {i:nat | i <= SYMM_MAX_MATRICES} .<SYMM_MAX_MATRICES - i>. (
+  h: int, n: int, cx: float, cy: float, i: int(i)
+): void =
+  if i >= SYMM_MAX_MATRICES then ()
+  else if i >= n then ()
+  else let
     val shifted = mat_mul(mat_translate_factor(cx, cy), load_mat(h, i))
     val () = store_mat(h, i, shifted)
-  in translate_back(h, n, cx, cy, i + 1) end
-  else ()
+  in
+    translate_back(h, n, cx, cy, i + 1)
+  end
 
 fn dispatch_kind(h: int, m: MinePaintTransform, t: int, ang: float, rot: float, num_l: int, pi: float): void =
   case+ kind_of(t) of
@@ -197,7 +212,10 @@ in
     val cy = f_get(g_pen_y, h)
     val pi = 3.141592653589793f
     val angle_rad = f_mul(f_get(g_pen_ang, h), f_div(pi, 180.0f))
-    val rot_angle = f_div(f_mul(2.0f, pi), pend_nl)
+    val nlines = lines_of(pend_nl)
+    val rot_angle =
+      if nlines > 0 then f_div(f_mul(2.0f, pi), g0int2float_int_float(nlines))
+      else 0.0f
     val origin = mat_translate_factor(f_sub(0.0f, cx), f_sub(0.0f, cy))
     val () = publish_current(h, pend_t, pend_nl)
     val () = dispatch_kind(h, origin, pend_t, angle_rad, rot_angle, lines_of(pend_nl), pi)

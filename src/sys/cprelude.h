@@ -29,7 +29,6 @@ static inline int mp_ptr_is_null(void *p) { return p == 0; }
 #define MP_AIRLOCK_CAP 2000000
 
 static inline int airlock_nat(int i) { return i >= 0 ? i : 0; }
-static inline int airlock_pos(int i) { return i > 0 ? i : 1; }
 static inline int airlock_below(int i, int n) {
   return (i >= 0 && n > 0 && i < n) ? 1 : 0;
 }

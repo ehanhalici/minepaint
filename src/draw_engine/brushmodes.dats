@@ -53,41 +53,43 @@ implement draw_dab_pixels_BlendMode_Normal(mask, rgba, color_r, color_g, color_b
   val cb = g0uint2uint_uint16_uint(color_b)
   val opacity_u = g0uint2uint_uint16_uint(opacity)
 
-  fun loop_outer(m: U16Buf, p: U16Buf): void = let
-    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf): @(U16Buf, U16Buf) = let
+  fnx loop_inner {k:nat} .<k>. (
+    k: int(k), m_cur: U16Buf, p_cur: U16Buf
+  ): @(bool, U16Buf, U16Buf) =
+    if k > 0 then let
       val mval = get_mask_val(m_cur)
     in
-      if mval != 0U then let
+      if mval = 0U then @(false, m_cur, p_cur)
+      else let
         val opa_a = (mval * opacity_u) / 32768U
         val opa_b = 32768U - opa_a
         val cur_a = get_a(p_cur)
         val cur_r = get_r(p_cur)
         val cur_g = get_g(p_cur)
         val cur_b = get_b(p_cur)
-
         val () = set_a(p_cur, opa_a + (opa_b * cur_a) / 32768U)
         val () = set_r(p_cur, (opa_a * cr + opa_b * cur_r) / 32768U)
         val () = set_g(p_cur, (opa_a * cg + opa_b * cur_g) / 32768U)
         val () = set_b(p_cur, (opa_a * cb + opa_b * cur_b) / 32768U)
       in
-        loop_inner(step(m_cur, 1), step(p_cur, 4))
-      end else
-        @(m_cur, p_cur)
-    end
+        loop_inner(k - 1, step(m_cur, 1), step(p_cur, 4))
+      end
+    end else @(true, m_cur, p_cur)
 
-    val @(m_end, p_end) = loop_inner(m, p)
-    val skip = get_mask_val(step(m_end, 1))
-  in
-    if skip = 0U then ()
-    else let
-      val next_p = step(p_end, g0uint2int_uint_int(skip))
-      val next_m = step(m_end, 2)
+  fnx loop_outer {k:nat} .<k>. (k: int(k), m: U16Buf, p: U16Buf): void =
+    if k > 0 then let
+      val @(halt, m_end, p_end) = loop_inner(k, m, p)
     in
-      loop_outer(next_m, next_p)
-    end
-  end
+      if halt then ()
+      else let
+        val skip = get_mask_val(step(m_end, 1))
+      in
+        if skip = 0U then ()
+        else loop_outer(k - 1, step(m_end, 2), step(p_end, g0uint2int_uint_int(skip)))
+      end
+    end else ()
 in
-  loop_outer(mask, rgba)
+  loop_outer(MP_REC_FUEL, mask, rgba)
 end
 
 // --- 2. NORMAL AND ERASER (SMUDGE / ERASE) ---
@@ -101,11 +103,14 @@ implement draw_dab_pixels_BlendMode_Normal_and_Eraser(mask, rgba, color_r, color
   val ca = g0uint2uint_uint16_uint(color_a)
   val opacity_u = g0uint2uint_uint16_uint(opacity)
 
-  fun loop_outer(m: U16Buf, p: U16Buf): void = let
-    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf): @(U16Buf, U16Buf) = let
+  fnx loop_inner {k:nat} .<k>. (
+    k: int(k), m_cur: U16Buf, p_cur: U16Buf
+  ): @(bool, U16Buf, U16Buf) =
+    if k > 0 then let
       val mval = get_mask_val(m_cur)
     in
-      if mval != 0U then let
+      if mval = 0U then @(false, m_cur, p_cur)
+      else let
         val opa_a0 = (mval * opacity_u) / 32768U
         val opa_b = 32768U - opa_a0
         val opa_a = (opa_a0 * ca) / 32768U
@@ -113,30 +118,29 @@ implement draw_dab_pixels_BlendMode_Normal_and_Eraser(mask, rgba, color_r, color
         val cur_r = get_r(p_cur)
         val cur_g = get_g(p_cur)
         val cur_b = get_b(p_cur)
-
         val () = set_a(p_cur, opa_a + (opa_b * cur_a) / 32768U)
         val () = set_r(p_cur, (opa_a * cr + opa_b * cur_r) / 32768U)
         val () = set_g(p_cur, (opa_a * cg + opa_b * cur_g) / 32768U)
         val () = set_b(p_cur, (opa_a * cb + opa_b * cur_b) / 32768U)
       in
-        loop_inner(step(m_cur, 1), step(p_cur, 4))
-      end else
-        @(m_cur, p_cur)
-    end
+        loop_inner(k - 1, step(m_cur, 1), step(p_cur, 4))
+      end
+    end else @(true, m_cur, p_cur)
 
-    val @(m_end, p_end) = loop_inner(m, p)
-    val skip = get_mask_val(step(m_end, 1))
-  in
-    if skip = 0U then ()
-    else let
-      val next_p = step(p_end, g0uint2int_uint_int(skip))
-      val next_m = step(m_end, 2)
+  fnx loop_outer {k:nat} .<k>. (k: int(k), m: U16Buf, p: U16Buf): void =
+    if k > 0 then let
+      val @(halt, m_end, p_end) = loop_inner(k, m, p)
     in
-      loop_outer(next_m, next_p)
-    end
-  end
+      if halt then ()
+      else let
+        val skip = get_mask_val(step(m_end, 1))
+      in
+        if skip = 0U then ()
+        else loop_outer(k - 1, step(m_end, 2), step(p_end, g0uint2int_uint_int(skip)))
+      end
+    end else ()
 in
-  loop_outer(mask, rgba)
+  loop_outer(MP_REC_FUEL, mask, rgba)
 end
 
 // --- 3. LOCK ALPHA BLEND MODE ---
@@ -149,11 +153,14 @@ implement draw_dab_pixels_BlendMode_LockAlpha(mask, rgba, color_r, color_g, colo
   val cb = g0uint2uint_uint16_uint(color_b)
   val opacity_u = g0uint2uint_uint16_uint(opacity)
 
-  fun loop_outer(m: U16Buf, p: U16Buf): void = let
-    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf): @(U16Buf, U16Buf) = let
+  fnx loop_inner {k:nat} .<k>. (
+    k: int(k), m_cur: U16Buf, p_cur: U16Buf
+  ): @(bool, U16Buf, U16Buf) =
+    if k > 0 then let
       val mval = get_mask_val(m_cur)
     in
-      if mval != 0U then let
+      if mval = 0U then @(false, m_cur, p_cur)
+      else let
         val opa_a0 = (mval * opacity_u) / 32768U
         val opa_b = 32768U - opa_a0
         val cur_a = get_a(p_cur)
@@ -161,86 +168,85 @@ implement draw_dab_pixels_BlendMode_LockAlpha(mask, rgba, color_r, color_g, colo
         val cur_r = get_r(p_cur)
         val cur_g = get_g(p_cur)
         val cur_b = get_b(p_cur)
-
         val () = set_r(p_cur, (opa_a * cr + opa_b * cur_r) / 32768U)
         val () = set_g(p_cur, (opa_a * cg + opa_b * cur_g) / 32768U)
         val () = set_b(p_cur, (opa_a * cb + opa_b * cur_b) / 32768U)
       in
-        loop_inner(step(m_cur, 1), step(p_cur, 4))
-      end else
-        @(m_cur, p_cur)
-    end
+        loop_inner(k - 1, step(m_cur, 1), step(p_cur, 4))
+      end
+    end else @(true, m_cur, p_cur)
 
-    val @(m_end, p_end) = loop_inner(m, p)
-    val skip = get_mask_val(step(m_end, 1))
-  in
-    if skip = 0U then ()
-    else let
-      val next_p = step(p_end, g0uint2int_uint_int(skip))
-      val next_m = step(m_end, 2)
+  fnx loop_outer {k:nat} .<k>. (k: int(k), m: U16Buf, p: U16Buf): void =
+    if k > 0 then let
+      val @(halt, m_end, p_end) = loop_inner(k, m, p)
     in
-      loop_outer(next_m, next_p)
-    end
-  end
+      if halt then ()
+      else let
+        val skip = get_mask_val(step(m_end, 1))
+      in
+        if skip = 0U then ()
+        else loop_outer(k - 1, step(m_end, 2), step(p_end, g0uint2int_uint_int(skip)))
+      end
+    end else ()
 in
-  loop_outer(mask, rgba)
+  loop_outer(MP_REC_FUEL, mask, rgba)
 end
 
 // --- 4. POSTERIZE BLEND MODE ---
 extern fun draw_dab_pixels_BlendMode_Posterize(
   mask: U16Buf, rgba: U16Buf, opacity: uint16, posterize_num: uint16
 ): void = "ext#draw_dab_pixels_BlendMode_Posterize"
-implement draw_dab_pixels_BlendMode_Posterize(mask, rgba, opacity, posterize_num) = let
-  val opacity_u = g0uint2uint_uint16_uint(opacity)
-  val pnum_f = u2f(g0uint2uint_uint16_uint(posterize_num))
+implement draw_dab_pixels_BlendMode_Posterize(mask, rgba, opacity, posterize_num) =
+  if g0uint2uint_uint16_uint(posterize_num) = 0U then ()
+  else let
+    val opacity_u = g0uint2uint_uint16_uint(opacity)
+    val pnum_f = u2f(g0uint2uint_uint16_uint(posterize_num))
 
-  fun loop_outer(m: U16Buf, p: U16Buf): void = let
-    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf): @(U16Buf, U16Buf) = let
-      val mval = get_mask_val(m_cur)
-    in
-      if mval != 0U then let
-        val cur_r = get_r(p_cur)
-        val cur_g = get_g(p_cur)
-        val cur_b = get_b(p_cur)
-
-        val rf = u2f(cur_r) / 32768.0f
-        val gf = u2f(cur_g) / 32768.0f
-        val bf = u2f(cur_b) / 32768.0f
-
-        val pr_f = f_div(f_mul(32768.0f, roundf(f_mul(rf, pnum_f))), pnum_f)
-        val pg_f = f_div(f_mul(32768.0f, roundf(f_mul(gf, pnum_f))), pnum_f)
-        val pb_f = f_div(f_mul(32768.0f, roundf(f_mul(bf, pnum_f))), pnum_f)
-
-        val post_r = f2u(pr_f)
-        val post_g = f2u(pg_f)
-        val post_b = f2u(pb_f)
-
-        val opa_a = (mval * opacity_u) / 32768U
-        val opa_b = 32768U - opa_a
-
-        val () = set_r(p_cur, (opa_a * post_r + opa_b * cur_r) / 32768U)
-        val () = set_g(p_cur, (opa_a * post_g + opa_b * cur_g) / 32768U)
-        val () = set_b(p_cur, (opa_a * post_b + opa_b * cur_b) / 32768U)
+    fnx loop_inner {k:nat} .<k>. (
+      k: int(k), m_cur: U16Buf, p_cur: U16Buf
+    ): @(bool, U16Buf, U16Buf) =
+      if k > 0 then let
+        val mval = get_mask_val(m_cur)
       in
-        loop_inner(step(m_cur, 1), step(p_cur, 4))
-      end else
-        @(m_cur, p_cur)
-    end
+        if mval = 0U then @(false, m_cur, p_cur)
+        else let
+          val cur_r = get_r(p_cur)
+          val cur_g = get_g(p_cur)
+          val cur_b = get_b(p_cur)
+          val rf = u2f(cur_r) / 32768.0f
+          val gf = u2f(cur_g) / 32768.0f
+          val bf = u2f(cur_b) / 32768.0f
+          val pr_f = f_div(f_mul(32768.0f, roundf(f_mul(rf, pnum_f))), pnum_f)
+          val pg_f = f_div(f_mul(32768.0f, roundf(f_mul(gf, pnum_f))), pnum_f)
+          val pb_f = f_div(f_mul(32768.0f, roundf(f_mul(bf, pnum_f))), pnum_f)
+          val post_r = f2u(pr_f)
+          val post_g = f2u(pg_f)
+          val post_b = f2u(pb_f)
+          val opa_a = (mval * opacity_u) / 32768U
+          val opa_b = 32768U - opa_a
+          val () = set_r(p_cur, (opa_a * post_r + opa_b * cur_r) / 32768U)
+          val () = set_g(p_cur, (opa_a * post_g + opa_b * cur_g) / 32768U)
+          val () = set_b(p_cur, (opa_a * post_b + opa_b * cur_b) / 32768U)
+        in
+          loop_inner(k - 1, step(m_cur, 1), step(p_cur, 4))
+        end
+      end else @(true, m_cur, p_cur)
 
-    val @(m_end, p_end) = loop_inner(m, p)
-    val skip = get_mask_val(step(m_end, 1))
+    fnx loop_outer {k:nat} .<k>. (k: int(k), m: U16Buf, p: U16Buf): void =
+      if k > 0 then let
+        val @(halt, m_end, p_end) = loop_inner(k, m, p)
+      in
+        if halt then ()
+        else let
+          val skip = get_mask_val(step(m_end, 1))
+        in
+          if skip = 0U then ()
+          else loop_outer(k - 1, step(m_end, 2), step(p_end, g0uint2int_uint_int(skip)))
+        end
+      end else ()
   in
-    if skip = 0U then ()
-    else let
-      val next_p = step(p_end, g0uint2int_uint_int(skip))
-      val next_m = step(m_end, 2)
-    in
-      loop_outer(next_m, next_p)
-    end
+    loop_outer(MP_REC_FUEL, mask, rgba)
   end
-in
-  loop_outer(mask, rgba)
-end
 
 // --- 5. COLORIZE BLEND MODE ---
 fn set_rgb16_lum_from_rgb16(
@@ -304,11 +310,14 @@ implement draw_dab_pixels_BlendMode_Color(mask, rgba, color_r, color_g, color_b,
   val topb = g0uint2uint_uint16_uint(color_b)
   val opacity_u = g0uint2uint_uint16_uint(opacity)
 
-  fun loop_outer(m: U16Buf, p: U16Buf): void = let
-    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf): @(U16Buf, U16Buf) = let
+  fnx loop_inner {k:nat} .<k>. (
+    k: int(k), m_cur: U16Buf, p_cur: U16Buf
+  ): @(bool, U16Buf, U16Buf) =
+    if k > 0 then let
       val mval = get_mask_val(m_cur)
     in
-      if mval != 0U then let
+      if mval = 0U then @(false, m_cur, p_cur)
+      else let
         val a = get_a(p_cur)
         var botr: uint = 0U
         var botg: uint = 0U
@@ -319,41 +328,37 @@ implement draw_dab_pixels_BlendMode_Color(mask, rgba, color_r, color_g, color_b,
             botg := (32768U * get_g(p_cur)) / a;
             botb := (32768U * get_b(p_cur)) / a
           )
-
         val () = set_rgb16_lum_from_rgb16(topr, topg, topb, botr, botg, botb)
-
         val r_repre = (botr * a) / 32768U
         val g_repre = (botg * a) / 32768U
         val b_repre = (botb * a) / 32768U
-
         val opa_a = (mval * opacity_u) / 32768U
         val opa_b = 32768U - opa_a
         val cur_r = get_r(p_cur)
         val cur_g = get_g(p_cur)
         val cur_b = get_b(p_cur)
-
         val () = set_r(p_cur, (opa_a * r_repre + opa_b * cur_r) / 32768U)
         val () = set_g(p_cur, (opa_a * g_repre + opa_b * cur_g) / 32768U)
         val () = set_b(p_cur, (opa_a * b_repre + opa_b * cur_b) / 32768U)
       in
-        loop_inner(step(m_cur, 1), step(p_cur, 4))
-      end else
-        @(m_cur, p_cur)
-    end
+        loop_inner(k - 1, step(m_cur, 1), step(p_cur, 4))
+      end
+    end else @(true, m_cur, p_cur)
 
-    val @(m_end, p_end) = loop_inner(m, p)
-    val skip = get_mask_val(step(m_end, 1))
-  in
-    if skip = 0U then ()
-    else let
-      val next_p = step(p_end, g0uint2int_uint_int(skip))
-      val next_m = step(m_end, 2)
+  fnx loop_outer {k:nat} .<k>. (k: int(k), m: U16Buf, p: U16Buf): void =
+    if k > 0 then let
+      val @(halt, m_end, p_end) = loop_inner(k, m, p)
     in
-      loop_outer(next_m, next_p)
-    end
-  end
+      if halt then ()
+      else let
+        val skip = get_mask_val(step(m_end, 1))
+      in
+        if skip = 0U then ()
+        else loop_outer(k - 1, step(m_end, 2), step(p_end, g0uint2int_uint_int(skip)))
+      end
+    end else ()
 in
-  loop_outer(mask, rgba)
+  loop_outer(MP_REC_FUEL, mask, rgba)
 end
 
 // --- 6. SPECTRAL PAINT BLEND MODES ---
@@ -381,11 +386,15 @@ extern fun get_color_pixels_legacy(
   mask: U16Buf, rgba: U16Buf, sum_weight: FCell, sum_r: FCell, sum_g: FCell, sum_b: FCell, sum_a: FCell
 ): void = "ext#get_color_pixels_legacy"
 implement get_color_pixels_legacy(mask, rgba, sum_weight, sum_r, sum_g, sum_b, sum_a) = let
-  fun loop_outer(m: U16Buf, p: U16Buf, acc_w: uint, acc_r: uint, acc_g: uint, acc_b: uint, acc_a: uint): @(uint, uint, uint, uint, uint) = let
-    fun loop_inner(m_cur: U16Buf, p_cur: U16Buf, w: uint, r: uint, g: uint, b: uint, a: uint): @(U16Buf, U16Buf, uint, uint, uint, uint, uint) = let
+  fnx loop_inner {k:nat} .<k>. (
+    k: int(k), m_cur: U16Buf, p_cur: U16Buf,
+    w: uint, r: uint, g: uint, b: uint, a: uint
+  ): @(bool, U16Buf, U16Buf, uint, uint, uint, uint, uint) =
+    if k > 0 then let
       val mval = get_mask_val(m_cur)
     in
-      if mval != 0U then let
+      if mval = 0U then @(false, m_cur, p_cur, w, r, g, b, a)
+      else let
         val opa = mval
         val w_next = w + opa
         val r_next = r + (opa * get_r(p_cur)) / 32768U
@@ -393,24 +402,30 @@ implement get_color_pixels_legacy(mask, rgba, sum_weight, sum_r, sum_g, sum_b, s
         val b_next = b + (opa * get_b(p_cur)) / 32768U
         val a_next = a + (opa * get_a(p_cur)) / 32768U
       in
-        loop_inner(step(m_cur, 1), step(p_cur, 4), w_next, r_next, g_next, b_next, a_next)
-      end else
-        @(m_cur, p_cur, w, r, g, b, a)
-    end
+        loop_inner(k - 1, step(m_cur, 1), step(p_cur, 4), w_next, r_next, g_next, b_next, a_next)
+      end
+    end else @(true, m_cur, p_cur, w, r, g, b, a)
 
-    val @(m_end, p_end, w1, r1, g1, b1, a1) = loop_inner(m, p, acc_w, acc_r, acc_g, acc_b, acc_a)
-    val skip = get_mask_val(step(m_end, 1))
-  in
-    if skip = 0U then @(w1, r1, g1, b1, a1)
-    else let
-      val next_p = step(p_end, g0uint2int_uint_int(skip))
-      val next_m = step(m_end, 2)
+  fnx loop_outer {k:nat} .<k>. (
+    k: int(k), m: U16Buf, p: U16Buf,
+    acc_w: uint, acc_r: uint, acc_g: uint, acc_b: uint, acc_a: uint
+  ): @(uint, uint, uint, uint, uint) =
+    if k > 0 then let
+      val @(halt, m_end, p_end, w1, r1, g1, b1, a1) =
+        loop_inner(k, m, p, acc_w, acc_r, acc_g, acc_b, acc_a)
     in
-      loop_outer(next_m, next_p, w1, r1, g1, b1, a1)
-    end
-  end
+      if halt then @(w1, r1, g1, b1, a1)
+      else let
+        val skip = get_mask_val(step(m_end, 1))
+      in
+        if skip = 0U then @(w1, r1, g1, b1, a1)
+        else loop_outer(
+          k - 1, step(m_end, 2), step(p_end, g0uint2int_uint_int(skip)), w1, r1, g1, b1, a1
+        )
+      end
+    end else @(acc_w, acc_r, acc_g, acc_b, acc_a)
 
-  val @(w, r, g, b, a) = loop_outer(mask, rgba, 0U, 0U, 0U, 0U, 0U)
+  val @(w, r, g, b, a) = loop_outer(MP_REC_FUEL, mask, rgba, 0U, 0U, 0U, 0U, 0U)
   fn add_accum(c: FCell, val_u: uint): void =
     if fcell_is_null(c) = 0 then let
       val p = fcell_ptr(c)

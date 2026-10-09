@@ -62,52 +62,61 @@ fn is_odd(s: lint): bool =
 
 extern fun rng_double_get_array(self: MpRng, aa: DblBuf, n: int): void = "ext#rng_double_get_array"
 implement rng_double_get_array(self, aa, n) = let
-  fun loop1(j: int): void =
-    if j < KK then (sdset(aa, j, mp_rng_get_u(self, j)); loop1(j + 1)) else ()
+  fnx loop1 {j:nat | j <= KK} .<KK - j>. (j: int(j)): void =
+    if j >= KK then ()
+    else let
+      val () = sdset(aa, j, mp_rng_get_u(self, j))
+    in loop1(j + 1) end
   val () = loop1(0)
 
-  fun loop2(j: int): int =
-    if j < n then let
-      val v = mod_sum(sdget(aa, j - KK), sdget(aa, j - LL))
-      val () = sdset(aa, j, v)
-    in loop2(j + 1) end else j
-  val j_after2 = loop2(KK)
+  fnx loop2 {k:nat} .<k>. (k: int(k), j: int): int =
+    if k > 0 then
+      if j < n then let
+        val v = mod_sum(sdget(aa, j - KK), sdget(aa, j - LL))
+        val () = sdset(aa, j, v)
+      in loop2(k - 1, j + 1) end
+      else j
+    else j
+  val j_after2 = loop2(MP_REC_FUEL, KK)
 
-  fun loop3(i: int, j: int): @(int, int) =
-    if i < LL then let
+  fnx loop3 {i:nat | i <= LL} .<LL - i>. (i: int(i), j: int): int =
+    if i >= LL then j
+    else let
       val v = mod_sum(sdget(aa, j - KK), sdget(aa, j - LL))
       val () = mp_rng_set_u(self, i, v)
-    in loop3(i + 1, j + 1) end else @(i, j)
-  val @(i3, j3) = loop3(0, j_after2)
+    in loop3(i + 1, j + 1) end
+  val j3 = loop3(0, j_after2)
 
-  fun loop4(i: int, j: int): void =
-    if i < KK then let
+  fnx loop4 {i:nat | i <= KK} .<KK - i>. (i: int(i), j: int): void =
+    if i >= KK then ()
+    else let
       val v = mod_sum(sdget(aa, j - KK), mp_rng_get_u(self, i - LL))
       val () = mp_rng_set_u(self, i, v)
-    in loop4(i + 1, j + 1) end else ()
-  val () = loop4(i3, j3)
+    in loop4(i + 1, j + 1) end
+  val () = loop4(LL, j3)
 in () end
 
 fn seed_init_u(u_ptr: DblBuf, ss_init: double, ulp: double): void = let
-  fun loop_boot(j: int, ss: double): void =
-    if j < KK then let
+  fnx loop_boot {j:nat | j <= KK} .<KK - j>. (j: int(j), ss: double): void =
+    if j >= KK then ()
+    else let
       val () = sdset(u_ptr, j, ss)
       val ss2 = ss + ss
       val ss_next = if ss2 >= 1.0 then ss2 - (1.0 - 2.0 * ulp) else ss2
-    in loop_boot(j + 1, ss_next) end else ()
+    in loop_boot(j + 1, ss_next) end
   val () = loop_boot(0, ss_init)
   val () = sdset(u_ptr, 1, sdget(u_ptr, 1) + ulp)
 in () end
 
 fn seed_square_and_fold(u_ptr: DblBuf): void = let
-  fun loop_sq(j: int): void =
+  fnx loop_sq {j:nat} .<j>. (j: int(j)): void =
     if j > 0 then let
       val () = sdset(u_ptr, j + j, sdget(u_ptr, j))
       val () = sdset(u_ptr, j + j - 1, 0.0)
     in loop_sq(j - 1) end else ()
   val () = loop_sq(KK - 1)
 
-  fun loop_fold(j: int): void =
+  fnx loop_fold {j:nat} .<j>. (j: int(j)): void =
     if j >= KK then let
       val uj = sdget(u_ptr, j)
       val () = sdset(u_ptr, j - (KK - LL), mod_sum(sdget(u_ptr, j - (KK - LL)), uj))
@@ -117,8 +126,10 @@ fn seed_square_and_fold(u_ptr: DblBuf): void = let
 in () end
 
 fn seed_shift_odd(u_ptr: DblBuf): void = let
-  fun loop_shift(j: int): void =
-    if j > 0 then (sdset(u_ptr, j, sdget(u_ptr, j - 1)); loop_shift(j - 1)) else ()
+  fnx loop_shift {j:nat} .<j>. (j: int(j)): void =
+    if j > 0 then let
+      val () = sdset(u_ptr, j, sdget(u_ptr, j - 1))
+    in loop_shift(j - 1) end else ()
   val () = loop_shift(KK)
   val ukk = sdget(u_ptr, KK)
   val () = sdset(u_ptr, 0, ukk)
@@ -132,20 +143,34 @@ fn seed_outer_step(u_ptr: DblBuf, s: lint, t: int): @(lint, int) = let
   val t_next = if s != 0L then t else t - 1
 in @(s_next, t_next) end
 
-fun seed_outer_loop(u_ptr: DblBuf, s: lint, t: int): void =
-  if t > 0 then let
-    val @(s_next, t_next) = seed_outer_step(u_ptr, s, t)
-  in seed_outer_loop(u_ptr, s_next, t_next) end else ()
+fnx seed_outer_loop {k:nat} .<k>. (
+  k: int(k), u_ptr: DblBuf, s: lint, t: int
+): void =
+  if k > 0 then
+    if t > 0 then let
+      val @(s_next, t_next) = seed_outer_step(u_ptr, s, t)
+    in seed_outer_loop(k - 1, u_ptr, s_next, t_next) end
+    else ()
+  else ()
 
 fn seed_copy_to_ran_u(self: MpRng, u_ptr: DblBuf): void = let
-  fun loop1(j: int): void =
-    if j < LL then (mp_rng_set_u(self, j + KK - LL, sdget(u_ptr, j)); loop1(j + 1)) else ()
+  fnx loop1 {j:nat | j <= LL} .<LL - j>. (j: int(j)): void =
+    if j >= LL then ()
+    else let
+      val () = mp_rng_set_u(self, j + KK - LL, sdget(u_ptr, j))
+    in loop1(j + 1) end
   val () = loop1(0)
-  fun loop2(j: int): void =
-    if j < KK then (mp_rng_set_u(self, j - LL, sdget(u_ptr, j)); loop2(j + 1)) else ()
+  fnx loop2 {j:nat | j <= KK} .<KK - j>. (j: int(j)): void =
+    if j >= KK then ()
+    else let
+      val () = mp_rng_set_u(self, j - LL, sdget(u_ptr, j))
+    in loop2(j + 1) end
   val () = loop2(LL)
-  fun loop_warm(j: int): void =
-    if j < 10 then (rng_double_get_array(self, u_ptr, KK + KK - 1); loop_warm(j + 1)) else ()
+  fnx loop_warm {j:nat | j <= 10} .<10 - j>. (j: int(j)): void =
+    if j >= 10 then ()
+    else let
+      val () = rng_double_get_array(self, u_ptr, KK + KK - 1)
+    in loop_warm(j + 1) end
   val () = loop_warm(0)
 in () end
 
@@ -159,7 +184,7 @@ implement rng_double_set_seed(self, seed) = let
   val ss_init: double = 2.0 * ulp * seed_dbl
 
   val () = seed_init_u(u_ptr, ss_init, ulp)
-  val () = seed_outer_loop(u_ptr, seed_masked, TT - 1)
+  val () = seed_outer_loop(MP_REC_FUEL, u_ptr, seed_masked, TT - 1)
   val () = seed_copy_to_ran_u(self, u_ptr)
   val () = mp_rng_set_arr_pos(self, RNG_ARR_NONE)
 in () end

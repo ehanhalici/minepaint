@@ -38,7 +38,8 @@ fn x_set(h: int, j: int, k: int, v: float): void = airlock_fset_n(g_x, point_slo
 fn y_get(h: int, j: int, k: int): float = airlock_fget_n(g_y, point_slot(h, j, k), POINT_CAPACITY)
 fn y_set(h: int, j: int, k: int, v: float): void = airlock_fset_n(g_y, point_slot(h, j, k), POINT_CAPACITY, v)
 
-fun find_free_slot(i: int): int =
+fnx find_free_slot {i:nat | i <= MAPPING_CAPACITY} .<MAPPING_CAPACITY - i>.
+  (i: int(i)): int =
   if i >= MAPPING_CAPACITY then MAPPING_NONE
   else if alive_get(i) then find_free_slot(i + 1)
   else i
@@ -46,7 +47,10 @@ fun find_free_slot(i: int): int =
 // A fresh mapping matches malloc+memset: counts and coordinates start at 0.
 // Tail recursion walks one curve, then the next, so a reused slot cannot
 // expose the previous owner's control points.
-fun clear_points(h: int, j: int, k: int): void =
+fnx clear_points
+  {j,k:nat | j <= MAPPING_INPUTS; k <= MAPPING_CURVE_POINTS}
+  .<MAPPING_INPUTS - j, MAPPING_CURVE_POINTS - k>.
+  (h: int, j: int(j), k: int(k)): void =
   if j >= MAPPING_INPUTS then ()
   else if k >= MAPPING_CURVE_POINTS then clear_points(h, j + 1, 0)
   else let
@@ -56,7 +60,8 @@ fun clear_points(h: int, j: int, k: int): void =
     clear_points(h, j, k + 1)
   end
 
-fun clear_curves(h: int, j: int): void =
+fnx clear_curves {j:nat | j <= MAPPING_INPUTS} .<MAPPING_INPUTS - j>.
+  (h: int, j: int(j)): void =
   if j < MAPPING_INPUTS then let
     val () = n_set(h, j, 0)
   in clear_curves(h, j + 1) end
@@ -149,37 +154,45 @@ fn eval_segment(x: float, x0: float, y0: float, x1: float, y1: float): float =
     g0float_div(num, den)
   end
 
-fun find_seg(
-  h: int, j: int, n: int, x: float, i: int,
+fnx find_seg {k:nat} .<k>. (
+  k: int(k), h: int, j: int, n: int, x: float, i: int,
   x0: float, y0: float, x1: float, y1: float
 ): @(float, float, float, float) =
-  if (i < n) && (x > x1) then
-    find_seg(h, j, n, x, i + 1, x1, y1, x_get(h, j, i), y_get(h, j, i))
-  else
-    @(x0, y0, x1, y1)
+  if k > 0 then
+    if (i < n) && (x > x1) then
+      find_seg(k - 1, h, j, n, x, i + 1, x1, y1, x_get(h, j, i), y_get(h, j, i))
+    else @(x0, y0, x1, y1)
+  else @(x0, y0, x1, y1)
 
 fn eval_curve(h: int, j: int, x: float): float = let
   val n = n_get(h, j)
 in
   if n <= 0 then 0.0f
+  else if n < 2 then y_get(h, j, 0)
   else let
-    val @(x0, y0, x1, y1) = find_seg(h, j, n, x, 2, x_get(h, j, 0), y_get(h, j, 0), x_get(h, j, 1), y_get(h, j, 1))
+    val x0 = x_get(h, j, 0)
+    val y0 = y_get(h, j, 0)
+    val x1 = x_get(h, j, 1)
+    val y1 = y_get(h, j, 1)
+    val @(sx0, sy0, sx1, sy1) = find_seg(MP_REC_FUEL, h, j, n, x, 2, x0, y0, x1, y1)
   in
-    eval_segment(x, x0, y0, x1, y1)
+    eval_segment(x, sx0, sy0, sx1, sy1)
   end
 end
 
 fn input_at(data: &(@[float][MAPPING_INPUTS]), j: int): float =
   if airlock_span(j, 1, MAPPING_INPUTS) != 0 then data[airlock_below(j, MAPPING_INPUTS)] else 0.0f
 
-fun sum_inputs(
-  h: int, data: &(@[float][MAPPING_INPUTS]), j: int, num_in: int, acc: float
+fnx sum_inputs {j:nat | j <= MAPPING_INPUTS} .<MAPPING_INPUTS - j>. (
+  h: int, data: &(@[float][MAPPING_INPUTS]), j: int(j), num_in: int, acc: float
 ): float =
-  if j < num_in then let
+  if j >= MAPPING_INPUTS then acc
+  else if j >= num_in then acc
+  else let
     val y = eval_curve(h, j, input_at(data, j))
   in
     sum_inputs(h, data, j + 1, num_in, g0float_add(acc, y))
-  end else acc
+  end
 
 extern fun minepaint_mapping_calculate(
   h: int, data: &(@[float][MAPPING_INPUTS])
