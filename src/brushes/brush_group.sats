@@ -13,5 +13,7 @@ datatype BrushGroup =
   | GroupKaerhon
 
 // Sınır dönüşümleri: yalnızca dış dünya tamsayılarını (session dosyası, sekme indeksi) çevirir.
-fun brush_group_of_int(g: int): Option(BrushGroup)
+// Duz demet (Option kutulu kurucusu her cagrida bellek ayirir, GC yok): @(gecerli_mi, grup).
+// Gecersiz girdide grup GroupClassic (kullanilmamali).
+fun brush_group_try(g: int): @(bool, BrushGroup)
 fun brush_group_to_int(g: BrushGroup): int

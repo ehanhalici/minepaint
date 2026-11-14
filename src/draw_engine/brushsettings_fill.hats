@@ -1,3 +1,4 @@
+// fragment: g_settings/g_inputs tanimlarini include eden brush_settings.dats saglar; tek basina degil include edenle denetlenir.
 // Fills g_settings and g_inputs. Include only after those arrays exist.
 #ifndef BRUSHSETTINGS_FILL_HATS
 #define BRUSHSETTINGS_FILL_HATS

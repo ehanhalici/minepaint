@@ -1,21 +1,25 @@
 // src/canvas/canvas.dats
-// Canvas records live in a dynloaded arena. main.dats loads this file.
+// Canvas records live in an arena. main.dats initialises this file at startup.
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+staload "gl/gl_io.sats"
 
-#include "draw_engine/engine_safe.hats"
+#include "sys/airlock.hats"
+#include "sys/arena.hats"
 staload "ui/color.dats"
 staload "canvas/stroke_queue.dats"
-staload "canvas/gl_surface.dats"
-staload "canvas/layer.dats"
+staload "canvas/layer_view.sats"
+staload "sys/capability.sats"
+staload "canvas/canvas_view.sats"
+#include "draw_engine/brush_borrow.hats"
 staload "canvas/layer_box.sats"
 staload "brushes/brush_group.sats"
 staload "draw_engine/setting_id.sats"
-staload "draw_engine/surface_box.sats"
+staload "draw_engine/surface_target.sats"
 
 typedef canvas_state_record = @{
   brush= int,
-  surf= MpSurface,
+  mode= DrawMode,
   layer= MpLayer,
   cam_x= float,
   cam_y= float,
@@ -26,34 +30,45 @@ typedef canvas_state_record = @{
   q= int
 }
 
-#define CANVAS_CAP 4
+
+fn tgt_of(s: canvas_state_record): MpTarget = @{ layer= s.layer, mode= s.mode }
 
 val g_blank = @{
-  brush= ~1, surf= mp_surface_none(), layer= layer_none(),
+  brush= ~1, mode= DrawPaint(), layer= layer_none(),
   cam_x= 0.0f, cam_y= 0.0f, zoom= 1.0f,
   last_mouse_x= 0.0f, last_mouse_y= 0.0f,
   last_time= 0.0, q= ~1
 } : canvas_state_record
-val g_alive = air_arena(CANVAS_CAP, airlock_esz_int())
+val g_alive = arrayref_make_elt<int>(i2sz(CANVAS_CAP), 0)
+val g_claim = arrayref_make_elt<int>(i2sz(CANVAS_CAP), 0)
 val g_canvas = arrayref_make_elt<canvas_state_record>(i2sz(CANVAS_CAP), g_blank)
 val g_fresh = ref<int>(0)
 
-fn cget(h: int): canvas_state_record =
-  if airlock_span(h, 1, CANVAS_CAP) != 0 then
-    if air_bget(g_alive, h, CANVAS_CAP) then g_canvas[airlock_below(h, CANVAS_CAP)] else g_blank
-  else g_blank
+// Yasayan canvas'in tipli indeksi: @(yasiyor_mu, indeks); indeks her zaman aralik icindedir.
+fn live_canvas(h: int): @(bool, Ix(CANVAS_CAP)) = let
+  val @(ok, c) = ix_try(h, CANVAS_CAP)
+in
+  @(ok * (g_alive[c] != 0), c)
+end
 
-fn cput(h: int, v: canvas_state_record): void =
-  if airlock_span(h, 1, CANVAS_CAP) != 0 then
-    if air_bget(g_alive, h, CANVAS_CAP) then g_canvas[airlock_below(h, CANVAS_CAP)] := v else ()
-  else ()
+fn cget(h: int): canvas_state_record = let
+  val @(ok, c) = live_canvas(h)
+in
+  if ok then g_canvas[c] else g_blank
+end
+
+fn cput(h: int, v: canvas_state_record): void = let
+  val @(ok, c) = live_canvas(h)
+in
+  if ok then g_canvas[c] := v else ()
+end
 
 fn canvas_alloc(v: canvas_state_record): int = let
   val n = !g_fresh
-  val () = assertloc(n < CANVAS_CAP)
+  val () = anth_require(n < CANVAS_CAP)
   val () = !g_fresh := n + 1
-  val () = air_bset(g_alive, n, CANVAS_CAP, true)
-  val () = if airlock_span(n, 1, CANVAS_CAP) != 0 then g_canvas[airlock_below(n, CANVAS_CAP)] := v
+  val @(ok, c) = ix_try(n, CANVAS_CAP)
+  val () = if ok then (g_alive[c] := 1; g_canvas[c] := v) else anth_die_void(DieContractViolation())
 in
   n
 end
@@ -67,20 +82,7 @@ macdef GL_COLOR_BUFFER_BIT = $extval(int, "GL_COLOR_BUFFER_BIT")
 #define MINEPAINT_BRUSH_SETTING_COLOR_S 35
 #define MINEPAINT_BRUSH_SETTING_COLOR_V 36
 
-extern fun glMatrixMode(m: int): void = "mac#"
-extern fun glLoadIdentity(): void = "mac#"
-extern fun glOrtho(l: double, r: double, b: double, t: double, n: double, f: double): void = "mac#"
-extern fun glPushMatrix(): void = "mac#"
-extern fun glPopMatrix(): void = "mac#"
-extern fun glViewport(x: int, y: int, w: int, h: int): void = "mac#"
-extern fun glClearColor(r: float, g: float, b: float, a: float): void = "mac#"
-extern fun glClear(mask: int): void = "mac#"
-extern fun glTranslatef(x: float, y: float, z: float): void = "mac#"
-extern fun glScalef(x: float, y: float, z: float): void = "mac#"
 
-extern fun minepaint_brush_reset(brush: int): void = "ext#minepaint_brush_reset"
-extern fun minepaint_brush_set_base_value(brush: int, setting: SettingId, value: float): void = "ext#minepaint_brush_set_base_value"
-extern fun minepaint_brush_get_base_value(brush: int, setting: SettingId): float = "ext#minepaint_brush_get_base_value"
 
 extern fun get_time_seconds(): double = "ext#get_time_seconds"
 fn i2f(i: int): float = g0int2float_int_float(i)
@@ -92,46 +94,65 @@ fn f_mul(a: float, b: float): float = g0float_mul_float(a, b)
 fn f_div(a: float, b: float): float = g0float_div_float(a, b)
 
 // Stroke Queue API
-extern fun stroke_queue_teleport(brush: int, surf: MpSurface, x: float, y: float): void = "ext#stroke_queue_teleport"
+extern fun stroke_queue_teleport(gio: !GL_IO | tgt: MpTarget, brush: int, x: float, y: float): void = "ext#stroke_queue_teleport"
 extern fun stroke_queue_start(wx: float, wy: float, pressure: float): int = "ext#stroke_queue_start"
-extern fun stroke_queue_step(
-  layer: MpLayer, brush: int, surf: MpSurface, zoom: float,
+extern fun stroke_queue_step(gio: !GL_IO | 
+  tgt: MpTarget, brush: int, zoom: float,
   qh: int, wx: float, wy: float, pressure: float, elapsed: double
 ): int = "ext#stroke_queue_step"
-extern fun stroke_queue_finish(
-  layer: MpLayer, brush: int, surf: MpSurface, zoom: float, qh: int
+extern fun stroke_queue_finish(gio: !GL_IO | 
+  tgt: MpTarget, brush: int, zoom: float, qh: int
 ): void = "ext#stroke_queue_finish"
 extern fun stroke_queue_free(qh: int): void = "ext#stroke_queue_free"
 
-extern fun minepaint_brush_apply_startup(b: int): void = "ext#minepaint_brush_apply_startup"
 extern fun catalog_apply_brush(b: int, g: BrushGroup, i: int): void = "ext#catalog_apply_brush"
 
 // --- Render Yardımcıları (SLAP, SRP) ---
-fn setup_canvas_viewport(w: int, h: int): void = {
-  val () = glViewport(0, 0, w, h)
-  val () = glMatrixMode(GL_PROJECTION)
-  val () = glLoadIdentity()
-  val () = glOrtho(0.0, g0int2float(w), g0int2float(h), 0.0, ~1.0, 1.0)
-  val () = glMatrixMode(GL_MODELVIEW)
-  val () = glLoadIdentity()
-  val () = glClearColor(0.07f, 0.07f, 0.07f, 1.0f)
-  val () = glClear(GL_COLOR_BUFFER_BIT)
+fn setup_canvas_viewport(gio: !GL_IO | w: int, h: int): void = {
+  val () = glViewport(gio | 0, 0, w, h)
+  val () = glMatrixMode(gio | GL_PROJECTION)
+  val () = glLoadIdentity(gio | )
+  val () = glOrtho(gio | 0.0, g0int2float(w), g0int2float(h), 0.0, ~1.0, 1.0)
+  val () = glMatrixMode(gio | GL_MODELVIEW)
+  val () = glLoadIdentity(gio | )
+  val () = glClearColor(gio | 0.07f, 0.07f, 0.07f, 1.0f)
+  val () = glClear(gio | GL_COLOR_BUFFER_BIT)
 }
 
 fn put_layer(h: int, layer: MpLayer): void = let
   val s = cget(h)
 in
   cput(h, @{
-    brush= s.brush, surf= s.surf, layer= layer,
+    brush= s.brush, mode= s.mode, layer= layer,
     cam_x= s.cam_x, cam_y= s.cam_y, zoom= s.zoom,
     last_mouse_x= s.last_mouse_x, last_mouse_y= s.last_mouse_y,
     last_time= s.last_time, q= s.q
   })
 end
 
-fn draw_layer_content(h: int, canvas_w: int, canvas_h: int): void = let
+// Katman kanitinin ucu: olusturulan katmanin sahipligi canvas durum kaydina birakilir.
+fn new_layer_handle(): MpLayer = let
+  val (pf | l) = layer_new()
+in
+  layer_stash(pf | l)
+end
+
+// Katman bir cizim boyunca odunc alinir (claim) ve geri verilir (stash).
+fn draw_layer_tiles(gio: !GL_IO | layer: MpLayer, vl: float, vt: float, vr: float, vb: float, zoom: float): void = let
+  val (pf | ok, l) = layer_claim(layer)
+in
+  if ok then let
+    prval Some_v(live) = pf
+    val () = layer_draw_tiles(live, gio | l, vl, vt, vr, vb, zoom)
+    val _ = layer_stash(live | l)
+  in () end else let
+    prval None_v() = pf
+  in () end
+end
+
+fn draw_layer_content(gio: !GL_IO | h: int, canvas_w: int, canvas_h: int): void = let
   val s0 = cget(h)
-  val () = if layer_is_null(s0.layer) != 0 then put_layer(h, layer_create(0, 0))
+  val () = if layer_is_null(s0.layer) != 0 then put_layer(h, new_layer_handle())
   val s = cget(h)
 in
   if layer_is_null(s.layer) = 0 then let
@@ -141,25 +162,23 @@ in
     val vr = f_div(f_sub(i2f(canvas_w), s.cam_x), cur_zoom)
     val vb = f_div(f_sub(i2f(canvas_h), s.cam_y), cur_zoom)
   in
-    layer_draw_tiles(s.layer, vl, vt, vr, vb, cur_zoom)
+    draw_layer_tiles(gio | s.layer, vl, vt, vr, vb, cur_zoom)
   end else ()
 end
 
 // --- Çizim Render Fonksiyonu ---
-extern fun canvas_render(h: int, canvas_w: int, canvas_h: int): void = "ext#canvas_render"
-implement canvas_render(h, canvas_w, canvas_h) = let
+implement canvas_render(pf, gio | h, canvas_w, canvas_h) = let
   val s = cget(h)
-  val () = setup_canvas_viewport(canvas_w, canvas_h)
-  val () = glPushMatrix()
-  val () = glTranslatef(s.cam_x, s.cam_y, 0.0f)
-  val () = glScalef(s.zoom, s.zoom, 1.0f)
-  val () = draw_layer_content(h, canvas_w, canvas_h)
-  val () = glPopMatrix()
+  val () = setup_canvas_viewport(gio | canvas_w, canvas_h)
+  val () = glPushMatrix(gio | )
+  val () = glTranslatef(gio | s.cam_x, s.cam_y, 0.0f)
+  val () = glScalef(gio | s.zoom, s.zoom, 1.0f)
+  val () = draw_layer_content(gio | h, canvas_w, canvas_h)
+  val () = glPopMatrix(gio | )
 in () end
 
 // --- Fare Tekerleği Zoom ---
-extern fun canvas_on_wheel(h: int, mx: int, my: int, dy: int): void = "ext#canvas_on_wheel"
-implement canvas_on_wheel(h, mx, my, dy) = let
+implement canvas_on_wheel(pf | h, mx, my, dy) = let
   val s = cget(h)
   val start_x = i2f(mx)
   val start_y = i2f(my)
@@ -173,7 +192,7 @@ implement canvas_on_wheel(h, mx, my, dy) = let
   val ma_y = f_div(f_sub(start_y, s.cam_y), new_zoom)
 in
   cput(h, @{
-    brush= s.brush, surf= s.surf, layer= s.layer,
+    brush= s.brush, mode= s.mode, layer= s.layer,
     cam_x= f_add(s.cam_x, f_mul(f_sub(ma_x, mb_x), new_zoom)),
     cam_y= f_add(s.cam_y, f_mul(f_sub(ma_y, mb_y), new_zoom)),
     zoom= new_zoom,
@@ -187,37 +206,33 @@ fn canvas_start_pan(h: int, mx: float, my: float): void = let
   val s = cget(h)
 in
   cput(h, @{
-    brush= s.brush, surf= s.surf, layer= s.layer,
+    brush= s.brush, mode= s.mode, layer= s.layer,
     cam_x= s.cam_x, cam_y= s.cam_y, zoom= s.zoom,
     last_mouse_x= mx, last_mouse_y= my,
     last_time= s.last_time, q= s.q
   })
 end
 
-fn canvas_start_stroke(h: int, mx: float, my: float, btn: int, pressure: float): void = let
+fn canvas_start_stroke(gio: !GL_IO | h: int, mx: float, my: float, btn: int, pressure: float): void = let
   val s = cget(h)
   val cur_zoom = s.zoom
   val wx = f_div(f_sub(mx, s.cam_x), cur_zoom)
   val wy = f_div(f_sub(my, s.cam_y), cur_zoom)
-  val () = stroke_queue_teleport(s.brush, s.surf, wx, wy)
+  val () = stroke_queue_teleport(gio | tgt_of(s), s.brush, wx, wy)
   val () = stroke_queue_free(s.q)
-  val () = glsurface_set_erasing(s.surf, if btn = 3 then 1 else 0)
   val eff_pressure = if pressure > 0.0f then pressure else 0.8f
 in
   cput(h, @{
-    brush= s.brush, surf= s.surf, layer= s.layer,
+    brush= s.brush, mode= (if btn = 3 then DrawErase() else DrawPaint()), layer= s.layer,
     cam_x= s.cam_x, cam_y= s.cam_y, zoom= s.zoom,
     last_mouse_x= s.last_mouse_x, last_mouse_y= s.last_mouse_y,
     last_time= get_time_seconds(), q= stroke_queue_start(wx, wy, eff_pressure)
   })
 end
 
-extern fun canvas_on_mouse_down(
-  h: int, mx: float, my: float, btn: int, is_pan: int, pressure: float
-): void = "ext#canvas_on_mouse_down"
-implement canvas_on_mouse_down(h, mx, my, btn, is_pan, pressure) =
+implement canvas_on_mouse_down(pf, gio | h, mx, my, btn, is_pan, pressure) =
   if is_pan > 0 || btn = 2 then canvas_start_pan(h, mx, my)
-  else canvas_start_stroke(h, mx, my, btn, pressure)
+  else canvas_start_stroke(gio | h, mx, my, btn, pressure)
 
 fn canvas_drag_pan(h: int, mx: float, my: float): void = let
   val s = cget(h)
@@ -225,14 +240,14 @@ fn canvas_drag_pan(h: int, mx: float, my: float): void = let
   val dy = f_sub(my, s.last_mouse_y)
 in
   cput(h, @{
-    brush= s.brush, surf= s.surf, layer= s.layer,
+    brush= s.brush, mode= s.mode, layer= s.layer,
     cam_x= f_add(s.cam_x, dx), cam_y= f_add(s.cam_y, dy), zoom= s.zoom,
     last_mouse_x= mx, last_mouse_y= my,
     last_time= s.last_time, q= s.q
   })
 end
 
-fn canvas_drag_stroke(h: int, mx: float, my: float, pressure: float): void = let
+fn canvas_drag_stroke(gio: !GL_IO | h: int, mx: float, my: float, pressure: float): void = let
   val s = cget(h)
   val cur_zoom = s.zoom
   val wx = f_div(f_sub(mx, s.cam_x), cur_zoom)
@@ -240,94 +255,104 @@ fn canvas_drag_stroke(h: int, mx: float, my: float, pressure: float): void = let
   val cur_time = get_time_seconds()
   val elapsed = cur_time - s.last_time
   val eff_pressure = if pressure > 0.0f then pressure else 0.8f
-  val nq = stroke_queue_step(
-    s.layer, s.brush, s.surf, s.zoom, s.q, wx, wy, eff_pressure, elapsed
+  val nq = stroke_queue_step(gio | 
+    tgt_of(s), s.brush, s.zoom, s.q, wx, wy, eff_pressure, elapsed
   )
 in
   cput(h, @{
-    brush= s.brush, surf= s.surf, layer= s.layer,
+    brush= s.brush, mode= s.mode, layer= s.layer,
     cam_x= s.cam_x, cam_y= s.cam_y, zoom= s.zoom,
     last_mouse_x= s.last_mouse_x, last_mouse_y= s.last_mouse_y,
     last_time= s.last_time, q= nq
   })
 end
 
-extern fun canvas_on_mouse_move(
-  h: int, mx: float, my: float, btn: int, is_pan: int, pressure: float
-): void = "ext#canvas_on_mouse_move"
-implement canvas_on_mouse_move(h, mx, my, btn, is_pan, pressure) =
+implement canvas_on_mouse_move(pf, gio | h, mx, my, btn, is_pan, pressure) =
   if is_pan > 0 || btn = 2 then canvas_drag_pan(h, mx, my)
-  else if btn = 1 || btn = 3 then canvas_drag_stroke(h, mx, my, pressure)
+  else if btn = 1 || btn = 3 then canvas_drag_stroke(gio | h, mx, my, pressure)
   else ()
 
-fn canvas_finish_stroke(h: int): void = let
+fn canvas_finish_stroke(gio: !GL_IO | h: int): void = let
   val s = cget(h)
-  val () = stroke_queue_finish(s.layer, s.brush, s.surf, s.zoom, s.q)
-  val () = minepaint_brush_reset(s.brush)
-  val () = glsurface_set_erasing(s.surf, 0)
+  val () = stroke_queue_finish(gio | tgt_of(s), s.brush, s.zoom, s.q)
+  val () = br_reset(s.brush)
 in
   cput(h, @{
-    brush= s.brush, surf= s.surf, layer= s.layer,
+    brush= s.brush, mode= s.mode, layer= s.layer,
     cam_x= s.cam_x, cam_y= s.cam_y, zoom= s.zoom,
     last_mouse_x= s.last_mouse_x, last_mouse_y= s.last_mouse_y,
     last_time= s.last_time, q= ~1
   })
 end
 
-extern fun canvas_on_mouse_up(h: int, mx: float, my: float, btn: int, is_pan: int): void = "ext#canvas_on_mouse_up"
-implement canvas_on_mouse_up(h, mx, my, btn, is_pan) =
+implement canvas_on_mouse_up(pf, gio | h, mx, my, btn, is_pan) =
   if is_pan > 0 || btn = 2 then ()
-  else canvas_finish_stroke(h)
+  else canvas_finish_stroke(gio | h)
 
 // --- Renk ve Fırça Ayarları ---
-extern fun canvas_set_brush_color(h: int, r: float, g: float, b: float): void = "ext#canvas_set_brush_color"
-implement canvas_set_brush_color(ch, r, g, b) = let
+implement canvas_set_brush_color(pf | ch, r, g, b) = let
   val @(hue, sat, vv) = rgb_to_hsv(r, g, b)
   val st = cget(ch)
 in
   if st.brush >= 0 then {
-    val () = minepaint_brush_set_base_value(st.brush, SetColorH(), hue)
-    val () = minepaint_brush_set_base_value(st.brush, SetColorS(), sat)
-    val () = minepaint_brush_set_base_value(st.brush, SetColorV(), vv)
+    val () = br_set_base_value(st.brush, SetColorH(), hue)
+    val () = br_set_base_value(st.brush, SetColorS(), sat)
+    val () = br_set_base_value(st.brush, SetColorV(), vv)
   } else ()
 end
 
-extern fun canvas_set_brush_setting(h: int, id: int, v: float): void = "ext#canvas_set_brush_setting"
-implement canvas_set_brush_setting(h, id, v) = let
+implement canvas_set_brush_setting(pf | h, id, v) = let
   val st = cget(h)
 in
-  if st.brush >= 0 then minepaint_brush_set_base_value(st.brush, setting_of(id), v) else ()
+  if st.brush >= 0 then br_set_base_value(st.brush, setting_of(id), v) else ()
 end
 
-extern fun canvas_apply_startup(h: int): void = "ext#canvas_apply_startup"
-implement canvas_apply_startup(h) = let
+implement canvas_apply_startup(pf | h) = let
   val st = cget(h)
 in
-  if st.brush >= 0 then minepaint_brush_apply_startup(st.brush) else ()
+  if st.brush >= 0 then br_apply_startup(st.brush) else ()
 end
 
-extern fun canvas_apply_catalog_brush(h: int, g: BrushGroup, i: int): void = "ext#canvas_apply_catalog_brush"
-implement canvas_apply_catalog_brush(h, g, i) = let
+implement canvas_apply_catalog_brush(pf | h, g, i) = let
   val st = cget(h)
 in
   if st.brush >= 0 then catalog_apply_brush(st.brush, g, i) else ()
 end
 
-extern fun canvas_get_brush_setting(h: int, id: int): float = "ext#canvas_get_brush_setting"
-implement canvas_get_brush_setting(h, id) = let
+implement canvas_get_brush_setting(pf | h, id) = let
   val st = cget(h)
 in
-  if st.brush >= 0 then minepaint_brush_get_base_value(st.brush, setting_of(id)) else 0.0f
+  if st.brush >= 0 then br_get_base_value(st.brush, setting_of(id)) else 0.0f
 end
 
-extern fun canvas_state_create(brush: int): int = "ext#canvas_state_create"
+// Kanit uretimi sys/capability.sats aksiyomlariyla; yalniz canvas_state_create ve canvas_claim uretir.
 implement canvas_state_create(brush) = let
-  val surf = glsurface_create()
-in
-  canvas_alloc(@{
-    brush= brush, surf= surf, layer= layer_none(),
+  val n = canvas_alloc(@{
+    brush= brush, mode= DrawPaint(), layer= layer_none(),
     cam_x= 0.0f, cam_y= 0.0f, zoom= 1.0f,
     last_mouse_x= 0.0f, last_mouse_y= 0.0f,
     last_time= 0.0, q= ~1
   })
+  val c = airlock_below(n, CANVAS_CAP)
+in
+  (cap_mint() | c)
+end
+
+implement canvas_stash(pf | h) = let
+  prval () = cap_burn(pf)
+  val @(ok, c) = ix_try(h, CANVAS_CAP)
+  val () = if ok then g_claim[c] := 0
+in
+  h
+end
+
+implement canvas_claim(raw) = let
+  val c = airlock_below(raw, CANVAS_CAP)
+  val @(ok_r, r) = ix_try(raw, CANVAS_CAP)
+in
+  // Cift claim engeli: canvas zaten odunc alinmissa kanit bir daha uretilmez.
+  if ok_r * (g_alive[r] != 0) * (g_claim[r] = 0) then let
+    val () = g_claim[r] := 1
+  in (Some_v(cap_mint()) | true, c) end
+  else (None_v() | false, c)
 end

@@ -1,337 +1,337 @@
-// src/Layer.dats
-#define ATS_DYNLOADFLAG 0
+// src/canvas/layer.dats
+// Sonsuz katman: tile'lar arena dizilerinde tutulur (C bellegindeki bagli listeler yok).
+// Arama: acik adreslemeli hash tablosu; her dongunun olcusu gercek sinirdan turer
+// (TABLE_SIZE - i veya tile_count - i), yakit yoktur.
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
-#include "draw_engine/engine_safe.hats"
+staload "gl/gl_io.sats"
+#include "sys/airlock.hats"
+#include "sys/arena.hats"
 staload "canvas/layer_box.sats"
+staload "sys/capability.sats"
+staload "canvas/layer_view.sats"
 staload "sys/libc.dats"
+staload "gl/gl.dats"
 
 typedef GLuint = uint
 
-#define TILE_HASH_SIZE 1024
-#define TILE_HASH_MASK 1023
+#define LAYER_CAP 4
+#define MAX_TILES 4096
+#define TABLE_SIZE 8192
+#define TABLE_MASK 8191U
+#define NO_ENTRY (~1)
+#define TILE_ARR (LAYER_CAP * MAX_TILES)
+#define TABLE_ARR (LAYER_CAP * TABLE_SIZE)
 
-typedef CanvasTile = @{
-  tx= int,
-  ty= int,
-  texture= uint,
-  fbo= uint,
-  next_in_bucket= MpTile,
-  next_in_layer= MpTile
-}
+// E.3: arenalar `arrayref`; ham katman/tile/tablo numaralari `ix_try` ile tipli indekse cevrilir.
+// Gecersiz numara politikasi (eski airlock davranisi): okuma varsayilan deger, yazma etkisiz.
+val g_lalive = arrayref_make_elt<int>(i2sz(LAYER_CAP), 0)
+val g_lcount = arrayref_make_elt<int>(i2sz(LAYER_CAP), 0)
+val g_lclaim = arrayref_make_elt<int>(i2sz(LAYER_CAP), 0)
+val g_lfree = arrayref_make_elt<int>(i2sz(LAYER_CAP), 0)
+val g_lfresh = ref<int>(0)
+val g_lnfree = ref<int>(0)
 
-typedef Layer_Record = @{
-  buckets= MpBuckets,
-  tiles= MpTile,
-  tile_count= int
-}
-
-extern fun view_layer(p: ptr): ref(Layer_Record) = "mac#mp_id_ptr"
-extern fun view_tile(p: ptr): ref(CanvasTile) = "mac#mp_id_ptr"
-
-fn mp_slot_get(p: MpSlot): ptr = airlock_pget_n(slot_ptr(p), 0, 1)
-
-fn mp_slot_set(p: MpSlot, v: ptr): void = airlock_pset_n(slot_ptr(p), 0, 1, v)
-
-fn bucket_at(b: MpBuckets, i: int): MpSlot =
-  slot_of(ptr_add<ptr>(buckets_ptr(b), i))
+val g_tx = arrayref_make_elt<int>(i2sz(TILE_ARR), 0)
+val g_ty = arrayref_make_elt<int>(i2sz(TILE_ARR), 0)
+val g_tex = arrayref_make_elt<int>(i2sz(TILE_ARR), 0)
+val g_fbo = arrayref_make_elt<int>(i2sz(TILE_ARR), 0)
+val g_table = arrayref_make_elt<int>(i2sz(TABLE_ARR), NO_ENTRY)
 
 // OpenGL Sabitleri
-macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
-macdef GL_RGBA = $extval(int, "GL_RGBA")
-macdef GL_UNSIGNED_BYTE = $extval(int, "GL_UNSIGNED_BYTE")
-macdef GL_FRAMEBUFFER = $extval(int, "GL_FRAMEBUFFER")
-macdef GL_COLOR_ATTACHMENT0 = $extval(int, "GL_COLOR_ATTACHMENT0")
-macdef GL_COLOR_BUFFER_BIT = $extval(int, "GL_COLOR_BUFFER_BIT")
-macdef GL_TEXTURE_MIN_FILTER = $extval(int, "GL_TEXTURE_MIN_FILTER")
-macdef GL_TEXTURE_MAG_FILTER = $extval(int, "GL_TEXTURE_MAG_FILTER")
 macdef GL_TEXTURE_WRAP_S = $extval(int, "GL_TEXTURE_WRAP_S")
 macdef GL_TEXTURE_WRAP_T = $extval(int, "GL_TEXTURE_WRAP_T")
-macdef GL_LINEAR = $extval(int, "GL_LINEAR")
 macdef GL_CLAMP_TO_EDGE = $extval(int, "GL_CLAMP_TO_EDGE")
-macdef GL_BLEND = $extval(int, "GL_BLEND")
-macdef GL_SRC_ALPHA = $extval(int, "GL_SRC_ALPHA")
-macdef GL_ONE_MINUS_SRC_ALPHA = $extval(int, "GL_ONE_MINUS_SRC_ALPHA")
-macdef GL_QUADS = $extval(int, "GL_QUADS")
-macdef GL_PROJECTION = $extval(int, "GL_PROJECTION")
-macdef GL_MODELVIEW = $extval(int, "GL_MODELVIEW")
 
-// OpenGL Fonksiyon İmzaları
-extern fun glGenTextures(n: int, textures: &GLuint? >> GLuint): void = "mac#glGenTextures"
-extern fun glBindTexture(target: int, texture: GLuint): void = "mac#glBindTexture"
-extern fun glTexImage2D(target: int, level: int, internalformat: int, width: int, height: int, border: int, format: int, atype: int, pixels: ptr): void = "mac#glTexImage2D"
-extern fun glTexParameteri(target: int, pname: int, param: int): void = "mac#glTexParameteri"
-extern fun glGenFramebuffers(n: int, fbos: &GLuint? >> GLuint): void = "mac#glGenFramebuffers"
-extern fun glBindFramebuffer(target: int, framebuffer: GLuint): void = "mac#glBindFramebuffer"
-extern fun glFramebufferTexture2D(target: int, attachment: int, textarget: int, texture: GLuint, level: int): void = "mac#glFramebufferTexture2D"
-extern fun glDeleteTextures(n: int, textures: &GLuint): void = "mac#glDeleteTextures"
-extern fun glDeleteFramebuffers(n: int, fbos: &GLuint): void = "mac#glDeleteFramebuffers"
-extern fun glEnable(cap: int): void = "mac#"
-extern fun glDisable(cap: int): void = "mac#"
-extern fun glBlendFunc(sfactor: int, dfactor: int): void = "mac#"
-extern fun glColor4f(r: float, g: float, b: float, a: float): void = "mac#"
-extern fun glBegin(mode: int): void = "mac#"
-extern fun glEnd(): void = "mac#"
-extern fun glTexCoord2f(s: float, t: float): void = "mac#"
-extern fun glVertex2f(x: float, y: float): void = "mac#"
-extern fun glClearColor(red: float, green: float, blue: float, alpha: float): void = "mac#"
-extern fun glClear(mask: int): void = "mac#"
-extern fun glViewport(x: int, y: int, w: int, h: int): void = "mac#"
-extern fun glMatrixMode(m: int): void = "mac#"
-extern fun glLoadIdentity(): void = "mac#"
-extern fun glPushMatrix(): void = "mac#"
-extern fun glPopMatrix(): void = "mac#"
-extern fun glOrtho(l: double, r: double, b: double, t: double, n: double, f: double): void = "mac#"
+// Kanit uretimi/tuketimi sys/capability.sats aksiyomlariyla; yalniz layer_new ve layer_claim uretir.
 
-// --- Sonsuz Kanvas / Tile Yönetim API'si ---
-extern fun layer_create(w: int, h: int): MpLayer = "ext#layer_create"
-extern fun layer_create_c(w: int, h: int): MpLayer = "ext#layer_create_c"
-extern fun layer_find_tile(layer: MpLayer, tx: int, ty: int): MpTile = "ext#layer_find_tile"
-extern fun layer_get_or_create_tile(layer: MpLayer, tx: int, ty: int): MpTile = "ext#layer_get_or_create_tile"
-extern fun layer_bind_tile(tile: MpTile): void = "ext#layer_bind_tile"
-extern fun layer_unbind_tile(): void = "ext#layer_unbind_tile"
-extern fun layer_draw_tiles(layer: MpLayer, view_l: float, view_t: float, view_r: float, view_b: float, zoom: float): void = "ext#layer_draw_tiles"
-extern fun layer_clear(layer: MpLayer): void = "ext#layer_clear"
-extern fun layer_destroy(layer: MpLayer): void = "ext#layer_destroy"
+// --- Arena erisimcileri ---
+fn lix(l: int): @(bool, Ix(LAYER_CAP)) = ix_try(l, LAYER_CAP)
+fn lalive_get(l: int): bool = let val @(ok, i) = lix(l) in if ok then g_lalive[i] != 0 else false end
+fn lclaim_get(l: int): bool = let val @(ok, i) = lix(l) in if ok then g_lclaim[i] != 0 else true end
+fn lclaim_mark(l: int): void = let val @(ok, i) = lix(l) in if ok then g_lclaim[i] := 1 end
+fn lclaim_clear(l: int): void = let val @(ok, i) = lix(l) in if ok then g_lclaim[i] := 0 end
+fn lalive_set(l: int, v: int): void = let val @(ok, i) = lix(l) in if ok then g_lalive[i] := v end
+fn count_get(l: int): int = let val @(ok, i) = lix(l) in if ok then g_lcount[i] else 0 end
+fn count_set(l: int, v: int): void = let val @(ok, i) = lix(l) in if ok then g_lcount[i] := v end
+fn tile_idx(l: int, i: int): int = l * MAX_TILES + i
+fn table_idx(l: int, s: int): int = l * TABLE_SIZE + s
 
-extern fun layer_drawOnScreen(layer: MpLayer, w: int, h: int): void = "ext#layer_drawOnScreen"
-extern fun layer_bind(l: MpLayer): void = "ext#layer_bind"
-extern fun layer_unbind(l: MpLayer): void = "ext#layer_unbind"
-extern fun layer_bind_c(l: MpLayer): void = "ext#layer_bind_c"
-extern fun layer_unbind_c(l: MpLayer): void = "ext#layer_unbind_c"
+fn tix(e: int): @(bool, Ix(TILE_ARR)) = ix_try(e, TILE_ARR)
+fn tx_get(e: int): int = let val @(ok, i) = tix(e) in if ok then g_tx[i] else 0 end
+fn ty_get(e: int): int = let val @(ok, i) = tix(e) in if ok then g_ty[i] else 0 end
+fn tex_get(e: int): int = let val @(ok, i) = tix(e) in if ok then g_tex[i] else 0 end
+fn fbo_get(e: int): int = let val @(ok, i) = tix(e) in if ok then g_fbo[i] else 0 end
+fn tx_set(e: int, v: int): void = let val @(ok, i) = tix(e) in if ok then g_tx[i] := v end
+fn ty_set(e: int, v: int): void = let val @(ok, i) = tix(e) in if ok then g_ty[i] := v end
+fn tex_set(e: int, v: int): void = let val @(ok, i) = tix(e) in if ok then g_tex[i] := v end
+fn fbo_set(e: int, v: int): void = let val @(ok, i) = tix(e) in if ok then g_fbo[i] := v end
 
-// 2D Karo Koordinat Hash Fonksiyonu - Saf ATS2
+fn entry_get(l: int, s: int): int =
+  let val @(ok, i) = ix_try(table_idx(l, s), TABLE_ARR) in if ok then g_table[i] else NO_ENTRY end
+fn entry_set(l: int, s: int, v: int): void =
+  let val @(ok, i) = ix_try(table_idx(l, s), TABLE_ARR) in if ok then g_table[i] := v end
+
+// 2D Karo Koordinat Hash Fonksiyonu
 fn tile_hash(tx: int, ty: int): int = let
   val u_tx = g0int2uint_int_uint(tx)
   val u_ty = g0int2uint_int_uint(ty)
   val h1 = g0uint_mul_uint(u_tx, 73856093U)
   val h2 = g0uint_mul_uint(u_ty, 19349663U)
   val h = g0uint_lxor_uint(h1, h2)
-  val idx = g0uint_land_uint(h, 1023U)
 in
-  g0uint2int_uint_int(idx)
+  g0uint2int_uint_int(g0uint_land_uint(h, TABLE_MASK))
 end
 
-// --- Pür ATS2 ile Sonsuz Katman Oluşturma ---
-implement layer_create(w, h) = let
-  val p = malloc(sizeof<Layer_Record>)
-  val r = view_layer(p)
-  val sz = g0int2uint_int_size(TILE_HASH_SIZE) * sizeof<ptr>
-  val buckets_mem = malloc(sz)
-  val () = assertloc(buckets_mem > the_null_ptr)
-  val buckets = buckets_of(buckets_mem)
+fn probe_slot(h0: int, i: int): int =
+  g0uint2int_uint_int(g0uint_land_uint(g0int2uint_int_uint(h0 + i), TABLE_MASK))
 
-  fun init_buckets(i: int): void =
-    if i < TILE_HASH_SIZE then let
-      val () = mp_slot_set(bucket_at(buckets, i), the_null_ptr)
-    in init_buckets(i + 1) end else ()
-
-  val () = init_buckets(0)
-  val () = r->buckets := buckets
-  val () = r->tiles := tile_none()
-  val () = r->tile_count := 0
-in
-  layer_of(p)
-end
-
-implement layer_create_c(w, h) = layer_create(w, h)
-
-// --- O(1) Hash Tablosu ile Tile Arama ---
-fun find_tile_in_bucket(cur: MpTile, tx: int, ty: int): MpTile =
-  if tile_is_null(cur) != 0 then tile_none()
-  else let
-    val t = view_tile(tile_ptr(cur))
+// --- Katman ayirma / birakma (diger arena modulleriyle ayni kalip) ---
+fn alloc_layer(): int =
+  if !g_lnfree > 0 then let
+    val n = !g_lnfree - 1
+    val () = !g_lnfree := n
   in
-    if (t->tx = tx) && (t->ty = ty) then cur
-    else find_tile_in_bucket(t->next_in_bucket, tx, ty)
+    let val @(ok_, i_) = ix_try(n, LAYER_CAP) in if ok_ then g_lfree[i_] else NO_ENTRY end
+  end else let
+    val n = !g_lfresh
+  in
+    if n < LAYER_CAP then (!g_lfresh := n + 1; n) else NO_ENTRY
   end
 
-implement layer_find_tile(layer, tx, ty) = let
-  val () = assertloc(layer_is_null(layer) = 0)
-  val lr = view_layer(layer_ptr(layer))
-  val idx = tile_hash(tx, ty)
-  val head = tile_of(mp_slot_get(bucket_at(lr->buckets, idx)))
+fn recycle_layer(l: int): void = let
+  val n = !g_lnfree
+  val @(ok_n, i_n) = ix_try(n, LAYER_CAP)
+  val @(ok_l, _) = ix_try(l, LAYER_CAP)
+  val () = if ok_n then g_lfree[i_n] := l
+  val () = if ok_l then !g_lnfree := n + 1
+in () end
+
+implement layer_new() = let
+  val l = alloc_layer()
+  val () = anth_require(l >= 0)
+  val () = count_set(l, 0)
+  val () = lalive_set(l, 1)
+  val ln = airlock_nat(l)
 in
-  find_tile_in_bucket(head, tx, ty)
+  (cap_mint() | ln)
 end
 
-// --- Tile Oluşturma (1024x1024 - 4MB Sparse Allocation) ---
-fn init_tile_texture_and_fbo(): @(GLuint, GLuint) = let
-  var tex_id: GLuint
-  var fbo_id: GLuint
-  val () = glGenTextures(1, tex_id)
-  val () = glBindTexture(GL_TEXTURE_2D, tex_id)
-  val () = glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1024, 1024, 0, GL_RGBA, GL_UNSIGNED_BYTE, the_null_ptr)
-  val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-  val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-  val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-  val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-  val () = glGenFramebuffers(1, fbo_id)
-  val () = glBindFramebuffer(GL_FRAMEBUFFER, fbo_id)
-  val () = glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex_id, 0)
-  val () = glClearColor(0.0f, 0.0f, 0.0f, 0.0f)
-  val () = glClear(GL_COLOR_BUFFER_BIT)
-  val () = glBindFramebuffer(GL_FRAMEBUFFER, 0u)
-  val () = glBindTexture(GL_TEXTURE_2D, 0u)
+implement layer_stash(pf | l) = let
+  prval () = cap_burn(pf)
+  val () = lclaim_clear(l)
+in
+  layer_of_int(l)
+end
+
+implement layer_claim(layer) = let
+  val l = layer_to_int(layer)
+  val l2 = airlock_nat(l)
+in
+  // Cift claim engeli: katman zaten odunc alinmissa kanit bir daha uretilmez.
+  if lalive_get(l) * not(lclaim_get(l)) then let
+    val () = lclaim_mark(l)
+  in (Some_v(cap_mint()) | true, l2) end
+  else (None_v() | false, l2)
+end
+
+// --- Acik adreslemeli arama: olcu TABLE_SIZE - i ---
+fun probe_find {i:nat | i <= TABLE_SIZE} .<TABLE_SIZE - i>. (
+  l: int, h0: int, tx: int, ty: int, i: int(i)
+): int =
+  if i < TABLE_SIZE then let
+    val s = probe_slot(h0, i)
+    val e = entry_get(l, s)
+  in
+    if e < 0 then NO_ENTRY
+    else if (tx_get(e) = tx) && (ty_get(e) = ty) then e
+    else probe_find(l, h0, tx, ty, i + 1)
+  end else NO_ENTRY
+
+fun probe_insert {i:nat | i <= TABLE_SIZE} .<TABLE_SIZE - i>. (
+  l: int, h0: int, e_new: int, i: int(i)
+): void =
+  if i < TABLE_SIZE then let
+    val s = probe_slot(h0, i)
+  in
+    if entry_get(l, s) < 0 then entry_set(l, s, e_new)
+    else probe_insert(l, h0, e_new, i + 1)
+  end else anth_die_void(DieContractViolation())
+
+implement layer_find_tile(pf | l, tx, ty) =
+  tile_of_int(probe_find(l, tile_hash(tx, ty), tx, ty, 0))
+
+// --- Tile Olusturma (1024x1024 doku + FBO) ---
+fn init_tile_texture_and_fbo(gio: !GL_IO | ): @(GLuint, GLuint) = let
+  val tex_id = gl_gen_texture(gio | )
+  val () = glBindTexture(gio | GL_TEXTURE_2D, tex_id)
+  val () = glTexImage2D(gio | GL_TEXTURE_2D, 0, GL_RGBA, 1024, 1024, 0, GL_RGBA, GL_UNSIGNED_BYTE, the_null_ptr)
+  val () = glTexParameteri(gio | GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+  val () = glTexParameteri(gio | GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+  val () = glTexParameteri(gio | GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+  val () = glTexParameteri(gio | GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+  val fbo_id = gl_gen_framebuffer(gio | )
+  val () = glBindFramebuffer(gio | GL_FRAMEBUFFER, fbo_id)
+  val () = glFramebufferTexture2D(gio | GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex_id, 0)
+  val () = glClearColor(gio | 0.0f, 0.0f, 0.0f, 0.0f)
+  val () = glClear(gio | GL_COLOR_BUFFER_BIT)
+  val () = glBindFramebuffer(gio | GL_FRAMEBUFFER, 0u)
+  val () = glBindTexture(gio | GL_TEXTURE_2D, 0u)
 in
   @(tex_id, fbo_id)
 end
 
-fun alloc_tile(tx: int, ty: int, next_bucket: MpTile, next_layer: MpTile): MpTile = let
-  val p = malloc(sizeof<CanvasTile>)
-  val t = view_tile(p)
-  val @(tex_id, fbo_id) = init_tile_texture_and_fbo()
-  val () = t->tx := tx
-  val () = t->ty := ty
-  val () = t->texture := tex_id
-  val () = t->fbo := fbo_id
-  val () = t->next_in_bucket := next_bucket
-  val () = t->next_in_layer := next_layer
+fn store_tile(gio: !GL_IO | l: int, e: int, tx: int, ty: int): void = let
+  val @(tex_id, fbo_id) = init_tile_texture_and_fbo(gio | )
+  val () = tx_set(e, tx)
+  val () = ty_set(e, ty)
+  val () = tex_set(e, g0uint2int_uint_int(tex_id))
 in
-  tile_of(p)
+  fbo_set(e, g0uint2int_uint_int(fbo_id))
 end
 
-implement layer_get_or_create_tile(layer, tx, ty) = let
-  val lr = view_layer(layer_ptr(layer))
-  val found = layer_find_tile(layer, tx, ty)
+fn create_tile(gio: !GL_IO | l: int, tx: int, ty: int): int = let
+  val n = count_get(l)
+  val () = anth_require(n < MAX_TILES)
+  val e = tile_idx(l, n)
+  val () = store_tile(gio | l, e, tx, ty)
+  val () = probe_insert(l, tile_hash(tx, ty), e, 0)
+  val () = count_set(l, n + 1)
+in
+  e
+end
+
+implement layer_get_or_create_tile(pf, gio | l, tx, ty) = let
+  val found = layer_find_tile(pf | l, tx, ty)
 in
   if tile_is_null(found) = 0 then found
-  else let
-    val idx = tile_hash(tx, ty)
-    val slot = bucket_at(lr->buckets, idx)
-    val old_head = tile_of(mp_slot_get(slot))
-    val nt = alloc_tile(tx, ty, old_head, lr->tiles)
-    val () = mp_slot_set(slot, tile_ptr(nt))
-    val () = lr->tiles := nt
-    val () = lr->tile_count := lr->tile_count + 1
-  in
-    nt
-  end
+  else tile_of_int(create_tile(gio | l, tx, ty))
 end
 
-// --- Tile Çizim Bağlantısı (FBO + Projeksiyon) ---
-implement layer_bind_tile(tile) = let
-  val t = view_tile(tile_ptr(tile))
-  val () = glBindFramebuffer(GL_FRAMEBUFFER, t->fbo)
-  val () = glViewport(0, 0, 1024, 1024)
-  val tx_f = g0int2float(t->tx) * 1024.0f
-  val ty_f = g0int2float(t->ty) * 1024.0f
+// --- Tile Cizim Baglantisi (FBO + Projeksiyon) ---
+implement layer_bind_tile(gio | tile) = let
+  val e = tile_to_int(tile)
+  val tx = tx_get(e)
+  val ty = ty_get(e)
+  val () = glBindFramebuffer(gio | GL_FRAMEBUFFER, g0int2uint_int_uint(fbo_get(e)))
+  val () = glViewport(gio | 0, 0, 1024, 1024)
+  val tx_f = g0int2float(tx) * 1024.0f
+  val ty_f = g0int2float(ty) * 1024.0f
   val tx1_f = tx_f + 1024.0f
   val ty1_f = ty_f + 1024.0f
-  val () = glMatrixMode(GL_PROJECTION)
-  val () = glPushMatrix()
-  val () = glLoadIdentity()
-  val () = glOrtho(
+  val () = glMatrixMode(gio | GL_PROJECTION)
+  val () = glPushMatrix(gio | )
+  val () = glLoadIdentity(gio | )
+  val () = glOrtho(gio | 
     g0float2float_float_double(tx_f),
     g0float2float_float_double(tx1_f),
     g0float2float_float_double(ty1_f),
     g0float2float_float_double(ty_f),
     ~1.0, 1.0
   )
-  val () = glMatrixMode(GL_MODELVIEW)
-  val () = glPushMatrix()
-  val () = glLoadIdentity()
+  val () = glMatrixMode(gio | GL_MODELVIEW)
+  val () = glPushMatrix(gio | )
+  val () = glLoadIdentity(gio | )
 in () end
 
-// --- Tile Bağlantısını Kapatma ---
-implement layer_unbind_tile() = let
-  val () = glMatrixMode(GL_MODELVIEW)
-  val () = glPopMatrix()
-  val () = glMatrixMode(GL_PROJECTION)
-  val () = glPopMatrix()
-  val () = glMatrixMode(GL_MODELVIEW)
-  val () = glBindFramebuffer(GL_FRAMEBUFFER, 0u)
+// --- Tile Baglantisini Kapatma ---
+implement layer_unbind_tile(gio | ) = let
+  val () = glMatrixMode(gio | GL_MODELVIEW)
+  val () = glPopMatrix(gio | )
+  val () = glMatrixMode(gio | GL_PROJECTION)
+  val () = glPopMatrix(gio | )
+  val () = glMatrixMode(gio | GL_MODELVIEW)
+  val () = glBindFramebuffer(gio | GL_FRAMEBUFFER, 0u)
 in () end
 
-// --- Görünür Tile'ları Ekrana Çizme ---
-fn render_tile_quad(
+// --- Gorunur Tile'lari Ekrana Cizme ---
+fn render_tile_quad(gio: !GL_IO | 
   tex: GLuint, u0: float, u1: float, v0: float, v1: float,
   x0: float, y0: float, x1: float, y1: float
 ): void = let
-  val () = glBindTexture(GL_TEXTURE_2D, tex)
-  val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-  val () = glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-  val () = glBegin(GL_QUADS)
-  val () = (glTexCoord2f(u0, v1); glVertex2f(x0, y0))
-  val () = (glTexCoord2f(u1, v1); glVertex2f(x1, y0))
-  val () = (glTexCoord2f(u1, v0); glVertex2f(x1, y1))
-  val () = (glTexCoord2f(u0, v0); glVertex2f(x0, y1))
-  val () = glEnd()
+  val () = glBindTexture(gio | GL_TEXTURE_2D, tex)
+  val () = glTexParameteri(gio | GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+  val () = glTexParameteri(gio | GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+  val () = glBegin(gio | GL_QUADS)
+  val () = (glTexCoord2f(gio | u0, v1); glVertex2f(gio | x0, y0))
+  val () = (glTexCoord2f(gio | u1, v1); glVertex2f(gio | x1, y0))
+  val () = (glTexCoord2f(gio | u1, v0); glVertex2f(gio | x1, y1))
+  val () = (glTexCoord2f(gio | u0, v0); glVertex2f(gio | x0, y1))
+  val () = glEnd(gio | )
 in () end
 
-fun draw_tiles_rec(cur: MpTile, vl: float, vt: float, vr: float, vb: float, zoom: float): void =
-  if tile_is_null(cur) != 0 then ()
-  else let
-    val t = view_tile(tile_ptr(cur))
-    val x0 = g0int2float(t->tx) * 1024.0f
-    val y0 = g0int2float(t->ty) * 1024.0f
-    val bleed = g0float_div_float(0.5f, zoom)
-    val du = g0float_div_float(bleed, 1024.0f)
-    val x0e = g0float_sub_float(x0, bleed)
-    val y0e = g0float_sub_float(y0, bleed)
-    val x1e = g0float_add_float(x0 + 1024.0f, bleed)
-    val y1e = g0float_add_float(y0 + 1024.0f, bleed)
-    val visible = (x1e >= vl) && (x0e <= vr) && (y1e >= vt) && (y0e <= vb)
-    val () = if visible then
-      render_tile_quad(t->texture, ~du, 1.0f + du, ~du, 1.0f + du, x0e, y0e, x1e, y1e)
-    else ()
-  in
-    draw_tiles_rec(t->next_in_layer, vl, vt, vr, vb, zoom)
-  end
-
-implement layer_draw_tiles(layer, vl, vt, vr, vb, zoom) = let
-  val lr = view_layer(layer_ptr(layer))
+fn draw_one_tile(gio: !GL_IO | e: int, vl: float, vt: float, vr: float, vb: float, zoom: float): void = let
+  val x0 = g0int2float(tx_get(e)) * 1024.0f
+  val y0 = g0int2float(ty_get(e)) * 1024.0f
+  val bleed = g0float_div_float(0.5f, zoom)
+  val du = g0float_div_float(bleed, 1024.0f)
+  val x0e = g0float_sub_float(x0, bleed)
+  val y0e = g0float_sub_float(y0, bleed)
+  val x1e = g0float_add_float(x0 + 1024.0f, bleed)
+  val y1e = g0float_add_float(y0 + 1024.0f, bleed)
+  val visible = (x1e >= vl) && (x0e <= vr) && (y1e >= vt) && (y0e <= vb)
 in
-  if tile_is_null(lr->tiles) = 0 then let
-    val () = glEnable(GL_TEXTURE_2D)
-    val () = glEnable(GL_BLEND)
-    val () = glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    val () = glColor4f(1.0f, 1.0f, 1.0f, 1.0f)
-    val () = draw_tiles_rec(lr->tiles, vl, vt, vr, vb, zoom)
-    val () = glDisable(GL_TEXTURE_2D)
+  if visible then
+    render_tile_quad(gio | g0int2uint_int_uint(tex_get(e)), ~du, 1.0f + du, ~du, 1.0f + du, x0e, y0e, x1e, y1e)
+  else ()
+end
+
+// Olcu n - i: n = katmandaki tile sayisi. En yeni tile once cizilir (eski bagli liste sirasi).
+fun draw_tiles_from {n:nat}{i:nat | i <= n} .<n - i>. (gio: !GL_IO | 
+  l: int, i: int(i), n: int(n), vl: float, vt: float, vr: float, vb: float, zoom: float
+): void =
+  if i < n then let
+    val () = draw_one_tile(gio | tile_idx(l, n - 1 - i), vl, vt, vr, vb, zoom)
+  in
+    draw_tiles_from(gio | l, i + 1, n, vl, vt, vr, vb, zoom)
+  end else ()
+
+implement layer_draw_tiles(pf, gio | l, vl, vt, vr, vb, zoom) = let
+  val n = count_get(l)
+in
+  if n > 0 then let
+    val () = glEnable(gio | GL_TEXTURE_2D)
+    val () = glEnable(gio | GL_BLEND)
+    val () = glBlendFunc(gio | GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    val () = glColor4f(gio | 1.0f, 1.0f, 1.0f, 1.0f)
+    val () = draw_tiles_from(gio | l, 0, airlock_nat(n), vl, vt, vr, vb, zoom)
+    val () = glDisable(gio | GL_TEXTURE_2D)
   in () end else ()
 end
 
-// --- Tile Belleğini Boşaltma ---
-fun free_tiles_rec(cur: MpTile): void =
-  if tile_is_null(cur) != 0 then ()
-  else let
-    val t = view_tile(tile_ptr(cur))
-    val next = t->next_in_layer
-    var tex: GLuint = t->texture
-    var fbo: GLuint = t->fbo
-    val () = glDeleteTextures(1, tex)
-    val () = glDeleteFramebuffers(1, fbo)
-    val () = free(tile_ptr(cur))
-  in
-    free_tiles_rec(next)
-  end
-
-implement layer_clear(layer) = let
-  val lr = view_layer(layer_ptr(layer))
-  val () = free_tiles_rec(lr->tiles)
-  val () = lr->tiles := tile_none()
-  val () = lr->tile_count := 0
-  fun clear_buckets(i: int): void =
-    if i < TILE_HASH_SIZE then let
-      val () = mp_slot_set(bucket_at(lr->buckets, i), the_null_ptr)
-    in clear_buckets(i + 1) end else ()
+// --- Tile Bellegini Bosaltma ---
+fn delete_one_tile(gio: !GL_IO | e: int): void = let
+  val () = gl_delete_texture(gio | g0int2uint_int_uint(tex_get(e)))
 in
-  clear_buckets(0)
+  gl_delete_framebuffer(gio | g0int2uint_int_uint(fbo_get(e)))
 end
 
-implement layer_destroy(layer) = let
-  val lr = view_layer(layer_ptr(layer))
-  val () = layer_clear(layer)
-  val () = free(buckets_ptr(lr->buckets))
-  val () = free(layer_ptr(layer))
-in () end
+fun delete_tiles_from {n:nat}{i:nat | i <= n} .<n - i>. (gio: !GL_IO | l: int, i: int(i), n: int(n)): void =
+  if i < n then let
+    val () = delete_one_tile(gio | tile_idx(l, i))
+  in
+    delete_tiles_from(gio | l, i + 1, n)
+  end else ()
 
-// Geriye dönük uyumluluk fonksiyonları
-implement layer_drawOnScreen(layer, w, h) =
-  layer_draw_tiles(layer, 0.0f, 0.0f, g0int2float(w), g0int2float(h), 1.0f)
+fun reset_table {i:nat | i <= TABLE_SIZE} .<TABLE_SIZE - i>. (l: int, i: int(i)): void =
+  if i < TABLE_SIZE then let
+    val () = entry_set(l, i, NO_ENTRY)
+  in
+    reset_table(l, i + 1)
+  end else ()
 
-implement layer_bind(l) = ()
-implement layer_unbind(l) = ()
-implement layer_bind_c(l) = ()
-implement layer_unbind_c(l) = ()
+implement layer_clear(pf, gio | l) = let
+  val () = delete_tiles_from(gio | l, 0, airlock_nat(count_get(l)))
+  val () = count_set(l, 0)
+in
+  reset_table(l, 0)
+end
+
+implement layer_destroy(pf, gio | l) = let
+  val () = layer_clear(pf, gio | l)
+  val () = lalive_set(l, 0)
+  val () = lclaim_clear(l)
+  prval () = cap_burn(pf)
+in
+  recycle_layer(l)
+end

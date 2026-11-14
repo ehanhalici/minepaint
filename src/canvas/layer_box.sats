@@ -1,22 +1,15 @@
-abst@ype MpLayer = ptr
-abst@ype MpTile = ptr
+// src/canvas/layer_box.sats
+// Katman ve tile tutamaclari: arena indeksleri. -1 = yok. Tamsayi <-> tutamac donusumu yalniz burada.
 
-fun layer_none(): MpLayer = "mac#mp_null_ptr"
-fun layer_is_null(l: MpLayer): int = "mac#mp_ptr_is_null"
-fun layer_of(p: ptr): MpLayer = "mac#mp_id_ptr"
-fun layer_ptr(l: MpLayer): ptr = "mac#mp_id_ptr"
+abst@ype MpLayer = int
+abst@ype MpTile = int
 
-fun tile_none(): MpTile = "mac#mp_null_ptr"
-fun tile_is_null(t: MpTile): int = "mac#mp_ptr_is_null"
-fun tile_of(p: ptr): MpTile = "mac#mp_id_ptr"
-fun tile_ptr(t: MpTile): ptr = "mac#mp_id_ptr"
+fun layer_none(): MpLayer = "mac#mp_none_handle"
+fun layer_is_null(l: MpLayer): int = "mac#mp_handle_is_none"
+fun layer_of_int(i: int): MpLayer = "mac#mp_id_int"
+fun layer_to_int(l: MpLayer): int = "mac#mp_id_int"
 
-abst@ype MpBuckets = ptr
-
-fun buckets_of(p: ptr): MpBuckets = "mac#mp_id_ptr"
-fun buckets_ptr(b: MpBuckets): ptr = "mac#mp_id_ptr"
-
-abst@ype MpSlot = ptr
-
-fun slot_of(p: ptr): MpSlot = "mac#mp_id_ptr"
-fun slot_ptr(s: MpSlot): ptr = "mac#mp_id_ptr"
+fun tile_none(): MpTile = "mac#mp_none_handle"
+fun tile_is_null(t: MpTile): int = "mac#mp_handle_is_none"
+fun tile_of_int(i: int): MpTile = "mac#mp_id_int"
+fun tile_to_int(t: MpTile): int = "mac#mp_id_int"

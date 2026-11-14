@@ -5,7 +5,7 @@
 
 staload "draw_engine/setting_id.sats"
 staload "draw_engine/input_id.sats"
-#include "draw_engine/engine_safe.hats"
+#include "sys/airlock.hats"
 
 fn {n:int}
 table_iget(a: &(@[int][n]), nsz: int(n), k: int): int =

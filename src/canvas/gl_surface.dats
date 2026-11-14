@@ -3,9 +3,13 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
-staload "draw_engine/surface_box.sats"
+staload "gl/gl_io.sats"
+staload "sys/cast_box.sats"
+#include "sys/airlock.hats"
+staload "draw_engine/surface_target.sats"
 staload "canvas/layer_box.sats"
 staload "sys/libc.dats"
+staload "gl/gl.dats"
 
 // OpenGL Sabitleri
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
@@ -17,20 +21,6 @@ macdef GL_SRC_ALPHA = $extval(int, "GL_SRC_ALPHA")
 macdef GL_ONE_MINUS_SRC_ALPHA = $extval(int, "GL_ONE_MINUS_SRC_ALPHA")
 macdef GL_TRIANGLE_FAN = $extval(int, "GL_TRIANGLE_FAN")
 
-// OpenGL Fonksiyonları
-extern fun glDisable(cap: int): void = "mac#"
-extern fun glEnable(cap: int): void = "mac#"
-extern fun glBlendFunc(sfactor: int, dfactor: int): void = "mac#"
-extern fun glColor4f(r: float, g: float, b: float, a: float): void = "mac#"
-extern fun glPushMatrix(): void = "mac#"
-extern fun glPopMatrix(): void = "mac#"
-extern fun glTranslatef(x: float, y: float, z: float): void = "mac#"
-extern fun glRotatef(angle: float, x: float, y: float, z: float): void = "mac#"
-extern fun glScalef(x: float, y: float, z: float): void = "mac#"
-extern fun glBegin(mode: int): void = "mac#"
-extern fun glEnd(): void = "mac#"
-extern fun glVertex2f(x: float, y: float): void = "mac#"
-
 fn f2i(x: float): int = g0float2int_float_int(x)
 fn f_sub(a: float, b: float): float = g0float_sub_float(a, b)
 fn f_add(a: float, b: float): float = g0float_add_float(a, b)
@@ -40,109 +30,71 @@ fn f_gt(a: float, b: float): bool = g0float_gt_float(a, b)
 fn f_lt(a: float, b: float): bool = g0float_lt_float(a, b)
 
 // Layer / Tile FFI Fonksiyonları
-extern fun layer_find_tile(layer: MpLayer, tx: int, ty: int): MpTile = "ext#layer_find_tile"
-extern fun layer_get_or_create_tile(layer: MpLayer, tx: int, ty: int): MpTile = "ext#layer_get_or_create_tile"
-extern fun layer_bind_tile(tile: MpTile): void = "ext#layer_bind_tile"
-extern fun layer_unbind_tile(): void = "ext#layer_unbind_tile"
-
-// LibMinePaint Tipleri
-typedef MinePaintDrawDabFunc = (
-  MpSurface, float, float, float, float, float, float, 
-  float, float, float, float, float, float, 
-  float, float, float, float, float
-) -> int
-
-typedef MinePaintSurface_Record = @{
-  draw_dab= MinePaintDrawDabFunc,
-  get_color= ptr,
-  begin_atomic= ptr,
-  end_atomic= ptr,
-  destroy= ptr,
-  save_png= ptr,
-  refcount= int
-}
-
-typedef MyGLSurface_Record = @{
-  parent= MinePaintSurface_Record,
-  is_erasing= int,
-  layer= MpLayer
-}
-
-extern fun view_glsurf(p: ptr): ref(MyGLSurface_Record) = "mac#mp_id_ptr"
-
-typedef glsurface_vtype = MpSurface
-
-extern fun draw_dab_callback : MinePaintDrawDabFunc = "ext#draw_dab_callback"
-extern fun glsurface_create(): glsurface_vtype = "ext#glsurface_create"
-extern fun glsurface_destroy(s: glsurface_vtype): void = "ext#glsurface_destroy"
-extern fun glsurface_set_erasing(s: glsurface_vtype, v: int): void = "ext#glsurface_set_erasing"
-extern fun mygl_surface_set_layer(s: glsurface_vtype, layer: MpLayer): void = "ext#mygl_surface_set_layer"
-extern fun mygl_surface_flush_batch(s: MpSurface): void = "ext#mygl_surface_flush_batch"
-implement mygl_surface_flush_batch(s) = ()
+staload "canvas/layer_view.sats"
 
 // --- Nokta Cizim Mantigi ---
-fn setup_blend_and_color(
+fn setup_blend_and_color(gio: !GL_IO | 
   is_erasing: int, color_r: float, color_g: float, color_b: float, opaque: float
 ): void = let
-  val () = glEnable(GL_BLEND)
+  val () = glEnable(gio | GL_BLEND)
 in
-  if is_erasing > 0 then (glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA); glColor4f(0.0f, 0.0f, 0.0f, 1.0f))
-  else (glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA); glColor4f(f_mul(color_r, opaque), f_mul(color_g, opaque), f_mul(color_b, opaque), opaque))
+  if is_erasing > 0 then (glBlendFunc(gio | GL_ZERO, GL_ONE_MINUS_SRC_ALPHA); glColor4f(gio | 0.0f, 0.0f, 0.0f, 1.0f))
+  else (glBlendFunc(gio | GL_ONE, GL_ONE_MINUS_SRC_ALPHA); glColor4f(gio | f_mul(color_r, opaque), f_mul(color_g, opaque), f_mul(color_b, opaque), opaque))
 end
 
-fn draw_dab_fan(
+fn draw_dab_fan(gio: !GL_IO | 
   is_erasing: int, color_r: float, color_g: float, color_b: float,
   r_outer: float, a_inner: float, a_outer: float
 ): void = let
-  val () = glBegin(GL_TRIANGLE_FAN)
-  val () = if is_erasing > 0 then glColor4f(0.0f, 0.0f, 0.0f, a_inner)
-           else glColor4f(f_mul(color_r, a_inner), f_mul(color_g, a_inner), f_mul(color_b, a_inner), a_inner)
-  val () = glVertex2f(0.0f, 0.0f)
-  val () = if is_erasing > 0 then glColor4f(0.0f, 0.0f, 0.0f, a_outer)
-           else glColor4f(f_mul(color_r, a_outer), f_mul(color_g, a_outer), f_mul(color_b, a_outer), a_outer)
+  val () = glBegin(gio | GL_TRIANGLE_FAN)
+  val () = if is_erasing > 0 then glColor4f(gio | 0.0f, 0.0f, 0.0f, a_inner)
+           else glColor4f(gio | f_mul(color_r, a_inner), f_mul(color_g, a_inner), f_mul(color_b, a_inner), a_inner)
+  val () = glVertex2f(gio | 0.0f, 0.0f)
+  val () = if is_erasing > 0 then glColor4f(gio | 0.0f, 0.0f, 0.0f, a_outer)
+           else glColor4f(gio | f_mul(color_r, a_outer), f_mul(color_g, a_outer), f_mul(color_b, a_outer), a_outer)
   val PI = 3.14159265358979323846f
-  fun loop(i: int): void =
+  fun loop {i:nat | i <= 17} .<17 - i>. (gio: !GL_IO | i: int(i)): void =
     if i <= 16 then let
       val theta = f_div(f_mul(f_mul(g0int2float(i), 2.0f), PI), 16.0f)
-      val () = glVertex2f(f_mul(r_outer, cosf(theta)), f_mul(r_outer, sinf(theta)))
-    in loop(i + 1) end else ()
-  val () = loop(0)
-  val () = glEnd()
+      val () = glVertex2f(gio | f_mul(r_outer, cosf(theta)), f_mul(r_outer, sinf(theta)))
+    in loop(gio | i + 1) end else ()
+  val () = loop(gio | 0)
+  val () = glEnd(gio | )
 in () end
 
-fun print_dot(
+fun print_dot(gio: !GL_IO | 
   is_erasing: int, radius: float, color_r: float, color_g: float, color_b: float, opaque: float, hardness: float
 ): void = let
-  val () = setup_blend_and_color(is_erasing, color_r, color_g, color_b, opaque)
+  val () = setup_blend_and_color(gio | is_erasing, color_r, color_g, color_b, opaque)
   val actual_radius = if is_erasing > 0 then f_mul(radius, 4.0f) else radius
   val r_hard = f_mul(actual_radius, hardness)
-  val () = if f_gt(hardness, 0.001f) then draw_dab_fan(is_erasing, color_r, color_g, color_b, r_hard, opaque, opaque)
-  val () = draw_dab_fan(is_erasing, color_r, color_g, color_b, actual_radius, opaque, 0.0f)
+  val () = if f_gt(hardness, 0.001f) then draw_dab_fan(gio | is_erasing, color_r, color_g, color_b, r_hard, opaque, opaque)
+  val () = draw_dab_fan(gio | is_erasing, color_r, color_g, color_b, actual_radius, opaque, 0.0f)
 in () end
 
-fn apply_dab_transform(x: float, y: float, angle: float, aspect: float): void = let
-  val () = glTranslatef(x, y, 0.0f)
+fn apply_dab_transform(gio: !GL_IO | x: float, y: float, angle: float, aspect: float): void = let
+  val () = glTranslatef(gio | x, y, 0.0f)
   val angle_deg = f_div(f_mul(angle, 180.0f), 3.14159265f)
-  val () = if angle_deg != 0.0f then glRotatef(angle_deg, 0.0f, 0.0f, 1.0f)
-  val () = if f_gt(aspect, 1.0f) then glScalef(1.0f, f_div(1.0f, aspect), 1.0f)
-           else if f_gt(aspect, 0.001f) && f_lt(aspect, 1.0f) then glScalef(aspect, 1.0f, 1.0f)
+  val () = if angle_deg != 0.0f then glRotatef(gio | angle_deg, 0.0f, 0.0f, 1.0f)
+  val () = if f_gt(aspect, 1.0f) then glScalef(gio | 1.0f, f_div(1.0f, aspect), 1.0f)
+           else if f_gt(aspect, 0.001f) && f_lt(aspect, 1.0f) then glScalef(gio | aspect, 1.0f, 1.0f)
            else ()
 in () end
 
-fn render_tile_dab(
+fn render_tile_dab(gio: !GL_IO | 
   tile: MpTile, is_erasing: int, x: float, y: float,
   radius: float, r: float, g: float, b: float,
   opaque: float, hardness: float, aspect: float, angle: float
 ): void =
   if tile_is_null(tile) = 0 then let
-    val () = layer_bind_tile(tile)
-    val () = glDisable(GL_TEXTURE_2D)
-    val () = glDisable(GL_DEPTH_TEST)
-    val () = glPushMatrix()
-    val () = apply_dab_transform(x, y, angle, aspect)
-    val () = print_dot(is_erasing, radius, r, g, b, opaque, hardness)
-    val () = glPopMatrix()
-    val () = layer_unbind_tile()
+    val () = layer_bind_tile(gio | tile)
+    val () = glDisable(gio | GL_TEXTURE_2D)
+    val () = glDisable(gio | GL_DEPTH_TEST)
+    val () = glPushMatrix(gio | )
+    val () = apply_dab_transform(gio | x, y, angle, aspect)
+    val () = print_dot(gio | is_erasing, radius, r, g, b, opaque, hardness)
+    val () = glPopMatrix(gio | )
+    val () = layer_unbind_tile(gio | )
   in () end else ()
 
 fn calc_tile_bounds(x: float, y: float, actual_radius: float): @(int, int, int, int) = let
@@ -154,52 +106,52 @@ in
   @(min_tx, max_tx, min_ty, max_ty)
 end
 
-// --- Dab Çizim Callback'i ---
-implement draw_dab_callback(self, x, y, radius, r, g, b, opaque, hardness, softness, alpha_eraser, aspect, angle, lock_alpha, colorize, posterize, posterize_num, paint): int = let
-  val surf = view_glsurf(mp_surface_to_ptr(self))
-  val layer = surf->layer
-  val is_erasing = surf->is_erasing
+// Tile araligindaki her tile'a dab cizer. Katman kaniti disaridan odunc gelir (!LAYER_LIVE).
+fun dab_on_tiles {lh:int} (
+  pf: !LAYER_LIVE(lh), gio: !GL_IO | l: int(lh), is_erasing: int, x: float, y: float,
+  radius: float, r: float, g: float, b: float,
+  opaque: float, hardness: float, aspect: float, angle: float,
+  min_tx: int, max_tx: int, min_ty: int, max_ty: int
+): void = let
+  val [lo_x:int] lx = airlock_int(min_tx)
+  val [hi_x:int] hxv = airlock_int(max_tx)
+  val [lo_y:int] ly = airlock_int(min_ty)
+  val [hi_y:int] hyv = airlock_int(max_ty)
+  fun loop_y {lh:int}{hy:int}{ty:int | ty <= hy + 1} .<hy + 1 - ty>. (
+    pf: !LAYER_LIVE(lh), gio: !GL_IO | l: int(lh), hy: int(hy), tx: int, ty: int(ty)
+  ): void =
+    if ty <= hy then let
+      val tile = if is_erasing > 0 then layer_find_tile(pf | l, tx, ty)
+                 else layer_get_or_create_tile(pf, gio | l, tx, ty)
+      val () = render_tile_dab(gio | tile, is_erasing, x, y, radius, r, g, b, opaque, hardness, aspect, angle)
+    in loop_y(pf, gio | l, hy, tx, ty + 1) end else ()
+  fun loop_x {lh:int}{hx:int}{tx:int | tx <= hx + 1} .<hx + 1 - tx>. (
+    pf: !LAYER_LIVE(lh), gio: !GL_IO | l: int(lh), hx: int(hx), tx: int(tx)
+  ): void =
+    if tx <= hx then let
+      val () = if ly <= hyv + 1 then loop_y(pf, gio | l, hyv, tx, ly) else ()
+    in loop_x(pf, gio | l, hx, tx + 1) end else ()
+in
+  if lx <= hxv + 1 then loop_x(pf, gio | l, hxv, lx) else ()
+end
+
+// --- Dab cizimi: dogrudan tipli cagri (geri cagri/vtable yok) ---
+implement draw_dab_on(gio | tgt, x, y, radius, r, g, b, opaque, hardness, aspect, angle): int = let
+  val layer = tgt.layer
+  val is_erasing = (case+ tgt.mode of | DrawErase() => 1 | DrawPaint() => 0): int
 in
   if (layer_is_null(layer) = 0) && (radius > 0.00001f) then let
     val actual_radius = if is_erasing > 0 then f_mul(radius, 4.0f) else radius
     val @(min_tx, max_tx, min_ty, max_ty) = calc_tile_bounds(x, y, actual_radius)
-    fun loop_y(tx: int, ty: int): void =
-      if ty <= max_ty then let
-        val tile = if is_erasing > 0 then layer_find_tile(layer, tx, ty)
-                   else layer_get_or_create_tile(layer, tx, ty)
-        val () = render_tile_dab(tile, is_erasing, x, y, radius, r, g, b, opaque, hardness, aspect, angle)
-      in loop_y(tx, ty + 1) end else ()
-
-    fun loop_x(tx: int): void =
-      if tx <= max_tx then (loop_y(tx, min_ty); loop_x(tx + 1)) else ()
-    val () = loop_x(min_tx)
-  in 1 end
+    val (pf | ok, l) = layer_claim(layer)
+  in
+    if ok then let
+      prval Some_v(live) = pf
+      val () = dab_on_tiles(live, gio | l, is_erasing, x, y, radius, r, g, b, opaque, hardness, aspect, angle, min_tx, max_tx, min_ty, max_ty)
+      val _ = layer_stash(live | l)
+    in 1 end else let
+      prval None_v() = pf
+    in 1 end
+  end
   else 1
-end
-
-// --- Yasam Dongusu (Lifecycle) ---
-implement glsurface_create() = let
-  val p = malloc(sizeof<MyGLSurface_Record>)
-  val () = assertloc(p > the_null_ptr)
-  val p1 = view_glsurf(p)
-  val () = p1->parent.draw_dab := draw_dab_callback
-  val () = p1->parent.refcount := 1
-  val () = p1->is_erasing := 0
-  val () = p1->layer := layer_none()
-in
-  mp_surface_of_ptr(p)
-end
-
-implement glsurface_destroy(s) = free(mp_surface_to_ptr(s))
-
-implement glsurface_set_erasing(s, v) = let
-  val surf = view_glsurf(mp_surface_to_ptr(s))
-in
-  surf->is_erasing := v
-end
-
-implement mygl_surface_set_layer(s, layer) = let
-  val surf = view_glsurf(mp_surface_to_ptr(s))
-in
-  surf->layer := layer
 end

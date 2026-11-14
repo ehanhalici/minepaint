@@ -1,8 +1,8 @@
 // Brush setting and input metadata as typed arrays.
-// main.dats dynloads this file so the tables are filled before use.
+// main.dats initialises this file at startup (tables are filled before use).
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
-#include "draw_engine/engine_safe.hats"
+#include "sys/airlock.hats"
 #include "./brushsettings_gen.hats"
 
 val g_set_blank = @{
@@ -46,7 +46,7 @@ end
 
 extern fun minepaint_brush_setting_from_cname(cname: string): int = "ext#minepaint_brush_setting_from_cname"
 implement minepaint_brush_setting_from_cname(cname) = let
-  fun loop(i: int): int =
+  fun loop {i:nat | i <= 65} .<65 - i>. (i: int(i)): int =
     if i < 65 then let
       val s = setting_at(i)
     in
@@ -76,7 +76,7 @@ end
 
 extern fun minepaint_brush_input_from_cname(cname: string): int = "ext#minepaint_brush_input_from_cname"
 implement minepaint_brush_input_from_cname(cname) = let
-  fun loop(i: int): int =
+  fun loop {i:nat | i <= 18} .<18 - i>. (i: int(i)): int =
     if i < 18 then let
       val s = input_at(i)
     in

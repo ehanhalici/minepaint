@@ -40,17 +40,17 @@ extern fun kaerhon_apply(b: int, i: int): void = "ext#kaerhon_apply"
 extern fun draw_engine_brush_prepare_load(b: int): void = "ext#draw_engine_brush_prepare_load"
 
 // --- Sınır Dönüşümleri (brush_group.sats) ---
-implement brush_group_of_int(g) =
+implement brush_group_try(g) =
   case+ g of
-  | 0 => Some(GroupDieterle())
-  | 1 => Some(GroupClassic())
-  | 2 => Some(GroupDeevad())
-  | 3 => Some(GroupFavorites())
-  | 4 => Some(GroupRamon())
-  | 5 => Some(GroupExperimental())
-  | 6 => Some(GroupTanda())
-  | 7 => Some(GroupKaerhon())
-  | _ => None()
+  | 0 => @(true, GroupDieterle())
+  | 1 => @(true, GroupClassic())
+  | 2 => @(true, GroupDeevad())
+  | 3 => @(true, GroupFavorites())
+  | 4 => @(true, GroupRamon())
+  | 5 => @(true, GroupExperimental())
+  | 6 => @(true, GroupTanda())
+  | 7 => @(true, GroupKaerhon())
+  | _ => @(false, GroupClassic())
 
 implement brush_group_to_int(grp) =
   case+ grp of
