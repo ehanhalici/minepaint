@@ -1,5 +1,4 @@
 .cache
 build
-GTAGS
-GRTAGS
-GPATH
+build-*/
+skill.md

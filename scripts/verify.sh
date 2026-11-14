@@ -32,6 +32,43 @@ check_file() {
 while IFS= read -r f; do check_file -s "$f"; done < <(find src -name '*.sats' | sort)
 while IFS= read -r f; do check_file -d "$f"; done < <(find src -name '*.dats' | sort)
 
+
+# .hats dosyalari tek basina da tip denetiminden gecmeli (include edenlerin ortak on ekiyle).
+check_hats() {
+  local h="$1" wrapper
+  if head -n 5 "$h" | grep -q '^// fragment:'; then return 0; fi
+  wrapper="$(mktemp --suffix=.dats)"
+  {
+    echo '#include "share/atspre_define.hats"'
+    echo '#include "share/atspre_staload.hats"'
+    echo '#include "draw_engine/minepaint_types.hats"'
+    echo '#include "sys/airlock.hats"'
+    echo "#include \"$ROOT/$h\""
+  } > "$wrapper"
+  total=$((total + 1))
+  if ! patsopt -tc "${INCLUDES[@]}" -d "$wrapper" > "$TC_LOG" 2>&1; then
+    fail=$((fail + 1))
+    echo "FAIL $h (tek basina)"
+    head -n 20 "$TC_LOG"
+  fi
+  rm -f "$wrapper"
+}
+while IFS= read -r f; do check_hats "$f"; done < <(find src -name '*.hats' | sort)
+
+# .cats / cprelude.h: C sozdizimi (clang) denetimi.
+if command -v clang > /dev/null 2>&1; then
+  total=$((total + 1))
+  if ! echo | clang -fsyntax-only -x c -I src -include src/sys/cprelude.h - > "$TC_LOG" 2>&1; then
+    fail=$((fail + 1)); echo "FAIL src/sys/cprelude.h (C sozdizimi)"; head -n 20 "$TC_LOG"
+  fi
+fi
+
+# skill.md kural kapisi (yasakli simgeler, tek assume, praxi yeri, metriksiz ozyineleme).
+total=$((total + 1))
+if ! python3 scripts/check_rules.py; then
+  fail=$((fail + 1)); echo "FAIL kural kapisi (scripts/check_rules.py)"
+fi
+
 echo "patsopt -tc: total=$total fail=$fail"
 if [ "$fail" -ne 0 ]; then
   exit 1

@@ -7,7 +7,7 @@ endif()
 find_program(MINEPAINT_CLANG clang REQUIRED)
 set(CMAKE_C_COMPILER "${MINEPAINT_CLANG}" CACHE FILEPATH "clang" FORCE)
 set(CMAKE_EXE_LINKER_FLAGS "" CACHE STRING "" FORCE)
-set(CMAKE_C_FLAGS "-Wall -Wextra -Wshadow -pedantic -I${CMAKE_SOURCE_DIR}/src -include ${CMAKE_SOURCE_DIR}/src/sys/cprelude.h -Wno-implicit-function-declaration -Wno-format -U_FORTIFY_SOURCE" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS "-Wall -Wextra -Wshadow -pedantic -I${CMAKE_SOURCE_DIR}/src -include ${CMAKE_SOURCE_DIR}/src/sys/cprelude.h -U_FORTIFY_SOURCE" CACHE STRING "" FORCE)
 set(CMAKE_C_FLAGS_DEBUG "-O0 -g" CACHE STRING "" FORCE)
 set(CMAKE_C_FLAGS_RELEASE "-O3 -flto=thin -march=native -funroll-loops -fomit-frame-pointer -fvectorize -fslp-vectorize -DNDEBUG" CACHE STRING "" FORCE)
 
@@ -60,6 +60,7 @@ include_directories(
 
 file(GLOB_RECURSE ATS_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.dats")
 list(SORT ATS_SOURCES)
+file(GLOB_RECURSE ATS_HEADERS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.sats" "${CMAKE_SOURCE_DIR}/src/*.hats" "${CMAKE_SOURCE_DIR}/src/*.cats" "${CMAKE_SOURCE_DIR}/src/sys/cprelude.h")
 if(NOT ATS_SOURCES)
   message(FATAL_ERROR "src altında .dats bulunamadı")
 endif()
@@ -86,7 +87,7 @@ foreach(ATS_FILE ${ATS_SOURCES})
       -o ${C_OUT}
       -d ${REL_ATS}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    DEPENDS ${ATS_FILE}
+    DEPENDS ${ATS_FILE} ${ATS_HEADERS}
     COMMENT "[ATS] ${REL_ATS} -> ${BASE_NAME}_dats.c"
   )
   list(APPEND GENERATED_C_SOURCES ${C_OUT})
