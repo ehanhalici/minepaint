@@ -1,9 +1,16 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
-#include "draw_engine/engine_safe.hats"
+#include "sys/airlock.hats"
+#include "sys/arena.hats"
 staload "brushes/brush_group.sats"
 staload "ui/widget_drag.sats"
+
+// Secim: "yok" degeri -1 yerine tipte tasinir.
+datatype Selection = SelNone | SelAt of int
+
+// Kenar çubuğu görünürlüğü
+datatype SidebarMode = SidebarShown | SidebarHidden
 
 typedef UIWidgetsState = @{
   edge_hover_time= double,
@@ -23,15 +30,15 @@ typedef UIWidgetsState = @{
   val7= float,
   active_drag= WidgetDrag,
   active_group= BrushGroup,
-  sidebar_visible= int,
-  active_brush= int,
+  sidebar= SidebarMode,
+  active_brush= Selection,
   brush_scroll= int,
   panel_h= int,
-  active_swatch= int,
-  pal= ptr
+  active_swatch= Selection,
+  pal= arrayref(float, 36)
 }
 
-val g_pal = air_arena(36, airlock_esz_float())
+val g_pal = arrayref_make_elt<float>(i2sz(36), 0.0f)
 val g_ui = ref<UIWidgetsState>(@{
   edge_hover_time= 0.0,
   cur_r= 0.0f, cur_g= 0.0f, cur_b= 0.0f,
@@ -40,28 +47,25 @@ val g_ui = ref<UIWidgetsState>(@{
   val4= 0.0f, val5= 0.0f, val6= 0.0f, val7= 0.0f,
   active_drag= DragNone(),
   active_group= GroupClassic(),
-  sidebar_visible= 0,
-  active_brush= 0,
+  sidebar= SidebarHidden(),
+  active_brush= SelAt(0),
   brush_scroll= 0,
   panel_h= 0,
-  active_swatch= 0,
+  active_swatch= SelAt(0),
   pal= g_pal
 })
 
 extern fun ui_get(): ref(UIWidgetsState) = "ext#ui_get"
 implement ui_get() = g_ui
 
-fn pal_init_put(p: ptr, i: int, r: float, g: float, b: float): void = let
-  val o = i * 3
-in
-  if airlock_span(o, 1, 34) != 0 then let
-    val () = airlock_fset_n(p, o, 36, r)
-    val () = airlock_fset_n(p, o + 1, 36, g)
-    val () = airlock_fset_n(p, o + 2, 36, b)
-  in () end else ()
-end
+// Palet satiri i (0..11) icin RGB; 3*i + c < 36 derleme zamaninda kanitlanir.
+fn pal_init_put {i:nat | i < 12} (p: arrayref(float, 36), i: int(i), r: float, g: float, b: float): void = {
+  val () = p[3 * i] := r
+  val () = p[3 * i + 1] := g
+  val () = p[3 * i + 2] := b
+}
 
-fn init_palette_colors(p: ptr): void = {
+fn init_palette_colors(p: arrayref(float, 36)): void = {
   val () = pal_init_put(p, 0, 1.00f, 1.00f, 1.00f)
   val () = pal_init_put(p, 1, 0.73f, 0.73f, 0.73f)
   val () = pal_init_put(p, 2, 0.30f, 0.30f, 0.30f)
@@ -78,8 +82,7 @@ fn init_palette_colors(p: ptr): void = {
 
 extern fun ui_state_new(): void = "ext#ui_state_new"
 implement ui_state_new() = let
-  val pal_arr = air_arena(36, airlock_esz_float())
-  val () = init_palette_colors(pal_arr)
+  val () = init_palette_colors(g_pal)
   val u = g_ui
   val () = u->edge_hover_time := 0.0
   val () = u->cur_r := 0.73f
@@ -98,11 +101,27 @@ implement ui_state_new() = let
   val () = u->val7 := 1.0f
   val () = u->active_drag := DragNone()
   val () = u->active_group := GroupClassic()
-  val () = u->sidebar_visible := 1
-  val () = u->active_brush := ~1
+  val () = u->sidebar := SidebarShown()
+  val () = u->active_brush := SelNone()
   val () = u->brush_scroll := 0
   val () = u->panel_h := 0
-  val () = u->active_swatch := ~1
-  val () = u->pal := pal_arr
+  val () = u->active_swatch := SelNone()
 in
 end
+
+// --- Secim sinir donusumleri: dis dunya tamsayisi [0, limit) disinda ise SelNone ---
+extern fun selection_of_code(code: int, limit: int): Selection = "ext#selection_of_code"
+implement selection_of_code(code, limit) =
+  if (code >= 0) * (code < limit) then SelAt(code) else SelNone()
+
+extern fun selection_code(s: Selection): int = "ext#selection_code"
+implement selection_code(s) =
+  case+ s of
+  | SelNone() => ~1
+  | SelAt(i) => i
+
+extern fun selection_is_at(s: Selection, i: int): bool = "ext#selection_is_at"
+implement selection_is_at(s, i) =
+  case+ s of
+  | SelNone() => false
+  | SelAt(j) => i = j

@@ -1,16 +1,17 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+staload "sys/cast_box.sats"
 
 staload "sys/libc.dats"
-#include "draw_engine/engine_safe.hats"
+#include "sys/airlock.hats"
 staload "sys/io_box.sats"
 staload "ui/state.dats"
 staload "brushes/brush_group.sats"
 staload "ui/palette.dats"
 
 macdef MODE_0755 = $extval(uint, "0755")
-extern fun addr2str(p: ptr): string = "mac#mp_id_ptr"
+fn addr2str(p: ptr): string = cstr_of_ptr(p)
 
 fn f2d(v: float): double = g0float2float_float_double(v)
 
@@ -63,16 +64,17 @@ fn parse_active_swatch(line: string): bool = let
 in
   if n = 1 then let
     val u = ui_get()
-    val () = u->active_swatch := (if (idx < ~1) || (idx > 11) then ~1 else idx)
+    val () = u->active_swatch := selection_of_code(idx, 12)
   in true end
   else false
 end
 
 // Dosyadan okunan geçersiz grup kimliği yerine varsayılan (Classic) kullanılır.
-fn group_or_default(idx: int): BrushGroup =
-  case+ brush_group_of_int(idx) of
-  | Some(g) => g
-  | None() => GroupClassic()
+fn group_or_default(idx: int): BrushGroup = let
+  val @(ok, g) = brush_group_try(idx)
+in
+  if ok then g else GroupClassic()
+end
 
 fn parse_group_brush_scroll(line: string): bool = let
   var idx: int = 0
@@ -82,7 +84,7 @@ in
     val () = u->active_group := group_or_default(idx)
   in true end
   else if sscanf_i(line, "brush %d", idx) = 1 then let
-    val () = u->active_brush := (if idx < ~1 then ~1 else idx)
+    val () = u->active_brush := selection_of_code(idx, 2147483647)
   in true end
   else if sscanf_i(line, "scroll %d", idx) = 1 then let
     val () = u->brush_scroll := (if idx < 0 then 0 else idx)
@@ -128,6 +130,15 @@ fn apply_line(line: string): void =
   else if parse_slider_setting(line) then ()
   else ()
 
+// Dosya boyutu (bayt): sonuna git, konumu oku, basa don.
+fn file_size_of(f: MpFile): int = let
+  val _ = fseek(f, 0L, 2)
+  val sz = ftell(f)
+  val () = rewind(f)
+in
+  g0int2int_lint_int(sz)
+end
+
 extern fun session_load(): int = "ext#session_load"
 implement session_load() = let
   var path_buf = @[byte][512]()
@@ -142,14 +153,17 @@ in
     else let
       var line_buf = @[byte][256]()
       val p_line = text_of(addr@(line_buf))
-      fnx loop {k:nat} .<k>. (k: int(k)): void =
-        if k > 0 then
+      // Olcu m - i: her basarili fgets en az bir bayt tuketir; satir sayisi dosya boyutunu asamaz
+      // (m = boyut + 1: son fgets NULL doner). Dosya okunurken buyurse fazlasi bir sonraki acilista okunur.
+      val [m:int] max_lines = airlock_nat(file_size_of(f) + 1)
+      fnx loop {i:nat | i <= m} .<m - i>. (i: int(i)): void =
+        if i < max_lines then
           if text_is_null(fgets(p_line, 256, f)) = 0 then let
             val () = apply_line(addr2str(text_ptr(p_line)))
-          in loop(k - 1) end
+          in loop(i + 1) end
           else ()
         else ()
-      val () = loop(MP_REC_FUEL)
+      val () = loop(0)
       val _ = fclose(f)
     in 1 end
   end
@@ -171,11 +185,11 @@ fn save_palette_and_state(f: MpFile, buf: MpText, cap: size_t): void = let
       val () = put_line(f, buf)
     in swatches(i + 1) end
   val () = swatches(0)
-  val _ = mp_snprintf_i(buf, cap, "active_swatch %d\n", u->active_swatch)
+  val _ = mp_snprintf_i(buf, cap, "active_swatch %d\n", selection_code(u->active_swatch))
   val () = put_line(f, buf)
   val _ = mp_snprintf_i(buf, cap, "group %d\n", brush_group_to_int(u->active_group))
   val () = put_line(f, buf)
-  val _ = mp_snprintf_i(buf, cap, "brush %d\n", u->active_brush)
+  val _ = mp_snprintf_i(buf, cap, "brush %d\n", selection_code(u->active_brush))
   val () = put_line(f, buf)
   val _ = mp_snprintf_i(buf, cap, "scroll %d\n", u->brush_scroll)
   val () = put_line(f, buf)

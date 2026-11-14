@@ -1,9 +1,10 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+staload "gl/gl_io.sats"
 
 staload "gl/gl.dats"
-#include "draw_engine/engine_safe.hats"
+#include "sys/airlock.hats"
 
 fn f_add(a: float, b: float): float = g0float_add_float(a, b)
 fn f_mul(a: float, b: float): float = g0float_mul_float(a, b)
@@ -75,46 +76,46 @@ fun font_get_col(c: int, col: int): int =
   else if c >= 79 && c <= 89 then font_col_alpha3(c, col)
   else font_col_symbol(c, col)
 
-fn gl_draw_row_pixels(col_x: float, y: float, scale: float, bits: int): void = let
-  fun loop(row: int, p2: int): void =
+fn gl_draw_row_pixels(gio: !GL_IO | col_x: float, y: float, scale: float, bits: int): void = let
+  fun loop {row:nat | row <= 7} .<7 - row>. (gio: !GL_IO | row: int(row), p2: int): void =
     if row < 7 then let
       val bit_set = (bits / p2) mod 2 != 0
-      val () = if bit_set then glVertex2f(col_x, f_add(y, f_mul(g0int2float(row), scale)))
-    in loop(row + 1, p2 * 2) end else ()
-in loop(0, 1) end
+      val () = if bit_set then glVertex2f(gio | col_x, f_add(y, f_mul(g0int2float(row), scale)))
+    in loop(gio | row + 1, p2 * 2) end else ()
+in loop(gio | 0, 1) end
 
-fn gl_draw_glyph_cols(cur_x: float, y: float, scale: float, code: int): void = let
-  fun loop(col: int): void =
+fn gl_draw_glyph_cols(gio: !GL_IO | cur_x: float, y: float, scale: float, code: int): void = let
+  fun loop {col:nat | col <= 5} .<5 - col>. (gio: !GL_IO | col: int(col)): void =
     if col < 5 then let
       val bits = font_get_col(code, col)
       val col_x = f_add(cur_x, f_mul(g0int2float(col), scale))
-      val () = gl_draw_row_pixels(col_x, y, scale, bits)
-    in loop(col + 1) end else ()
-in loop(0) end
+      val () = gl_draw_row_pixels(gio | col_x, y, scale, bits)
+    in loop(gio | col + 1) end else ()
+in loop(gio | 0) end
 
-fn gl_draw_char(cur_x: float, y: float, scale: float, ch: char): void = let
+fn gl_draw_char(gio: !GL_IO | cur_x: float, y: float, scale: float, ch: char): void = let
   val code = char2int0(ch)
   val upper = if code >= 97 && code <= 122 then code - 32 else code
 in
-  gl_draw_glyph_cols(cur_x, y, scale, upper)
+  gl_draw_glyph_cols(gio | cur_x, y, scale, upper)
 end
 
 // --- Vektör Metin Çizimi (Sıfır Unsafe, Tip Güvenli Dize İndeksleme) ---
-extern fun gl_draw_string(x: float, y: float, scale: float, str: string, r: float, g: float, b: float): void = "ext#gl_draw_string"
-implement gl_draw_string(x, y, scale, str, r, g, b) = let
-  val () = glColor3f(r, g, b)
-  val () = glBegin(GL_POINTS)
-  val n = airlock_cstr_len(str)
+extern fun gl_draw_string(gio: !GL_IO | x: float, y: float, scale: float, str: string, r: float, g: float, b: float): void = "ext#gl_draw_string"
+implement gl_draw_string(gio | x, y, scale, str, r, g, b) = let
+  val () = glColor3f(gio | r, g, b)
+  val () = glBegin(gio | GL_POINTS)
+  val [m_str:int] n = airlock_cstr_len(str)
   val char_advance = f_mul(7.0f, scale)
 
-  fun loop(i: int, cur_x: float): void =
+  fun loop {i:nat | i <= m_str} .<m_str - i>. (gio: !GL_IO | i: int(i), cur_x: float): void =
     if i < n then let
       val ch = int2char0(airlock_cstr_at(str, i, n))
-      val () = gl_draw_char(cur_x, y, scale, ch)
+      val () = gl_draw_char(gio | cur_x, y, scale, ch)
     in
-      loop(i + 1, f_add(cur_x, char_advance))
+      loop(gio | i + 1, f_add(cur_x, char_advance))
     end else ()
-
-  val () = loop(0, x)
-  val () = glEnd()
+  val () = loop(gio | 0, x)
+  val () = glEnd(gio | )
 in () end
+
