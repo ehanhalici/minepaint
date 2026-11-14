@@ -1,5 +1,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+staload "sys/cast_box.sats"
+#include "sys/airlock.hats"
 
 staload "sys/libc.dats"
 staload "window/input.dats"
@@ -100,12 +102,12 @@ typedef XI2BackendState = @{
   devs= MpDevTab
 }
 
-extern fun view_dev(p: ptr): ref(XI2DevInfo) = "mac#mp_id_ptr"
-extern fun addr2str(p: ptr): string = "mac#mp_id_ptr"
+fn view_dev(p: ptr): ref(XI2DevInfo) = ref_of_ptr{XI2DevInfo}(p)
+fn addr2str(p: ptr): string = cstr_of_ptr(p)
 
 val g_dev_sz = g0int2uint_int_size(XI2_MAX_DEVICES) * sizeof<XI2DevInfo>
 val g_devs_raw = malloc(g_dev_sz)
-val () = assertloc(g_devs_raw > the_null_ptr)
+val () = anth_require(g_devs_raw > the_null_ptr)
 val _ = memset(g_devs_raw, 0, g_dev_sz)
 val g_devs = devtab_of(g_devs_raw)
 val g_xi = ref<XI2BackendState>(@{
@@ -135,7 +137,7 @@ fn xi2_clear_device(base: MpDevTab, id: int): void = let
 in () end
 
 fn xi2_clear_all_devices(base: MpDevTab): void = let
-  fun loop(i: int): void =
+  fun loop {i:nat | i <= XI2_MAX_DEVICES} .<XI2_MAX_DEVICES - i>. (i: int(i)): void =
     if i < XI2_MAX_DEVICES then (xi2_clear_device(base, i); loop(i + 1)) else ()
 in
   loop(0)
@@ -170,8 +172,9 @@ end
 fn xi2_inspect_device_classes(
   dpy: MpDisplay, devs: MpDevList, dev_idx: int, num_classes: int, dev_p: MpDev
 ): void = let
-  fun loop(c: int): void =
-    if c < num_classes then (xi2_inspect_valuator(dpy, devs, dev_idx, c, dev_p); loop(c + 1)) else ()
+  val [m_cls:int] ncls = airlock_nat(num_classes)
+  fun loop {c:nat | c <= m_cls} .<m_cls - c>. (c: int(c)): void =
+    if c < ncls then (xi2_inspect_valuator(dpy, devs, dev_idx, c, dev_p); loop(c + 1)) else ()
 in
   loop(0)
 end
@@ -205,8 +208,9 @@ fn xi2_refresh_devices_internal(dpy: MpDisplay, base: MpDevTab): void = let
 in
   if devlist_is_null(devs) = 0 then let
     val n = ndevs
-    fun loop(i: int): void =
-      if i < n then (xi2_inspect_single_device(dpy, devs, i, base); loop(i + 1)) else ()
+    val [m_dev:int] n_ix = airlock_nat(n)
+    fun loop {i:nat | i <= m_dev} .<m_dev - i>. (i: int(i)): void =
+      if i < n_ix then (xi2_inspect_single_device(dpy, devs, i, base); loop(i + 1)) else ()
     val () = loop(0)
     val () = c_xi2_free_devices(devs)
   in () end else ()

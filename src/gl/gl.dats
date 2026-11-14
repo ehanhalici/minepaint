@@ -1,6 +1,8 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+staload "sys/cast_box.sats"
+staload "gl/gl_io.sats"
 
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
 macdef GL_RGBA = $extval(int, "GL_RGBA")
@@ -25,33 +27,22 @@ macdef GL_DEPTH_TEST = $extval(int, "GL_DEPTH_TEST")
 macdef GL_ZERO = $extval(int, "GL_ZERO")
 macdef GL_ONE = $extval(int, "GL_ONE")
 
-extern fun glGenTextures(n: int, textures: ptr): void = "mac#"
-extern fun glBindTexture(target: int, texture: uint): void = "mac#"
-extern fun glTexImage2D(target: int, level: int, internalformat: int, width: int, height: int, border: int, format: int, atype: int, pixels: ptr): void = "mac#"
-extern fun glTexParameteri(target: int, pname: int, param: int): void = "mac#"
-extern fun glGenFramebuffers(n: int, fbos: ptr): void = "mac#"
-extern fun glBindFramebuffer(target: int, framebuffer: uint): void = "mac#"
-extern fun glFramebufferTexture2D(target: int, attachment: int, textarget: int, texture: uint, level: int): void = "mac#"
-extern fun glDeleteTextures(n: int, textures: ptr): void = "mac#"
-extern fun glDeleteFramebuffers(n: int, fbos: ptr): void = "mac#"
-extern fun glEnable(cap: int): void = "mac#"
-extern fun glDisable(cap: int): void = "mac#"
-extern fun glBlendFunc(sfactor: int, dfactor: int): void = "mac#"
-extern fun glColor3f(r: float, g: float, b: float): void = "mac#"
-extern fun glColor4f(r: float, g: float, b: float, a: float): void = "mac#"
-extern fun glPointSize(sz: float): void = "mac#"
-extern fun glBegin(mode: int): void = "mac#"
-extern fun glEnd(): void = "mac#"
-extern fun glTexCoord2f(s: float, t: float): void = "mac#"
-extern fun glVertex2f(x: float, y: float): void = "mac#"
-extern fun glClearColor(red: float, green: float, blue: float, alpha: float): void = "mac#"
-extern fun glClear(mask: int): void = "mac#"
-extern fun glViewport(x: int, y: int, w: int, h: int): void = "mac#"
-extern fun glMatrixMode(m: int): void = "mac#"
-extern fun glLoadIdentity(): void = "mac#"
-extern fun glPushMatrix(): void = "mac#"
-extern fun glPopMatrix(): void = "mac#"
-extern fun glOrtho(l: double, r: double, b: double, t: double, n: double, f: double): void = "mac#"
-extern fun glTranslatef(x: float, y: float, z: float): void = "mac#"
-extern fun glRotatef(angle: float, x: float, y: float, z: float): void = "mac#"
-extern fun glScalef(x: float, y: float, z: float): void = "mac#"
+
+// --- Tekil nesne uretim/yikim sarmalayicilari (C cikis parametresi sinirda kalir) ---
+implement gl_gen_texture(pf | ) = let
+  var id: uint = 0u
+  val () = glGenTextures(pf | 1, ptr_forget(addr@(id)))
+in id end
+
+implement gl_gen_framebuffer(pf | ) = let
+  var id: uint = 0u
+  val () = glGenFramebuffers(pf | 1, ptr_forget(addr@(id)))
+in id end
+
+implement gl_delete_texture(pf | id) = let
+  var v: uint = id
+in glDeleteTextures(pf | 1, ptr_forget(addr@(v))) end
+
+implement gl_delete_framebuffer(pf | id) = let
+  var v: uint = id
+in glDeleteFramebuffers(pf | 1, ptr_forget(addr@(v))) end
