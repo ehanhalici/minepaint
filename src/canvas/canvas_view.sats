@@ -16,10 +16,10 @@ fun canvas_state_create (brush: int): [c:nat | c < CANVAS_CAP] (CANVAS_LIVE(c) |
 fun canvas_render {c:nat | c < CANVAS_CAP} (pf: !CANVAS_LIVE(c), gio: !GL_IO | h: int(c), canvas_w: int, canvas_h: int): void = "ext#canvas_render"
 fun canvas_on_wheel {c:nat | c < CANVAS_CAP} (pf: !CANVAS_LIVE(c) | h: int(c), mx: int, my: int, dy: int): void = "ext#canvas_on_wheel"
 fun canvas_on_mouse_down {c:nat | c < CANVAS_CAP} (
-  pf: !CANVAS_LIVE(c), gio: !GL_IO | h: int(c), mx: float, my: float, btn: int, is_pan: int, pressure: float
+  pf: !CANVAS_LIVE(c), gio: !GL_IO | h: int(c), mx: float, my: float, btn: int, is_pan: int, pressure: float, now: double
 ): void = "ext#canvas_on_mouse_down"
 fun canvas_on_mouse_move {c:nat | c < CANVAS_CAP} (
-  pf: !CANVAS_LIVE(c), gio: !GL_IO | h: int(c), mx: float, my: float, btn: int, is_pan: int, pressure: float
+  pf: !CANVAS_LIVE(c), gio: !GL_IO | h: int(c), mx: float, my: float, btn: int, is_pan: int, pressure: float, now: double
 ): void = "ext#canvas_on_mouse_move"
 fun canvas_on_mouse_up {c:nat | c < CANVAS_CAP} (
   pf: !CANVAS_LIVE(c), gio: !GL_IO | h: int(c), mx: float, my: float, btn: int, is_pan: int

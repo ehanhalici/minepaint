@@ -34,24 +34,24 @@ in
   in () end
 end
 
-fn cv_on_mouse_down(gio: !GL_IO | raw: int, mx: float, my: float, btn: int, is_pan: int, pressure: float): void = let
+fn cv_on_mouse_down(gio: !GL_IO | raw: int, mx: float, my: float, btn: int, is_pan: int, pressure: float, now: double): void = let
   val (pf | ok, c) = canvas_claim(raw)
 in
   if ok then let
     prval Some_v(live) = pf
-    val () = canvas_on_mouse_down(live, gio | c, mx, my, btn, is_pan, pressure)
+    val () = canvas_on_mouse_down(live, gio | c, mx, my, btn, is_pan, pressure, now)
     val _ = canvas_stash(live | c)
   in () end else let
     prval None_v() = pf
   in () end
 end
 
-fn cv_on_mouse_move(gio: !GL_IO | raw: int, mx: float, my: float, btn: int, is_pan: int, pressure: float): void = let
+fn cv_on_mouse_move(gio: !GL_IO | raw: int, mx: float, my: float, btn: int, is_pan: int, pressure: float, now: double): void = let
   val (pf | ok, c) = canvas_claim(raw)
 in
   if ok then let
     prval Some_v(live) = pf
-    val () = canvas_on_mouse_move(live, gio | c, mx, my, btn, is_pan, pressure)
+    val () = canvas_on_mouse_move(live, gio | c, mx, my, btn, is_pan, pressure, now)
     val _ = canvas_stash(live | c)
   in () end else let
     prval None_v() = pf

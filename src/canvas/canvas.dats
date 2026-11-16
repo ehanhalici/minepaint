@@ -34,7 +34,7 @@ typedef canvas_state_record = @{
 fn tgt_of(s: canvas_state_record): MpTarget = @{ layer= s.layer, mode= s.mode }
 
 val g_blank = @{
-  brush= ~1, mode= DrawPaint(), layer= layer_none(),
+  brush= ~1, mode= DrawPaint(), layer= ~1,
   cam_x= 0.0f, cam_y= 0.0f, zoom= 1.0f,
   last_mouse_x= 0.0f, last_mouse_y= 0.0f,
   last_time= 0.0, q= ~1
@@ -84,7 +84,6 @@ macdef GL_COLOR_BUFFER_BIT = $extval(int, "GL_COLOR_BUFFER_BIT")
 
 
 
-extern fun get_time_seconds(): double = "ext#get_time_seconds"
 fn i2f(i: int): float = g0int2float_int_float(i)
 fn f_lt(a: float, b: float): bool = a < b
 fn f_gt(a: float, b: float): bool = a > b
@@ -152,10 +151,10 @@ end
 
 fn draw_layer_content(gio: !GL_IO | h: int, canvas_w: int, canvas_h: int): void = let
   val s0 = cget(h)
-  val () = if layer_is_null(s0.layer) != 0 then put_layer(h, new_layer_handle())
+  val () = if s0.layer < 0 then put_layer(h, new_layer_handle())
   val s = cget(h)
 in
-  if layer_is_null(s.layer) = 0 then let
+  if s.layer >= 0 then let
     val cur_zoom = s.zoom
     val vl = f_div(f_sub(0.0f, s.cam_x), cur_zoom)
     val vt = f_div(f_sub(0.0f, s.cam_y), cur_zoom)
@@ -178,23 +177,25 @@ implement canvas_render(pf, gio | h, canvas_w, canvas_h) = let
 in () end
 
 // --- Fare Tekerleği Zoom ---
-implement canvas_on_wheel(pf | h, mx, my, dy) = let
-  val s = cget(h)
-  val start_x = i2f(mx)
-  val start_y = i2f(my)
-  val cur_zoom = s.zoom
-  val mb_x = f_div(f_sub(start_x, s.cam_x), cur_zoom)
-  val mb_y = f_div(f_sub(start_y, s.cam_y), cur_zoom)
+fn wheel_zoom(cur_zoom: float, dy: int): float = let
   val step_zoom = if dy < 0 then f_mul(cur_zoom, 1.15f) else f_mul(cur_zoom, 0.85f)
   val min_clamped = if f_lt(step_zoom, 0.02f) then 0.02f else step_zoom
-  val new_zoom = if f_gt(min_clamped, 50.0f) then 50.0f else min_clamped
-  val ma_x = f_div(f_sub(start_x, s.cam_x), new_zoom)
-  val ma_y = f_div(f_sub(start_y, s.cam_y), new_zoom)
+in if f_gt(min_clamped, 50.0f) then 50.0f else min_clamped end
+
+// Imlecin altindaki tuval noktasi ayni kalacak sekilde kamera kaymasi (bir eksen).
+fn cam_shift(start: float, cam: float, cur_zoom: float, new_zoom: float): float = let
+  val before = f_div(f_sub(start, cam), cur_zoom)
+  val after = f_div(f_sub(start, cam), new_zoom)
+in f_add(cam, f_mul(f_sub(after, before), new_zoom)) end
+
+implement canvas_on_wheel(pf | h, mx, my, dy) = let
+  val s = cget(h)
+  val new_zoom = wheel_zoom(s.zoom, dy)
 in
   cput(h, @{
     brush= s.brush, mode= s.mode, layer= s.layer,
-    cam_x= f_add(s.cam_x, f_mul(f_sub(ma_x, mb_x), new_zoom)),
-    cam_y= f_add(s.cam_y, f_mul(f_sub(ma_y, mb_y), new_zoom)),
+    cam_x= cam_shift(i2f(mx), s.cam_x, s.zoom, new_zoom),
+    cam_y= cam_shift(i2f(my), s.cam_y, s.zoom, new_zoom),
     zoom= new_zoom,
     last_mouse_x= s.last_mouse_x, last_mouse_y= s.last_mouse_y,
     last_time= s.last_time, q= s.q
@@ -213,7 +214,7 @@ in
   })
 end
 
-fn canvas_start_stroke(gio: !GL_IO | h: int, mx: float, my: float, btn: int, pressure: float): void = let
+fn canvas_start_stroke(gio: !GL_IO | h: int, mx: float, my: float, btn: int, pressure: float, now: double): void = let
   val s = cget(h)
   val cur_zoom = s.zoom
   val wx = f_div(f_sub(mx, s.cam_x), cur_zoom)
@@ -226,13 +227,13 @@ in
     brush= s.brush, mode= (if btn = 3 then DrawErase() else DrawPaint()), layer= s.layer,
     cam_x= s.cam_x, cam_y= s.cam_y, zoom= s.zoom,
     last_mouse_x= s.last_mouse_x, last_mouse_y= s.last_mouse_y,
-    last_time= get_time_seconds(), q= stroke_queue_start(wx, wy, eff_pressure)
+    last_time= now, q= stroke_queue_start(wx, wy, eff_pressure)
   })
 end
 
-implement canvas_on_mouse_down(pf, gio | h, mx, my, btn, is_pan, pressure) =
+implement canvas_on_mouse_down(pf, gio | h, mx, my, btn, is_pan, pressure, now) =
   if is_pan > 0 || btn = 2 then canvas_start_pan(h, mx, my)
-  else canvas_start_stroke(gio | h, mx, my, btn, pressure)
+  else canvas_start_stroke(gio | h, mx, my, btn, pressure, now)
 
 fn canvas_drag_pan(h: int, mx: float, my: float): void = let
   val s = cget(h)
@@ -247,12 +248,12 @@ in
   })
 end
 
-fn canvas_drag_stroke(gio: !GL_IO | h: int, mx: float, my: float, pressure: float): void = let
+fn canvas_drag_stroke(gio: !GL_IO | h: int, mx: float, my: float, pressure: float, now: double): void = let
   val s = cget(h)
   val cur_zoom = s.zoom
   val wx = f_div(f_sub(mx, s.cam_x), cur_zoom)
   val wy = f_div(f_sub(my, s.cam_y), cur_zoom)
-  val cur_time = get_time_seconds()
+  val cur_time = now
   val elapsed = cur_time - s.last_time
   val eff_pressure = if pressure > 0.0f then pressure else 0.8f
   val nq = stroke_queue_step(gio | 
@@ -267,9 +268,9 @@ in
   })
 end
 
-implement canvas_on_mouse_move(pf, gio | h, mx, my, btn, is_pan, pressure) =
+implement canvas_on_mouse_move(pf, gio | h, mx, my, btn, is_pan, pressure, now) =
   if is_pan > 0 || btn = 2 then canvas_drag_pan(h, mx, my)
-  else if btn = 1 || btn = 3 then canvas_drag_stroke(gio | h, mx, my, pressure)
+  else if btn = 1 || btn = 3 then canvas_drag_stroke(gio | h, mx, my, pressure, now)
   else ()
 
 fn canvas_finish_stroke(gio: !GL_IO | h: int): void = let
@@ -328,7 +329,7 @@ end
 // Kanit uretimi sys/capability.sats aksiyomlariyla; yalniz canvas_state_create ve canvas_claim uretir.
 implement canvas_state_create(brush) = let
   val n = canvas_alloc(@{
-    brush= brush, mode= DrawPaint(), layer= layer_none(),
+    brush= brush, mode= DrawPaint(), layer= ~1,
     cam_x= 0.0f, cam_y= 0.0f, zoom= 1.0f,
     last_mouse_x= 0.0f, last_mouse_y= 0.0f,
     last_time= 0.0, q= ~1

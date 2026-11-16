@@ -93,25 +93,19 @@ fn make_node(pt: input_point, nxt: int): int = let
 in h end
 
 // --- Pür ATS2 ile Kübik Enterpolasyon ---
+// Catmull-Rom bir eksen: t, t^2, t^3 onceden hesaplanir.
+fn catmull(t: float, t2: float, t3: float, v0: float, v1: float, v2: float, v3: float): float = let
+  val c1 = f_mul(2.0f, v1)
+  val c2 = f_mul(f_add(f_sub(0.0f, v0), v2), t)
+  val c3 = f_mul(f_add(f_sub(f_mul(2.0f, v0), f_mul(5.0f, v1)), f_sub(f_mul(4.0f, v2), v3)), t2)
+  val c4 = f_mul(f_add(f_sub(0.0f, v0), f_sub(f_mul(3.0f, v1), f_sub(f_mul(3.0f, v2), v3))), t3)
+in f_mul(0.5f, f_add(c1, f_add(c2, f_add(c3, c4)))) end
+
 fun interpolate_cubic(t: float, p0: input_point, p1: input_point, p2: input_point, p3: input_point): input_point = let
   val t2 = f_mul(t, t)
   val t3 = f_mul(t2, t)
-  fun solve(v0: float, v1: float, v2: float, v3: float): float =
-    f_mul(
-      0.5f,
-      f_add(
-        f_mul(2.0f, v1),
-        f_add(
-          f_mul(f_add(f_sub(0.0f, v0), v2), t),
-          f_add(
-            f_mul(f_add(f_sub(f_mul(2.0f, v0), f_mul(5.0f, v1)), f_sub(f_mul(4.0f, v2), v3)), t2),
-            f_mul(f_add(f_sub(0.0f, v0), f_sub(f_mul(3.0f, v1), f_sub(f_mul(3.0f, v2), v3))), t3)
-          )
-        )
-      )
-    )
-  val res_x = solve(p0.x, p1.x, p2.x, p3.x)
-  val res_y = solve(p0.y, p1.y, p2.y, p3.y)
+  val res_x = catmull(t, t2, t3, p0.x, p1.x, p2.x, p3.x)
+  val res_y = catmull(t, t2, t3, p0.y, p1.y, p2.y, p3.y)
   val res_p = f_add(p1.pressure, f_mul(f_sub(p2.pressure, p1.pressure), t))
   val res_t = p1.time + (p2.time - p1.time) * g0float2float_float_double(t)
 in
@@ -149,7 +143,7 @@ fun send_stroke_to_engine(gio: !GL_IO |
   tgt: MpTarget, brush: int, zoom: float,
   x: float, y: float, pressure: float, dtime: double
 ): void = let
-  val () = if layer_is_null(tgt.layer) = 0 then let
+  val () = if tgt.layer >= 0 then let
     val _ = br_stroke_to(gio | brush, tgt, x, y, pressure, 0.0f, 0.0f, dtime, zoom, 0.0f, 0.0f, 0)
   in () end
 in () end
@@ -180,8 +174,19 @@ fun emit_spline_steps {st:nat}{i:nat | i <= st + 1} .<st + 1 - i>. (gio: !GL_IO 
     emit_spline_steps(gio | tgt, brush, zoom, p0, p1, p2, p3, steps, sub_dtime, i + 1)
   end else ()
 // --- Spline Kuyruğunu İşleme ---
+// Bir dugum cifti icin spline adimlarini cizer, basi siler.
+fn process_node(gio: !GL_IO | tgt: MpTarget, brush: int, zoom: float, h: int, p1: int, p2: int, p3: int): void = let
+  val p1v = point_of(p1)
+  val p2v = point_of(p2)
+  val total_dtime_raw = p2v.time - p1v.time
+  val total_dtime = if total_dtime_raw <= 0.0001 then 0.0001 else total_dtime_raw
+  val @(steps, sub_dtime) = calc_step_count(g0float2float_double_float(total_dtime), p1v, p2v)
+  val () = emit_spline_steps(gio | tgt, brush, zoom, point_of(h), p1v, p2v, point_of(p3), airlock_nat(steps), sub_dtime, 1)
+  val () = len_set(p1, len_get(h) - 1)
+in recycle_node(h) end
+
 // Olcu n: bas dugumun uzunluk sayaci; her adim basi bir ilerletir (uzunluk bir azalir).
-fun process_queue {n:nat} .<n>. (gio: !GL_IO | 
+fun process_queue {n:nat} .<n>. (gio: !GL_IO |
   n: int(n), tgt: MpTarget, brush: int, zoom: float,
   h: int, force_finish: bool
 ): int = let
@@ -190,17 +195,7 @@ fun process_queue {n:nat} .<n>. (gio: !GL_IO |
   val p3 = next_get(p2)
 in
   if (n > 0) * (h >= 0) * (p1 >= 0) * (p2 >= 0) * (p3 >= 0) then let
-    val p0v = point_of(h)
-    val p1v = point_of(p1)
-    val p2v = point_of(p2)
-    val p3v = point_of(p3)
-    val total_dtime_raw = p2v.time - p1v.time
-    val total_dtime = if total_dtime_raw <= 0.0001 then 0.0001 else total_dtime_raw
-    val dt_f = g0float2float_double_float(total_dtime)
-    val @(steps, sub_dtime) = calc_step_count(dt_f, p1v, p2v)
-    val () = emit_spline_steps(gio | tgt, brush, zoom, p0v, p1v, p2v, p3v, airlock_nat(steps), sub_dtime, 1)
-    val () = len_set(p1, len_get(h) - 1)
-    val () = recycle_node(h)
+    val () = process_node(gio | tgt, brush, zoom, h, p1, p2, p3)
   in
     process_queue(gio | n - 1, tgt, brush, zoom, p1, force_finish)
   end else if force_finish then (free_queue_from(h); STROKE_NONE) else h

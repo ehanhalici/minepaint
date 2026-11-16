@@ -121,11 +121,11 @@ implement layer_stash(pf | l) = let
   prval () = cap_burn(pf)
   val () = lclaim_clear(l)
 in
-  layer_of_int(l)
+  if l >= 0 then l else ~1
 end
 
 implement layer_claim(layer) = let
-  val l = layer_to_int(layer)
+  val l = layer
   val l2 = airlock_nat(l)
 in
   // Cift claim engeli: katman zaten odunc alinmissa kanit bir daha uretilmez.
@@ -158,8 +158,13 @@ fun probe_insert {i:nat | i <= TABLE_SIZE} .<TABLE_SIZE - i>. (
     else probe_insert(l, h0, e_new, i + 1)
   end else anth_die_void(DieContractViolation())
 
+// Girdi dizin degeri (-1 = yok) -> tile tutamaci.
+fn tile_of_entry(e: int): MpTile = let
+  val [t:int] t = airlock_int(e)
+in if t >= 0 then t else ~1 end
+
 implement layer_find_tile(pf | l, tx, ty) =
-  tile_of_int(probe_find(l, tile_hash(tx, ty), tx, ty, 0))
+  tile_of_entry(probe_find(l, tile_hash(tx, ty), tx, ty, 0))
 
 // --- Tile Olusturma (1024x1024 doku + FBO) ---
 fn init_tile_texture_and_fbo(gio: !GL_IO | ): @(GLuint, GLuint) = let
@@ -204,35 +209,32 @@ end
 implement layer_get_or_create_tile(pf, gio | l, tx, ty) = let
   val found = layer_find_tile(pf | l, tx, ty)
 in
-  if tile_is_null(found) = 0 then found
-  else tile_of_int(create_tile(gio | l, tx, ty))
+  if found >= 0 then found
+  else tile_of_entry(create_tile(gio | l, tx, ty))
 end
 
 // --- Tile Cizim Baglantisi (FBO + Projeksiyon) ---
-implement layer_bind_tile(gio | tile) = let
-  val e = tile_to_int(tile)
-  val tx = tx_get(e)
-  val ty = ty_get(e)
-  val () = glBindFramebuffer(gio | GL_FRAMEBUFFER, g0int2uint_int_uint(fbo_get(e)))
-  val () = glViewport(gio | 0, 0, 1024, 1024)
+fn tile_ortho(gio: !GL_IO | tx: int, ty: int): void = let
   val tx_f = g0int2float(tx) * 1024.0f
   val ty_f = g0int2float(ty) * 1024.0f
-  val tx1_f = tx_f + 1024.0f
-  val ty1_f = ty_f + 1024.0f
+in
+  glOrtho(gio |
+    g0float2float_float_double(tx_f), g0float2float_float_double(tx_f + 1024.0f),
+    g0float2float_float_double(ty_f + 1024.0f), g0float2float_float_double(ty_f),
+    ~1.0, 1.0)
+end
+
+implement layer_bind_tile(gio | tile) = let
+  val e = tile
+  val () = glBindFramebuffer(gio | GL_FRAMEBUFFER, g0int2uint_int_uint(fbo_get(e)))
+  val () = glViewport(gio | 0, 0, 1024, 1024)
   val () = glMatrixMode(gio | GL_PROJECTION)
   val () = glPushMatrix(gio | )
   val () = glLoadIdentity(gio | )
-  val () = glOrtho(gio | 
-    g0float2float_float_double(tx_f),
-    g0float2float_float_double(tx1_f),
-    g0float2float_float_double(ty1_f),
-    g0float2float_float_double(ty_f),
-    ~1.0, 1.0
-  )
+  val () = tile_ortho(gio | tx_get(e), ty_get(e))
   val () = glMatrixMode(gio | GL_MODELVIEW)
   val () = glPushMatrix(gio | )
-  val () = glLoadIdentity(gio | )
-in () end
+in glLoadIdentity(gio | ) end
 
 // --- Tile Baglantisini Kapatma ---
 implement layer_unbind_tile(gio | ) = let
