@@ -2,6 +2,11 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 staload "sys/io_box.sats"
+staload "sys/fs_io.sats"
+staload "sys/buf.sats"
+staload "sys/clock_io.sats"
+staload "sys/log_io.sats"
+#include "sys/airlock.hats"
 
 typedef mp_timeval = $extype_struct "mp_timeval" of {
   tv_sec= lint,
@@ -10,24 +15,8 @@ typedef mp_timeval = $extype_struct "mp_timeval" of {
 
 extern fun malloc(sz: size_t): ptr = "mac#"
 extern fun free(p: ptr): void = "mac#"
-extern fun realloc(p: ptr, sz: size_t): ptr = "mac#"
 extern fun memset(p: ptr, v: int, sz: size_t): ptr = "mac#"
-extern fun memcpy(dst: ptr, src: ptr, sz: size_t): ptr = "mac#"
 
-extern fun fopen(path: string, mode: string): MpFile = "mac#"
-extern fun fclose(f: MpFile): int = "mac#"
-extern fun fgets(buf: MpText, n: int, f: MpFile): MpText = "mac#"
-extern fun fputs(s: string, f: MpFile): int = "mac#"
-extern fun fflush(f: MpFile): int = "mac#"
-extern fun fileno(f: MpFile): int = "mac#"
-extern fun fsync(fd: int): int = "mac#"
-extern fun rename(old: string, new: string): int = "mac#"
-extern fun perror(msg: string): void = "mac#"
-extern fun fseek(f: MpFile, off: lint, whence: int): int = "mac#"
-extern fun ftell(f: MpFile): lint = "mac#"
-extern fun rewind(f: MpFile): void = "mac#"
-extern fun getenv(name: string): MpText = "mac#"
-extern fun mkdir(path: string, mode: uint): int = "mac#"
 extern fun usleep(usec: uint): int = "mac#"
 extern fun gettimeofday(tv: &mp_timeval, tz: ptr): int = "mac#"
 
@@ -41,26 +30,13 @@ extern fun cosf(x: float): float = "mac#"
 extern fun sinf(x: float): float = "mac#"
 extern fun sqrtf(x: float): float = "mac#"
 extern fun floorf(x: float): float = "mac#"
-extern fun roundf(x: float): float = "mac#"
-extern fun ceilf(x: float): float = "mac#"
-extern fun rand(): int = "mac#"
 
-extern fun mp_snprintf_f(buf: MpText, n: size_t, fmt: string, v: double): int = "mac#snprintf"
-extern fun mp_snprintf_i(buf: MpText, n: size_t, fmt: string, v: int): int = "mac#snprintf"
-extern fun mp_snprintf_fff(buf: MpText, n: size_t, fmt: string, a: double, b: double, c: double): int = "mac#snprintf"
-extern fun mp_snprintf_ifff(buf: MpText, n: size_t, fmt: string, i: int, a: double, b: double, c: double): int = "mac#snprintf"
-extern fun mp_snprintf_ss(buf: MpText, n: size_t, fmt: string, s1: string, s2: string): int = "mac#mp_snprintf_two_strings"
-extern fun mp_format_path(buf: MpText, n: size_t, s1: string, s2: string): int = "ext#mp_format_path"
-implement mp_format_path(buf, n, s1, s2) =
-  mp_snprintf_ss(buf, n, "%s%s", s1, s2)
+extern fun sscanf_i{n:int}(s: !Text(n), fmt: string, i: &int): int = "mac#sscanf"
+extern fun sscanf_f{n:int}(s: !Text(n), fmt: string, a: &float): int = "mac#sscanf"
+extern fun sscanf_fff{n:int}(s: !Text(n), fmt: string, a: &float, b: &float, c: &float): int = "mac#sscanf"
+extern fun sscanf_ifff{n:int}(s: !Text(n), fmt: string, i: &int, a: &float, b: &float, c: &float): int = "mac#sscanf"
 
-extern fun sscanf_i(s: string, fmt: string, i: &int): int = "mac#sscanf"
-extern fun sscanf_f(s: string, fmt: string, a: &float): int = "mac#sscanf"
-extern fun sscanf_fff(s: string, fmt: string, a: &float, b: &float, c: &float): int = "mac#sscanf"
-extern fun sscanf_ifff(s: string, fmt: string, i: &int, a: &float, b: &float, c: &float): int = "mac#sscanf"
-
-extern fun get_time_seconds(): double = "ext#get_time_seconds"
-implement get_time_seconds() = let
+implement get_time_seconds(pf | ) = let
   var tv: mp_timeval
   val () = tv.tv_sec := 0L
   val () = tv.tv_usec := 0L
@@ -70,3 +46,62 @@ implement get_time_seconds() = let
 in
   g0float_add_double(sec, g0float_div_double(usec, 1000000.0))
 end
+
+implement log_error(pf | msg) = fprintln!(stderr_ref, msg)
+
+implement sleep_usec(pf | usec) = let
+  val _ = usleep(usec)
+in () end
+
+// --- Bellek sinirinin tek yeri (kural R10): malloc/free/memset yalniz bu dosyada cagrilir. ---
+// heap_new sifirlanmis bellek dondurur; basarisizlik tasarim ihlalidir (anth_die).
+extern fun heap_new(sz: size_t): ptr = "ext#heap_new"
+implement heap_new(sz) = let
+  val p = malloc(sz)
+  val () = anth_require(p > the_null_ptr)
+  val _ = memset(p, 0, sz)
+in p end
+
+extern fun heap_free(p: ptr): void = "ext#heap_free"
+implement heap_free(p) = free(p)
+
+extern fun bytes_zero(p: ptr, n: int): void = "ext#bytes_zero"
+implement bytes_zero(p, n) = let
+  val _ = memset(p, 0, g0int2uint_int_size(n))
+in () end
+
+// --- Dosya sahipligi (sanctioned assume: File) ---
+assume File = ptr
+
+extern fun c_fopen{n:int}(path: !Text(n), mode: string): ptr = "mac#fopen"
+extern fun c_fclose(f: ptr): int = "mac#fclose"
+
+implement file_open{n}(pf | path, mode) = let
+  val p = c_fopen(path, mode)
+in
+  if p > the_null_ptr then Some_vt(p) else None_vt()
+end
+
+implement file_close(pf | f) = let
+  val _ = c_fclose(f)
+in () end
+
+// --- Tampon sahipligi (sanctioned assume: Buf) ---
+assume Buf(k, n) = ptr
+assume Text(n) = ptr
+assume TextRaw(n) = ptr
+
+implement buf_new{k}{n}(n) = heap_new(g0int2uint_int_size(n))
+implement buf_free{k}{n}(b) = heap_free(b)
+implement text_new{n}(n) = heap_new(g0int2uint_int_size(n))
+implement text_free{n}(b) = heap_free(b)
+
+// Muhur: son bayta 0 yazar (tek depolama; i = n-1 statik olarak < n).
+extern fun c_text_store0{n,i:int | 0 <= i; i < n}(b: !TextRaw(n), i: int(i)): void = "mac#mp_text_store0"
+implement text_seal{n}(b, n) = c_text_store0{n, n-1}(b, n - 1)
+
+// text_len: sinirli ozyineleme (olcu n - 1 - i); son bayt sifir oldugundan (Text degismezi) tarama n-1'de durur.
+fun text_scan {n:pos}{i:nat | i < n} .<n - i>. (b: !Text(n), n: int(n), i: int(i)): [m:nat | m < n] int(m) =
+  if i + 1 < n then (if text_at{n,i}(b, i) = 0 then i else text_scan(b, n, i + 1)) else i
+
+implement text_len{n}(b, n) = text_scan(b, n, 0)

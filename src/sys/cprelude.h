@@ -30,10 +30,14 @@ static inline unsigned int mp_float_to_uint(float x) { return (unsigned int)x; }
 static inline void *mp_id_ptr(void *p) { return p; }
 static inline long mp_ulint_to_lint(unsigned long x) { return (long)x; }
 static inline void *mp_null_ptr(void) { return 0; }
-static inline int mp_none_handle(void) { return -1; }
-static inline int mp_handle_is_none(int h) { return h < 0; }
-static inline int mp_id_int(int i) { return i; }
 static inline int mp_ptr_is_null(void *p) { return p == 0; }
+static inline int mp_text_byte(const char *s, int i) { return (unsigned char)s[i]; }
+static inline void mp_text_store0(char *s, int i) { s[i] = 0; }
+static inline int mp_fgets_ok(char *b, int n, FILE *f) { return fgets(b, n, f) != 0; }
+static inline const char *mp_getenv_or_empty(const char *name) {
+  const char *v = getenv(name);
+  return v ? v : "";
+}
 static inline int mp_snprintf_two_strings(char *buf, size_t n, const char *fmt,
                                           const char *s1, const char *s2) {
   return snprintf(buf, n, fmt, s1, s2);
@@ -96,6 +100,10 @@ static inline int airlock_cstr_at(const char *s, int i, int n) {
   return airlock_word(s, i, n);
 }
 
+
+_Static_assert(sizeof(XEvent) <= 256, "XEvBuf kapasitesi yetersiz");
+_Static_assert(sizeof(XSetWindowAttributes) <= 256, "SwaBuf kapasitesi yetersiz");
+_Static_assert(sizeof(XSizeHints) <= 256, "HintsBuf kapasitesi yetersiz");
 
 #include "x11/event.cats"
 #include "x11/xi2_raw.cats"

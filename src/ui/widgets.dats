@@ -3,13 +3,14 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
+staload "sys/buf.sats"
 staload "gl/gl_io.sats"
-staload "sys/cast_box.sats"
 #include "sys/airlock.hats"
 
 staload "gl/gl.dats"
 staload "sys/libc.dats"
-staload "sys/io_box.sats"
+staload "sys/text_io.dats"
+staload "sys/buf.sats"
 staload "ui/state.dats"
 #include "canvas/canvas_borrow.hats"
 staload "brushes/brush_group.sats"
@@ -47,10 +48,9 @@ extern fun slider_get_label(i: SliderId): string = "ext#slider_get_label"
 extern fun slider_get_val(i: SliderId): float = "ext#slider_get_val"
 extern fun slider_get_pct(i: SliderId): float = "ext#slider_get_pct"
 
-fn addr2str(p: ptr): string = cstr_of_ptr(p)
 
-fn format_slider_val(buf: MpText, sz: int, v: float): void = let
-  val _ = mp_snprintf_f(buf, g0int2uint_int_size(sz), "%.2f", g0float2float_float_double(v))
+fn format_slider_val{n:pos}(buf: !Text(n), sz: int(n), v: float): void = let
+  val _ = mp_snprintf_f(buf, sz, "%.2f", g0float2float_float_double(v))
 in () end
 
 fn f_add(a: float, b: float): float = g0float_add_float(a, b)
@@ -388,7 +388,7 @@ fn render_sv_box(gio: !GL_IO | sx: float, bar_w: float): void = let
   val () = gl_draw_rect(gio | f_add(sx, 20.0f), 235.0f, bar_w, 1.0f, 0.2f, 0.2f, 0.22f, 1.0f)
 in () end
 
-fn render_single_slider(gio: !GL_IO | sx: float, sw: float, bar_w: float, i: int, id: SliderId, buf: MpText): void = let
+fn render_single_slider(gio: !GL_IO | sx: float, sw: float, bar_w: float, i: int, id: SliderId, buf: !Text(16)): void = let
   val sy_pos = f_add(242.0f, f_mul(g0int2float(i), 30.0f))
   val lbl = slider_get_label(id)
   val v = slider_get_val(id)
@@ -396,7 +396,7 @@ fn render_single_slider(gio: !GL_IO | sx: float, sw: float, bar_w: float, i: int
   val () = glPointSize(gio | 1.2f)
   val () = gl_draw_string(gio | f_add(sx, 20.0f), sy_pos, 1.0f, lbl, 0.85f, 0.85f, 0.85f)
   val () = format_slider_val(buf, 16, v)
-  val () = gl_draw_string(gio | f_sub(f_add(sx, sw), 60.0f), sy_pos, 1.0f, addr2str(text_ptr(buf)), 0.6f, 0.6f, 0.65f)
+  val () = gl_draw_text(gio | f_sub(f_add(sx, sw), 60.0f), sy_pos, 1.0f, buf, 16, 0.6f, 0.6f, 0.65f)
   val track_y = f_add(sy_pos, 12.0f)
   val () = gl_draw_rect(gio | f_add(sx, 20.0f), track_y, bar_w, 4.0f, 0.18f, 0.18f, 0.20f, 1.0f)
   val () = gl_draw_rect(gio | f_add(sx, 20.0f), track_y, f_mul(pct, bar_w), 4.0f, 0.0f, 0.48f, 0.80f, 1.0f)
@@ -406,18 +406,22 @@ fn render_single_slider(gio: !GL_IO | sx: float, sw: float, bar_w: float, i: int
   val () = gl_draw_circle(gio | thumb_x, thumb_y, 3.0f, 0.0f, 0.48f, 0.80f, 1.0f)
 in () end
 
+fun render_slider_rows {k:nat} .<k>. (
+  gio: !GL_IO | buf: !Text(16), sx: float, sw: float, bar_w: float, k: int(k), i: int
+): void =
+  if k > 0 then let
+    val @(ok, id) = slider_id_try(i)
+  in
+    if ok then let
+      val () = render_single_slider(gio | sx, sw, bar_w, i, id, buf)
+    in render_slider_rows(gio | buf, sx, sw, bar_w, k - 1, i + 1) end
+    else ()
+  end else ()
+
 fn render_sliders_section(gio: !GL_IO | sx: float, sw: float, bar_w: float): void = let
-  var val_buf = @[byte][16]()
-  val p_buf = text_of(addr@(val_buf))
-  fun loop {k:nat} .<k>. (gio: !GL_IO | k: int(k), i: int): void =
-    if k > 0 then (
-      let val @(ok, id) = slider_id_try(i) in
-        if ok then (render_single_slider(gio | sx, sw, bar_w, i, id, p_buf); loop(gio | k - 1, i + 1)) else ()
-      end
-    ) else ()
-in
-  loop(gio | 8, 0)
-end
+  val buf = text_new(16)
+  val () = render_slider_rows(gio | buf, sx, sw, bar_w, 8, 0)
+in text_free(buf) end
 
 fn render_brush_panel_bg(gio: !GL_IO | sx: float, sw: float, sh: float): void = let
   val win_x = f_add(sx, 12.0f)
@@ -465,6 +469,19 @@ in
   loop(gio | 8, 0)
 end
 
+fn render_brush_row(gio: !GL_IO | sx: float, row: int, i: int): void = let
+  val u = ui_get()
+  val y = f_add(568.0f, f_mul(g0int2float(row), 18.0f))
+  val bx = f_add(sx, 16.0f)
+  val on = selection_is_at(u->active_brush, i)
+  val () = if on then gl_draw_rect(gio | bx, y, 218.0f, 16.0f, 0.0f, 0.48f, 0.80f, 1.0f) else ()
+  val () = glPointSize(gio | 1.2f)
+  val name = brush_name(u->active_group, i)
+in
+  if on then gl_draw_string(gio | f_add(bx, 4.0f), f_add(y, 3.0f), 1.0f, name, 1.0f, 1.0f, 1.0f)
+  else gl_draw_string(gio | f_add(bx, 4.0f), f_add(y, 3.0f), 1.0f, name, 0.82f, 0.82f, 0.86f)
+end
+
 fn render_brush_list(gio: !GL_IO | sx: float, sh: float): void = let
   val u = ui_get()
   val nbrush = brush_count(u->active_group)
@@ -475,14 +492,7 @@ fn render_brush_list(gio: !GL_IO | sx: float, sh: float): void = let
       val i = u->brush_scroll + row
     in
       if i < nbrush then let
-        val y = f_add(568.0f, f_mul(g0int2float(row), 18.0f))
-        val bx = f_add(sx, 16.0f)
-        val on = selection_is_at(u->active_brush, i)
-        val () = if on then gl_draw_rect(gio | bx, y, 218.0f, 16.0f, 0.0f, 0.48f, 0.80f, 1.0f) else ()
-        val () = glPointSize(gio | 1.2f)
-        val name = brush_name(u->active_group, i)
-        val () = if on then gl_draw_string(gio | f_add(bx, 4.0f), f_add(y, 3.0f), 1.0f, name, 1.0f, 1.0f, 1.0f)
-                 else gl_draw_string(gio | f_add(bx, 4.0f), f_add(y, 3.0f), 1.0f, name, 0.82f, 0.82f, 0.86f)
+        val () = render_brush_row(gio | sx, row, i)
       in loop(gio | row + 1) end else ()
     end else ()
 in
@@ -555,29 +565,27 @@ in
   end else 0
 end
 
+fn toggle_alpha(dt: double): float =
+  g0float2float_double_float(if d_gt(dt, 0.7) then d_div(d_sub(1.0, dt), 0.3) else 1.0)
+
+fn render_toggle_button(gio: !GL_IO | win_w: float, fa: float): void = let
+  val bx = f_sub(win_w, 42.0f)
+  val by = 10.0f
+  val () = glDisable(gio | GL_DEPTH_TEST)
+  val () = glDisable(gio | GL_TEXTURE_2D)
+  val () = glEnable(gio | GL_BLEND)
+  val () = glBlendFunc(gio | GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+  val () = gl_draw_rect(gio | bx, by, 34.0f, 30.0f, 0.12f, 0.12f, 0.15f, f_mul(0.85f, fa))
+  val () = gl_draw_rect_outline(gio | bx, by, 34.0f, 30.0f, 0.0f, 0.55f, 0.95f, f_mul(0.95f, fa))
+  val () = glPointSize(gio | 2.0f)
+in gl_draw_string(gio | f_add(bx, 9.0f), f_add(by, 8.0f), 1.3f, "<<", 0.3f, 0.8f, 1.0f) end
+
 extern fun widgets_render_floating_toggle(gio: !GL_IO | win_w: float, cur_time: double): void = "ext#widgets_render_floating_toggle"
 implement widgets_render_floating_toggle(gio | win_w, cur_time) = let
   val u = ui_get()
+  val dt = d_sub(cur_time, u->edge_hover_time)
+  val is_active = d_gte(dt, 0.0) && d_lte(dt, 1.0)
 in
-  if not(sidebar_is_shown(u->sidebar)) then let
-    val dt = d_sub(cur_time, u->edge_hover_time)
-    val is_active = d_gte(dt, 0.0) && d_lte(dt, 1.0)
-  in
-    if is_active then let
-      val alpha_d = if d_gt(dt, 0.7) then d_div(d_sub(1.0, dt), 0.3) else 1.0
-      val fa = g0float2float_double_float(alpha_d)
-      val bx = f_sub(win_w, 42.0f)
-      val by = 10.0f
-      val bw = 34.0f
-      val bh = 30.0f
-      val () = glDisable(gio | GL_DEPTH_TEST)
-      val () = glDisable(gio | GL_TEXTURE_2D)
-      val () = glEnable(gio | GL_BLEND)
-      val () = glBlendFunc(gio | GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-      val () = gl_draw_rect(gio | bx, by, bw, bh, 0.12f, 0.12f, 0.15f, f_mul(0.85f, fa))
-      val () = gl_draw_rect_outline(gio | bx, by, bw, bh, 0.0f, 0.55f, 0.95f, f_mul(0.95f, fa))
-      val () = glPointSize(gio | 2.0f)
-      val () = gl_draw_string(gio | f_add(bx, 9.0f), f_add(by, 8.0f), 1.3f, "<<", 0.3f, 0.8f, 1.0f)
-    in () end
-  end
+  if not(sidebar_is_shown(u->sidebar)) * is_active then render_toggle_button(gio | win_w, toggle_alpha(dt))
+  else ()
 end
