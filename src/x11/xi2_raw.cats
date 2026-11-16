@@ -135,20 +135,26 @@ static inline int xi2_raw_deviceid(void *data) {
   return ((XIRawEvent*)data)->deviceid;
 }
 
-static inline int xi2_mask_popcount(const unsigned char *mask, int mask_len) {
-  if (!mask || mask_len <= 0) return 0;
-  int n = 0;
-  for (int i = 0; i < mask_len; i++) {
-    unsigned char b = (unsigned char)airlock_word(mask, i, mask_len);
-    while (b) { n += b & 1; b = (unsigned char)(b >> 1); }
-  }
-  return n;
+/* Ham valuator okuyuculari: salt okur, hava kilidiyle sinirli. Algoritma (maske sayimi, indeks hesabi) ATS tarafindadir (x11/xi2_axis.dats). */
+static inline int xi2_raw_mask_len(void *data) {
+  XIRawEvent *raw = (XIRawEvent*)data;
+  return (raw && raw->valuators.mask) ? raw->valuators.mask_len : 0;
 }
 
-static inline int xi2_raw_has_axis(void *data, int axis) {
+static inline int xi2_raw_mask_byte(void *data, int i) {
   XIRawEvent *raw = (XIRawEvent*)data;
-  return (raw && airlock_nat(axis) == axis && raw->valuators.mask &&
-          XIMaskIsSet(raw->valuators.mask, axis)) ? 1 : 0;
+  if (!raw || !raw->valuators.mask) return 0;
+  return airlock_word(raw->valuators.mask, i, raw->valuators.mask_len);
+}
+
+static inline int xi2_raw_has_values(void *data) {
+  XIRawEvent *raw = (XIRawEvent*)data;
+  return (raw && raw->valuators.values) ? 1 : 0;
+}
+
+static inline int xi2_raw_has_raw_values(void *data) {
+  XIRawEvent *raw = (XIRawEvent*)data;
+  return (raw && raw->raw_values) ? 1 : 0;
 }
 
 static inline double xi2_raw_axis_at(const double *vals, int idx, int nval) {
@@ -156,22 +162,14 @@ static inline double xi2_raw_axis_at(const double *vals, int idx, int nval) {
   return vals[idx];
 }
 
-static inline double xi2_raw_read_axis(void *data, int axis) {
+static inline double xi2_raw_value_at(void *data, int idx, int nval) {
   XIRawEvent *raw = (XIRawEvent*)data;
-  if (!raw || airlock_nat(axis) != axis || !raw->valuators.mask ||
-      !XIMaskIsSet(raw->valuators.mask, axis)) return 0.0;
-  int idx = 0;
-  for (int a = 0; a < axis; a++) {
-    if (XIMaskIsSet(raw->valuators.mask, a)) idx++;
-  }
-  int nval = xi2_mask_popcount((const unsigned char *)raw->valuators.mask, raw->valuators.mask_len);
-  double v = xi2_raw_axis_at(raw->valuators.values, idx, nval);
-  if (v > 0.0) return v;
-  double r = xi2_raw_axis_at(raw->raw_values, idx, nval);
-  if (r > 0.0) return r;
-  if (raw->valuators.values && airlock_below(idx, nval)) return v;
-  if (raw->raw_values && airlock_below(idx, nval)) return r;
-  return 0.0;
+  return raw ? xi2_raw_axis_at(raw->valuators.values, idx, nval) : 0.0;
+}
+
+static inline double xi2_raw_rawvalue_at(void *data, int idx, int nval) {
+  XIRawEvent *raw = (XIRawEvent*)data;
+  return raw ? xi2_raw_axis_at(raw->raw_values, idx, nval) : 0.0;
 }
 
 #endif /* MINEPAINT_XI2_RAW_CATS */

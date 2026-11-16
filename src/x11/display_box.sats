@@ -1,6 +1,4 @@
-abst@ype MpDisplay = ptr
-
-fun dpy_none(): MpDisplay = "mac#mp_null_ptr"
-fun dpy_is_null(d: MpDisplay): int = "mac#mp_ptr_is_null"
-fun dpy_of(p: ptr): MpDisplay = "mac#mp_id_ptr"
-fun dpy_ptr(d: MpDisplay): ptr = "mac#mp_id_ptr"
+// src/x11/display_box.sats
+// X11 ekrani sahipli (dogrusal) tutamactir: acma/kapama window.dats'ta (tek `assume`); X cagrilari `!Display` ile
+// odunc alir. Ham MpDisplay gorunumu yoktur.
+absvtype Display = ptr

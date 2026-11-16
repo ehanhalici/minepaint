@@ -21,8 +21,16 @@
 #define mp_xevent_motion_y(e) (((XEvent*)(e))->xmotion.y)
 #define mp_xevent_motion_state(e) ((unsigned int)((XEvent*)(e))->xmotion.state)
 
-#define mp_xvi_depth(vi) (((XVisualInfo*)(vi))->depth)
-#define mp_xvi_visual(vi) ((atstype_ptr)((XVisualInfo*)(vi))->visual)
+static inline unsigned long mp_x_create_colormap(void *d, unsigned long root, void *vi) {
+  return XCreateColormap((Display *)d, root, ((XVisualInfo *)vi)->visual, AllocNone);
+}
+static inline unsigned long mp_x_create_window(void *d, unsigned long root, unsigned int w, unsigned int h,
+                                               void *vi, unsigned long mask, void *swa) {
+  XVisualInfo *v = (XVisualInfo *)vi;
+  return XCreateWindow((Display *)d, root, 0, 0, w, h, 0, v->depth, InputOutput, v->visual, mask,
+                       (XSetWindowAttributes *)swa);
+}
+static inline int mp_glx_release(void *d) { return glXMakeCurrent((Display *)d, 0, 0); }
 
 #define mp_swa_sizeof() ((int)sizeof(XSetWindowAttributes))
 #define mp_hints_sizeof() ((int)sizeof(XSizeHints))
