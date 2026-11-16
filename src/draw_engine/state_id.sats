@@ -44,7 +44,9 @@ datatype BrushState =
   | StDabsPerActualRadius
   | StDabsPerSecond
   | StN43
-  | StNone
 
-fun state_of(i: int): BrushState = "ext#"
-fun state_ix(id: BrushState): int = "ext#"
+// Tag kodlari yalniz bu sinirda: ix = tipli indeks (derleme zamaninda < 44), try = disaridan gelen int icin.
+typedef StateIx = [k:nat | k < 44] int(k)
+
+fun state_ix(id: BrushState): StateIx = "ext#"
+fun state_try(i: int): @(bool, BrushState) = "ext#"

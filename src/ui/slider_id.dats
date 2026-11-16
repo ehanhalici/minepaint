@@ -1,19 +1,17 @@
-#define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 staload "ui/slider_id.sats"
+#include "sys/airlock.hats"
+#include "sys/arena.hats"
 
-implement slider_id_try(i) =
-  case+ i of
-  | 0 => @(true, SliderSize())
-  | 1 => @(true, SliderOpaque())
-  | 2 => @(true, SliderSharp())
-  | 3 => @(true, SliderGrain())
-  | 4 => @(true, SliderPigment())
-  | 5 => @(true, SliderSmooth())
-  | 6 => @(true, SliderPressure())
-  | 7 => @(true, SliderTwist())
-  | _ => @(false, SliderSize())
+val g_slider_tab = arrayref_make_arrpsz($arrpsz{SliderId}(
+  SliderSize(), SliderOpaque(), SliderSharp(), SliderGrain(),
+  SliderPigment(), SliderSmooth(), SliderPressure(), SliderTwist()
+))
+
+implement slider_id_try(i) = let
+  val @(ok, k) = ix_try(i, 8)
+in @(ok, g_slider_tab[k]) end
 
 implement slider_id_to_int(s) =
   case+ s of

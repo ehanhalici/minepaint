@@ -38,34 +38,16 @@ in
   else a1
 end
 
-// HSV Sektör Renk Eşlemesi (Atomik Helper, SRP)
-fn hsv_sector_rgb(i: int, v: float, t: float, w: float, q: float): @(float, float, float) =
-  case+ i of
-  | 0 => @(v, t, w)
-  | 1 => @(q, v, w)
-  | 2 => @(w, v, t)
-  | 3 => @(w, q, v)
-  | 4 => @(t, w, v)
-  | _ => @(v, w, q)
+extern fun hsv_to_rgb(h: float, s: float, v: float): @(float, float, float) = "ext#hsv_to_rgb"
 
-// HSV -> RGB Dönüşümü - Saf ATS2
+fn unit_clamp(x: float): float = if f_lt(x, 0.0f) then 0.0f else if f_gt(x, 1.0f) then 1.0f else x
+
+// HSV -> RGB (motor girdisi): ton [0,1) dilimine, doygunluk ve deger [0,1] araligina oturtulur, donusumu ui/color.dats yapar.
 implement engine_hsv_to_rgb(h_in, s_in, v_in) = let
   val h0 = f_sub(h_in, floorf(h_in))
-  val s = if f_lt(s_in, 0.0f) then 0.0f else if f_gt(s_in, 1.0f) then 1.0f else s_in
-  val v = if f_lt(v_in, 0.0f) then 0.0f else if f_gt(v_in, 1.0f) then 1.0f else v_in
+  val hue = if h0 = 1.0f then 0.0f else h0
 in
-  if f_lte(s, 0.0f) then @(v, v, v)
-  else let
-    val hue = if h0 = 1.0f then 0.0f else h0
-    val hue6 = f_mul(hue, 6.0f)
-    val i: int = g0float2int(hue6)
-    val f = f_sub(hue6, g0int2float(i))
-    val w = f_mul(v, f_sub(1.0f, s))
-    val q = f_mul(v, f_sub(1.0f, f_mul(s, f)))
-    val t = f_mul(v, f_sub(1.0f, f_mul(s, f_sub(1.0f, f))))
-  in
-    hsv_sector_rgb(i, v, t, w, q)
-  end
+  hsv_to_rgb(hue, unit_clamp(s_in), unit_clamp(v_in))
 end
 
 datatype SpecBand =
@@ -175,66 +157,50 @@ fn get_t_matrix(r: int, b: SpecBand): float =
   else if r = 1 then get_t_row1(b)
   else get_t_row2(b)
 
-// RGB -> Spektral Dönüşüm (Sıfır Unsafe, Bağımlı Tipli Dizi)
+fn spec_eps(): float = 0.0000001f
+
+fn spec_offset(): float = f_sub(1.0f, spec_eps())
+
+fn band_mix(b: SpecBand, r_adj: float, g_adj: float, b_adj: float): float =
+  f_add(f_add(f_mul(get_spectral_r(b), r_adj), f_mul(get_spectral_g(b), g_adj)), f_mul(get_spectral_b(b), b_adj))
+
+fun spectral_fill {i:nat | i <= 10} .<10 - i>. (
+  spectral: &(@[float][10]), i: int(i), r_adj: float, g_adj: float, b_adj: float
+): void =
+  if i >= 10 then ()
+  else let
+    val () = spectral.[i] := band_mix(band_of(i), r_adj, g_adj, b_adj)
+  in spectral_fill(spectral, i + 1, r_adj, g_adj, b_adj) end
+
+// RGB -> Spektral Donusum (Sifir Unsafe, Bagimli Tipli Dizi)
 extern fun rgb_to_spectral(r: float, g: float, b: float, spectral: &(@[float][10])): void = "ext#rgb_to_spectral"
 implement rgb_to_spectral(r, g, b, spectral) = let
-  val eps = 0.0000001f
-  val offset = f_sub(1.0f, eps)
-  val r_adj = f_add(f_mul(r, offset), eps)
-  val g_adj = f_add(f_mul(g, offset), eps)
-  val b_adj = f_add(f_mul(b, offset), eps)
-
-  fnx loop {i:nat | i <= 10} .<10 - i>. (
-    spectral: &(@[float][10]), i: int(i)
-  ): void =
-    if i >= 10 then ()
-    else let
-      val b = band_of(i)
-      val sr = get_spectral_r(b)
-      val sg = get_spectral_g(b)
-      val sb = get_spectral_b(b)
-      val added = f_add(f_add(f_mul(sr, r_adj), f_mul(sg, g_adj)), f_mul(sb, b_adj))
-      val () = spectral.[i] := added
-    in
-      loop(spectral, i + 1)
-    end
+  val eps = spec_eps()
+  val offset = spec_offset()
 in
-  loop(spectral, 0)
+  spectral_fill(spectral, 0, f_add(f_mul(r, offset), eps), f_add(f_mul(g, offset), eps), f_add(f_mul(b, offset), eps))
 end
 
-// Spektral -> RGB Dönüşüm (Sıfır Unsafe, Bağımlı Tipli Dizi)
+fun spectral_row_sum {c:nat | c <= 10} .<10 - c>. (
+  spectral: &(@[float][10]), r: int, c: int(c), acc: float
+): float =
+  if c >= 10 then acc
+  else let
+    val term = f_mul(get_t_matrix(r, band_of(c)), spectral.[c])
+  in spectral_row_sum(spectral, r, c + 1, f_add(acc, term)) end
+
+fn unit_of_row(spectral: &(@[float][10]), r: int): float = let
+  val v = f_div(f_sub(spectral_row_sum(spectral, r, 0, 0.0f), spec_eps()), spec_offset())
+in unit_clamp(v) end
+
+fun spectral_rows_out {i:nat | i <= 3} .<3 - i>. (
+  spectral: &(@[float][10]), rgb: &(@[float][3]), i: int(i)
+): void =
+  if i >= 3 then ()
+  else let
+    val () = rgb.[i] := unit_of_row(spectral, i)
+  in spectral_rows_out(spectral, rgb, i + 1) end
+
+// Spektral -> RGB Donusum (Sifir Unsafe, Bagimli Tipli Dizi)
 extern fun spectral_to_rgb(spectral: &(@[float][10]), rgb: &(@[float][3])): void = "ext#spectral_to_rgb"
-implement spectral_to_rgb(spectral, rgb) = let
-  val eps = 0.0000001f
-  val offset = f_sub(1.0f, eps)
-
-  fn loop_row(spectral: &(@[float][10]), r: int): float = let
-    fnx loop_col {c:nat | c <= 10} .<10 - c>. (
-      spectral: &(@[float][10]), c: int(c), acc: float
-    ): float =
-      if c >= 10 then acc
-      else let
-        val coeff = get_t_matrix(r, band_of(c))
-        val term = f_mul(coeff, spectral.[c])
-      in
-        loop_col(spectral, c + 1, f_add(acc, term))
-      end
-  in
-    loop_col(spectral, 0, 0.0f)
-  end
-
-  fnx loop_out {i:nat | i <= 3} .<3 - i>. (
-    spectral: &(@[float][10]), rgb: &(@[float][3]), i: int(i)
-  ): void =
-    if i >= 3 then ()
-    else let
-      val tmp = loop_row(spectral, i)
-      val v = f_div(f_sub(tmp, eps), offset)
-      val clamped = if f_lt(v, 0.0f) then 0.0f else if f_gt(v, 1.0f) then 1.0f else v
-      val () = rgb.[i] := clamped
-    in
-      loop_out(spectral, rgb, i + 1)
-    end
-in
-  loop_out(spectral, rgb, 0)
-end
+implement spectral_to_rgb(spectral, rgb) = spectral_rows_out(spectral, rgb, 0)

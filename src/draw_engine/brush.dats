@@ -156,23 +156,9 @@ end
 
 fn mp_brush_destroy(b: int): void = recycle_brush(b)
 
-fn state_slot(id: BrushState): int = let
-  val i = state_ix(id)
-in
-  if (i >= 0) * (i < ST_N) then i else ~1
-end
+fn mp_brush_get_state(b: int, id: BrushState): float = st_get(b, state_ix(id))
 
-fn mp_brush_get_state(b: int, id: BrushState): float = let
-  val i = state_slot(id)
-in
-  if i >= 0 then st_get(b, i) else 0.0f
-end
-
-fn mp_brush_set_state(b: int, id: BrushState, v: float): void = let
-  val i = state_slot(id)
-in
-  if i >= 0 then st_set(b, i, v)
-end
+fn mp_brush_set_state(b: int, id: BrushState, v: float): void = st_set(b, state_ix(id), v)
 fn mp_brush_get_base(b: int, i: int): float = base_get(b, i)
 fn mp_brush_set_base(b: int, i: int, v: float): void = base_set(b, i, v)
 fn mp_brush_get_val(b: int, i: int): float = val_get(b, i)
@@ -268,7 +254,7 @@ in
     prval None_v() = pf
   in dflt end
 end
-extern fun minepaint_brush_setting_info(id: int): MinePaintBrushSettingInfo = "ext#minepaint_brush_setting_info"
+extern fun minepaint_brush_setting_def(id: int): float = "ext#minepaint_brush_setting_def"
 
 fn clear_mapping_curves(m: int): void = let
   fun loop {j:nat | j <= MAPPING_INPUTS} .<MAPPING_INPUTS - j>. (j: int(j)): void =
@@ -283,11 +269,11 @@ fn is_color_setting(i: int): bool =
   (i = 34) || (i = 35) || (i = 36)
 
 fn reset_setting_default(b: int, i: int): void = let
-  val s = minepaint_brush_setting_info(i)
+  val d = minepaint_brush_setting_def(i)
   val m = mp_brush_get_mapping(b, i)
-  val () = mp_brush_set_base(b, i, s.def)
-  val () = mp_brush_set_val(b, i, s.def)
-  val () = if m != MAPPING_NONE then m_set_base(m, s.def)
+  val () = mp_brush_set_base(b, i, d)
+  val () = mp_brush_set_val(b, i, d)
+  val () = if m != MAPPING_NONE then m_set_base(m, d)
 in
   if m != MAPPING_NONE then clear_mapping_curves(m)
 end
@@ -355,14 +341,13 @@ extern fun draw_engine_brush_set_base_value(b: int, id: SettingId, v: float): vo
 implement draw_engine_brush_set_base_value(b, id, v) = let
   val ix = setting_ix(id)
 in
-  if b >= 0 then
-    if (ix >= 0) * (ix < 65) then let
-      val m = mp_brush_get_mapping(b, ix)
-      val () = mp_brush_set_base(b, ix, v)
-      val () = mp_brush_set_val(b, ix, v)
-    in
-      if m != MAPPING_NONE then m_set_base(m, v)
-    end
+  if b >= 0 then let
+    val m = mp_brush_get_mapping(b, ix)
+    val () = mp_brush_set_base(b, ix, v)
+    val () = mp_brush_set_val(b, ix, v)
+  in
+    if m != MAPPING_NONE then m_set_base(m, v)
+  end
 end
 
 extern fun draw_engine_brush_set_mapping_n(
@@ -373,7 +358,7 @@ implement draw_engine_brush_set_mapping_n(b, setting, input, n) = let
   val iin = input_ix(input)
 in
   if b >= 0 then
-    if (ix >= 0) * (ix < 65) * (iin >= 0) * (iin < 18) * (n >= 0) * (n <= 64) * (n != 1) then
+    if (n >= 0) * (n <= 64) * (n != 1) then
       m_set_n(mp_brush_get_mapping(b, ix), iin, n)
 end
 
@@ -384,9 +369,7 @@ implement draw_engine_brush_set_mapping_point(b, setting, input, index, x, y) = 
   val ix = setting_ix(setting)
   val iin = input_ix(input)
 in
-  if b >= 0 then
-    if (ix >= 0) * (ix < 65) * (iin >= 0) * (iin < 18) then
-      m_set_point(mp_brush_get_mapping(b, ix), iin, index, x, y)
+  if b >= 0 then m_set_point(mp_brush_get_mapping(b, ix), iin, index, x, y)
 end
 
 extern fun draw_engine_brush_prepare_load(b: int): void = "ext#draw_engine_brush_prepare_load"
@@ -444,9 +427,7 @@ extern fun draw_engine_brush_get_base_value(b: int, id: SettingId): float = "ext
 implement draw_engine_brush_get_base_value(b, id) = let
   val ix = setting_ix(id)
 in
-  if b >= 0 then
-    if (ix >= 0) * (ix < 65) then mp_brush_get_base(b, ix) else 0.0f
-  else 0.0f
+  if b >= 0 then mp_brush_get_base(b, ix) else 0.0f
 end
 
 extern fun draw_engine_brush_get_state(b: int, id: BrushState): float = "ext#draw_engine_brush_get_state"
@@ -540,7 +521,7 @@ end
 fn in_set(arr: &(@[float][MAPPING_INPUTS]), id: InputId, v: float): void = let
   val j = input_ix(id)
 in
-  if airlock_span(j, 1, MAPPING_INPUTS) != 0 then arr[airlock_below(j, MAPPING_INPUTS)] := v else ()
+  arr[j] := v
 end
 
 fn populate_input_buffer(
@@ -603,35 +584,38 @@ in
   mp_brush_set_state(b, StActualEllipticalDabAngle(), mp_brush_get_val(b, setting_ix(SetEllipticalDabAngle())))
 end
 
-fun update_states(
+fn advance_pose(b: int, step_dx: float, step_dy: float, step_dpress: float, viewzoom: float): @(float, float, float) = let
+  val cur_x = f_add(mp_brush_get_state(b, StX()), step_dx)
+  val cur_y = f_add(mp_brush_get_state(b, StY()), step_dy)
+  val cur_p_raw = f_add(mp_brush_get_state(b, StPressure()), step_dpress)
+  val cur_p = if cur_p_raw < 0.0f then 0.0f else cur_p_raw
+  val () = mp_brush_set_state(b, StX(), cur_x)
+  val () = mp_brush_set_state(b, StY(), cur_y)
+  val () = mp_brush_set_state(b, StPressure(), cur_p)
+  val () = mp_brush_set_state(b, StViewzoom(), viewzoom)
+in @(cur_x, cur_y, cur_p) end
+
+fn eval_step_inputs(b: int, cur_p: float, viewzoom: float): void = let
+  val base_radius_log = mp_brush_get_base(b, setting_ix(SetRadiusLogarithmic()))
+  var inbuf = @[float][MAPPING_INPUTS](0.0f)
+  val () = populate_input_buffer(b, inbuf, cur_p, viewzoom, base_radius_log)
+in eval_mappings(b, inbuf) end
+
+fn mirror_dab_rates(b: int): void = let
+  val () = mp_brush_set_state(b, StDabsPerBasicRadius(), mp_brush_get_val(b, setting_ix(SetDabsPerBasicRadius())))
+  val () = mp_brush_set_state(b, StDabsPerActualRadius(), mp_brush_get_val(b, setting_ix(SetDabsPerActualRadius())))
+in mp_brush_set_state(b, StDabsPerSecond(), mp_brush_get_val(b, setting_ix(SetDabsPerSecond()))) end
+
+fn update_states(
   b: int,
   step_ddab: float, step_dx: float, step_dy: float,
   step_dpress: float, step_dtime: float, viewzoom: float
 ): void = let
   val dt = if step_dtime <= 0.0f then 0.001f else step_dtime
-  val cur_x = f_add(mp_brush_get_state(b, StX()), step_dx)
-  val cur_y = f_add(mp_brush_get_state(b, StY()), step_dy)
-  val cur_p_raw = f_add(mp_brush_get_state(b, StPressure()), step_dpress)
-  val cur_p = if cur_p_raw < 0.0f then 0.0f else cur_p_raw
-
-  val () = mp_brush_set_state(b, StX(), cur_x)
-  val () = mp_brush_set_state(b, StY(), cur_y)
-  val () = mp_brush_set_state(b, StPressure(), cur_p)
-  val () = mp_brush_set_state(b, StViewzoom(), viewzoom)
-
-  val base_radius_log = mp_brush_get_base(b, setting_ix(SetRadiusLogarithmic()))
-  val norm_dx = f_mul(f_div(step_dx, dt), viewzoom)
-  val norm_dy = f_mul(f_div(step_dy, dt), viewzoom)
-  val norm_speed = hypotf(norm_dx, norm_dy)
-
-  var inbuf = @[float][MAPPING_INPUTS](0.0f)
-  val () = populate_input_buffer(b, inbuf, cur_p, viewzoom, base_radius_log)
-  val () = eval_mappings(b, inbuf)
-
-  val () = mp_brush_set_state(b, StDabsPerBasicRadius(), mp_brush_get_val(b, setting_ix(SetDabsPerBasicRadius())))
-  val () = mp_brush_set_state(b, StDabsPerActualRadius(), mp_brush_get_val(b, setting_ix(SetDabsPerActualRadius())))
-  val () = mp_brush_set_state(b, StDabsPerSecond(), mp_brush_get_val(b, setting_ix(SetDabsPerSecond())))
-
+  val @(cur_x, cur_y, cur_p) = advance_pose(b, step_dx, step_dy, step_dpress, viewzoom)
+  val norm_speed = hypotf(f_mul(f_div(step_dx, dt), viewzoom), f_mul(f_div(step_dy, dt), viewzoom))
+  val () = eval_step_inputs(b, cur_p, viewzoom)
+  val () = mirror_dab_rates(b)
   val () = update_tracking_speed(b, cur_x, cur_y, norm_speed, step_ddab, dt)
 in
   update_actual_geometry(b)
@@ -673,35 +657,44 @@ in
   else @(radius_raw, hardness)
 end
 
-fun prepare_and_draw_dab(gio: !GL_IO | b: int, tgt: MpTarget): int = let
-  val opaque_final = compute_opaque_final(b)
+fn dab_jitter(b: int): @(float, float) = let
   val jitter = mp_brush_get_val(b, setting_ix(SetOffsetByRandom()))
   val amp = if g0float_gt(jitter, 0.0f) then jitter else 0.0f
-  val base_r = expf(mp_brush_get_base(b, setting_ix(SetRadiusLogarithmic())))
-  val spread = f_mul(amp, base_r)
-  val use_jitter = g0float_gt(amp, 0.0f)
-  val jx = if use_jitter then f_mul(rand_gauss(jitter_rng(b)), spread) else 0.0f
-  val jy = if use_jitter then f_mul(rand_gauss(jitter_rng(b)), spread) else 0.0f
-  val x = f_add(mp_brush_get_state(b, StActualX()), jx)
-  val y = f_add(mp_brush_get_state(b, StActualY()), jy)
-  val radius_raw = mp_brush_get_state(b, StActualRadius())
+  val spread = f_mul(amp, expf(mp_brush_get_base(b, setting_ix(SetRadiusLogarithmic()))))
+in
+  if g0float_gt(amp, 0.0f) then let
+    val jx = f_mul(rand_gauss(jitter_rng(b)), spread)
+    val jy = f_mul(rand_gauss(jitter_rng(b)), spread)
+  in @(jx, jy) end
+  else @(0.0f, 0.0f)
+end
 
-  val @(color_r, color_g, color_b) = engine_hsv_to_rgb(
+fn dab_color(b: int): @(float, float, float) =
+  engine_hsv_to_rgb(
     mp_brush_get_base(b, setting_ix(SetColorH())),
     mp_brush_get_base(b, setting_ix(SetColorS())),
     mp_brush_get_base(b, setting_ix(SetColorV()))
   )
 
+fn dab_shape(b: int): @(float, float) = let
   val hardness_raw = mp_brush_get_val(b, setting_ix(SetHardness()))
   val hardness = if hardness_raw < 0.0f then 0.0f else if hardness_raw > 1.0f then 1.0f else hardness_raw
-  val min_fadeout = mp_brush_get_val(b, setting_ix(SetAntiAliasing()))
-  val @(final_radius, final_hardness) = compute_anti_aliased_dab(radius_raw, hardness, min_fadeout)
+in
+  compute_anti_aliased_dab(mp_brush_get_state(b, StActualRadius()), hardness, mp_brush_get_val(b, setting_ix(SetAntiAliasing())))
+end
 
+fn prepare_and_draw_dab(gio: !GL_IO | b: int, tgt: MpTarget): int = let
+  val opaque_final = compute_opaque_final(b)
+  val @(jx, jy) = dab_jitter(b)
+  val x = f_add(mp_brush_get_state(b, StActualX()), jx)
+  val y = f_add(mp_brush_get_state(b, StActualY()), jy)
+  val @(color_r, color_g, color_b) = dab_color(b)
+  val @(final_radius, final_hardness) = dab_shape(b)
   val dab_ratio = mp_brush_get_state(b, StActualEllipticalDabRatio())
   val aspect = if dab_ratio < 1.0f then 1.0f else dab_ratio
   val angle = mp_brush_get_state(b, StActualEllipticalDabAngle())
 in
-  draw_dab_on(gio | 
+  draw_dab_on(gio |
     tgt, x, y, final_radius, color_r, color_g, color_b,
     opaque_final, final_hardness, aspect, angle
   )
@@ -725,36 +718,64 @@ in
   1
 end
 
-fun dab_loop {k:nat} .<k>. (gio: !GL_IO | k: int(k), 
+fn step_deltas(b: int, frac: float, target_x: float, target_y: float, p_clean: float): @(float, float, float) =
+  @(f_mul(frac, f_sub(target_x, mp_brush_get_state(b, StX()))),
+    f_mul(frac, f_sub(target_y, mp_brush_get_state(b, StY()))),
+    f_mul(frac, f_sub(p_clean, mp_brush_get_state(b, StPressure()))))
+
+// Bir dab adimi: durumlari ilerletir, dab cizer; kalan sure ve sonraki dab sayisini dondurur.
+fn dab_step(gio: !GL_IO | b: int, tgt: MpTarget, target_x: float, target_y: float, p_clean: float,
+  dtime_left: double, dabs_moved: float, dabs_todo: float, viewzoom: float
+): @(double, float) = let
+  val step_ddab = if dabs_moved > 0.0f then f_sub(1.0f, dabs_moved) else 1.0f
+  val frac = if dabs_todo > 0.00001f then f_div(step_ddab, dabs_todo) else 1.0f
+  val @(step_dx, step_dy, step_dpress) = step_deltas(b, frac, target_x, target_y, p_clean)
+  val step_dt_float = f_mul(frac, g0float2float_double_float(dtime_left))
+  val () = update_states(b, step_ddab, step_dx, step_dy, step_dpress, step_dt_float, viewzoom)
+  val () = mp_brush_set_state(b, StFlip(), f_mul(mp_brush_get_state(b, StFlip()), ~1.0f))
+  val _ = prepare_and_draw_dab(gio | b, tgt)
+  val rem_dt = dtime_left - g0float2float_float_double(step_dt_float)
+in @(rem_dt, count_dabs_to(b, target_x, target_y, g0float2float_double_float(rem_dt))) end
+
+fun dab_loop {k:nat} .<k>. (gio: !GL_IO | k: int(k),
   b: int, tgt: MpTarget, target_x: float, target_y: float, p_clean: float,
   dtime_left: double, dabs_moved: float, dabs_todo: float, viewzoom: float
 ): @(double, float, float) =
-  if k > 0 then (
-  if f_add(dabs_moved, dabs_todo) >= 1.0f then let
-    val step_ddab = if dabs_moved > 0.0f then f_sub(1.0f, dabs_moved) else 1.0f
-    val frac = if dabs_todo > 0.00001f then f_div(step_ddab, dabs_todo) else 1.0f
+  if k > 0 then
+    if f_add(dabs_moved, dabs_todo) >= 1.0f then let
+      val @(rem_dt, next_todo) = dab_step(gio | b, tgt, target_x, target_y, p_clean, dtime_left, dabs_moved, dabs_todo, viewzoom)
+    in
+      dab_loop(gio | k - 1, b, tgt, target_x, target_y, p_clean, rem_dt, 0.0f, next_todo, viewzoom)
+    end
+    else @(dtime_left, dabs_moved, dabs_todo)
+  else anth_die_any(DieFuelDab())
 
-    val cur_st_x = mp_brush_get_state(b, StX())
-    val cur_st_y = mp_brush_get_state(b, StY())
-    val cur_st_p = mp_brush_get_state(b, StPressure())
+fn smoothed_target(b: int, x: float, y: float, dt_float: float): @(float, float) = let
+  val tracking = mp_brush_get_val(b, setting_ix(SetSlowTracking()))
+  val fac = f_sub(1.0f, engine_exp_decay(tracking, f_mul(100.0f, dt_float)))
+  val old_x = mp_brush_get_state(b, StX())
+  val old_y = mp_brush_get_state(b, StY())
+in @(f_add(old_x, f_mul(f_sub(x, old_x), fac)), f_add(old_y, f_mul(f_sub(y, old_y), fac))) end
 
-    val step_dx = f_mul(frac, f_sub(target_x, cur_st_x))
-    val step_dy = f_mul(frac, f_sub(target_y, cur_st_y))
-    val step_dpress = f_mul(frac, f_sub(p_clean, cur_st_p))
-    val step_dt_float = f_mul(frac, g0float2float_double_float(dtime_left))
-    val step_dt = g0float2float_float_double(step_dt_float)
+// Hareketin kalan kismini isler: kalan dab/sure durumlarini yazar.
+fn finish_motion(b: int, target_x: float, target_y: float, p_clean: float, viewzoom: float,
+  rem_dt: double, rem_moved: float, rem_todo: float
+): void = let
+  val end_dx = f_sub(target_x, mp_brush_get_state(b, StX()))
+  val end_dy = f_sub(target_y, mp_brush_get_state(b, StY()))
+  val end_dpress = f_sub(p_clean, mp_brush_get_state(b, StPressure()))
+  val () = update_states(b, rem_todo, end_dx, end_dy, end_dpress, g0float2float_double_float(rem_dt), viewzoom)
+in mp_brush_set_state(b, StPartialDabs(), f_add(rem_moved, rem_todo)) end
 
-    val () = update_states(b, step_ddab, step_dx, step_dy, step_dpress, step_dt_float, viewzoom)
-    val () = mp_brush_set_state(b, StFlip(), f_mul(mp_brush_get_state(b, StFlip()), ~1.0f))
-    val _ = prepare_and_draw_dab(gio | b, tgt)
+fn run_motion(gio: !GL_IO | b: int, tgt: MpTarget, x: float, y: float, p_clean: float, dt_clean: double, viewzoom: float): void = let
+  val @(target_x, target_y) = smoothed_target(b, x, y, g0float2float_double_float(dt_clean))
+  val init_todo = count_dabs_to(b, target_x, target_y, g0float2float_double_float(dt_clean))
+  val init_moved = mp_brush_get_state(b, StPartialDabs())
+  // Olcu yok: dab sayisi float durumuna (dabs_moved + dabs_todo >= 1) bagli; hareket basina ust sinir.
+  val @(rem_dt, rem_moved, rem_todo) = dab_loop(gio | FUEL_DABS_PER_MOTION,
+    b, tgt, target_x, target_y, p_clean, dt_clean, init_moved, init_todo, viewzoom)
+in finish_motion(b, target_x, target_y, p_clean, viewzoom, rem_dt, rem_moved, rem_todo) end
 
-    val rem_dt = dtime_left - step_dt
-    val next_todo = count_dabs_to(b, target_x, target_y, g0float2float_double_float(rem_dt))
-  in
-    dab_loop(gio | k - 1, b, tgt, target_x, target_y, p_clean, rem_dt, 0.0f, next_todo, viewzoom)
-  end
-  else @(dtime_left, dabs_moved, dabs_todo)
-  ) else anth_die_any(DieFuelDab())
 extern fun draw_engine_brush_stroke_to(gio: !GL_IO | 
     b: int, tgt: MpTarget,
     x: float, y: float, pressure: float,
@@ -768,35 +789,9 @@ implement draw_engine_brush_stroke_to(gio |
   else let
     val p_clean = if pressure < 0.0f then 0.0f else pressure
     val dt_clean = if dtime <= 0.0 then 0.0001 else dtime
-    val dt_float = g0float2float_double_float(dt_clean)
-    val is_reset = mp_brush_get_reset(b)
   in
-    if (dtime > 5.0) || (is_reset > 0) then reset_stroke_state(b, x, y, p_clean)
-    else let
-      val tracking = mp_brush_get_val(b, setting_ix(SetSlowTracking()))
-      val fac = f_sub(1.0f, engine_exp_decay(tracking, f_mul(100.0f, dt_float)))
-      val old_x = mp_brush_get_state(b, StX())
-      val old_y = mp_brush_get_state(b, StY())
-      val target_x = f_add(old_x, f_mul(f_sub(x, old_x), fac))
-      val target_y = f_add(old_y, f_mul(f_sub(y, old_y), fac))
-
-      val init_todo = count_dabs_to(b, target_x, target_y, dt_float)
-      val init_moved = mp_brush_get_state(b, StPartialDabs())
-      // Olcu yok: dab sayisi float durumuna (dabs_moved + dabs_todo >= 1) bagli; hareket basina ust sinir.
-      val @(rem_dt, rem_moved, rem_todo) = dab_loop(gio | FUEL_DABS_PER_MOTION, 
-        b, tgt, target_x, target_y, p_clean, dt_clean, init_moved, init_todo, viewzoom
-      )
-
-      val end_dx = f_sub(target_x, mp_brush_get_state(b, StX()))
-      val end_dy = f_sub(target_y, mp_brush_get_state(b, StY()))
-      val end_dpress = f_sub(p_clean, mp_brush_get_state(b, StPressure()))
-      val end_dt = g0float2float_double_float(rem_dt)
-
-      val () = update_states(b, rem_todo, end_dx, end_dy, end_dpress, end_dt, viewzoom)
-      val () = mp_brush_set_state(b, StPartialDabs(), f_add(rem_moved, rem_todo))
-    in
-      0
-    end
+    if (dtime > 5.0) || (mp_brush_get_reset(b) > 0) then reset_stroke_state(b, x, y, p_clean)
+    else (run_motion(gio | b, tgt, x, y, p_clean, dt_clean, viewzoom); 0)
   end
 
 // --- Yetenek kaniti: sahip ham tutamaci stash/claim ile birakir/geri alir (sys/capability.sats aksiyomlari;

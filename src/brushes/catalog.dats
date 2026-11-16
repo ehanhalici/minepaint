@@ -1,8 +1,9 @@
-#define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
 staload "brushes/brush_group.sats"
+#include "sys/airlock.hats"
+#include "sys/arena.hats"
 
 // Harici Fırça Koleksiyonu İmzaları
 extern fun dieterle_brush_count(): int = "ext#dieterle_brush_count"
@@ -40,17 +41,14 @@ extern fun kaerhon_apply(b: int, i: int): void = "ext#kaerhon_apply"
 extern fun draw_engine_brush_prepare_load(b: int): void = "ext#draw_engine_brush_prepare_load"
 
 // --- Sınır Dönüşümleri (brush_group.sats) ---
-implement brush_group_try(g) =
-  case+ g of
-  | 0 => @(true, GroupDieterle())
-  | 1 => @(true, GroupClassic())
-  | 2 => @(true, GroupDeevad())
-  | 3 => @(true, GroupFavorites())
-  | 4 => @(true, GroupRamon())
-  | 5 => @(true, GroupExperimental())
-  | 6 => @(true, GroupTanda())
-  | 7 => @(true, GroupKaerhon())
-  | _ => @(false, GroupClassic())
+val g_group_tab = arrayref_make_arrpsz($arrpsz{BrushGroup}(
+  GroupDieterle(), GroupClassic(), GroupDeevad(), GroupFavorites(),
+  GroupRamon(), GroupExperimental(), GroupTanda(), GroupKaerhon()
+))
+
+implement brush_group_try(g) = let
+  val @(ok, k) = ix_try(g, 8)
+in @(ok, g_group_tab[k]) end
 
 implement brush_group_to_int(grp) =
   case+ grp of

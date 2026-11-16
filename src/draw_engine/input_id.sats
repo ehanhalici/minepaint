@@ -18,8 +18,10 @@ datatype InputId =
   | InViewzoom
   | InBrushRadius
   | InBarrelRotation
-  | InNone
 
+// Tag kodlari yalniz bu sinirda: ix = tipli indeks (derleme zamaninda < 18), try = disaridan gelen int icin.
+typedef InputIx = [k:nat | k < 18] int(k)
+
+fun input_ix(id: InputId): InputIx = "ext#"
+fun input_try(i: int): @(bool, InputId) = "ext#"
 fun input_of(i: int): InputId = "ext#"
-fun input_ix(id: InputId): int = "ext#"
-

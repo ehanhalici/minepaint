@@ -78,39 +78,36 @@ end
 fn is_odd(s: lint): bool =
   g0int_mod_lint(s, 2L) != 0L
 
+fun rng_copy_state {j:nat | j <= KK} .<KK - j>. (self: RIx, aa: BufIx, j: int(j)): void =
+  if j >= KK then ()
+  else let
+    val () = sdset(aa, j, mp_rng_get_u(self, j))
+  in rng_copy_state(self, aa, j + 1) end
+
+fun rng_extend {nn:int}{j:nat | j <= nn} .<nn - j>. (aa: BufIx, j: int(j), n_ix: int(nn)): int =
+  if j < n_ix then let
+    val () = sdset(aa, j, mod_sum(sdget(aa, j - KK), sdget(aa, j - LL)))
+  in rng_extend(aa, j + 1, n_ix) end
+  else j
+
+fun rng_refill_head {i:nat | i <= LL} .<LL - i>. (self: RIx, aa: BufIx, i: int(i), j: int): int =
+  if i >= LL then j
+  else let
+    val () = mp_rng_set_u(self, i, mod_sum(sdget(aa, j - KK), sdget(aa, j - LL)))
+  in rng_refill_head(self, aa, i + 1, j + 1) end
+
+fun rng_refill_tail {i:nat | i <= KK} .<KK - i>. (self: RIx, aa: BufIx, i: int(i), j: int): void =
+  if i >= KK then ()
+  else let
+    val () = mp_rng_set_u(self, i, mod_sum(sdget(aa, j - KK), mp_rng_get_u(self, i - LL)))
+  in rng_refill_tail(self, aa, i + 1, j + 1) end
+
 fn rng_double_get_array(self: RIx, aa: BufIx, n: int): void = let
-  fnx loop1 {j:nat | j <= KK} .<KK - j>. (j: int(j)): void =
-    if j >= KK then ()
-    else let
-      val () = sdset(aa, j, mp_rng_get_u(self, j))
-    in loop1(j + 1) end
-  val () = loop1(0)
-
+  val () = rng_copy_state(self, aa, 0)
   val [nn:int] n_ix = airlock_int(n)
-  fnx loop2 {j:nat | j <= nn} .<nn - j>. (j: int(j)): int =
-    if j < n_ix then let
-      val v = mod_sum(sdget(aa, j - KK), sdget(aa, j - LL))
-      val () = sdset(aa, j, v)
-    in loop2(j + 1) end
-    else j
-  val j_after2 = if KK <= n_ix then loop2(KK) else KK
-
-  fnx loop3 {i:nat | i <= LL} .<LL - i>. (i: int(i), j: int): int =
-    if i >= LL then j
-    else let
-      val v = mod_sum(sdget(aa, j - KK), sdget(aa, j - LL))
-      val () = mp_rng_set_u(self, i, v)
-    in loop3(i + 1, j + 1) end
-  val j3 = loop3(0, j_after2)
-
-  fnx loop4 {i:nat | i <= KK} .<KK - i>. (i: int(i), j: int): void =
-    if i >= KK then ()
-    else let
-      val v = mod_sum(sdget(aa, j - KK), mp_rng_get_u(self, i - LL))
-      val () = mp_rng_set_u(self, i, v)
-    in loop4(i + 1, j + 1) end
-  val () = loop4(LL, j3)
-in () end
+  val j_after2 = if KK <= n_ix then rng_extend(aa, KK, n_ix) else KK
+  val j3 = rng_refill_head(self, aa, 0, j_after2)
+in rng_refill_tail(self, aa, LL, j3) end
 
 fn seed_init_u(u_ptr: BufIx, ss_init: double, ulp: double): void = let
   fnx loop_boot {j:nat | j <= KK} .<KK - j>. (j: int(j), ss: double): void =

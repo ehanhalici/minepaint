@@ -80,10 +80,7 @@ fn init_palette_colors(p: arrayref(float, 36)): void = {
   val () = pal_init_put(p, 11, 0.55f, 0.35f, 0.20f)
 }
 
-extern fun ui_state_new(): void = "ext#ui_state_new"
-implement ui_state_new() = let
-  val () = init_palette_colors(g_pal)
-  val u = g_ui
+fn ui_defaults_color(u: ref(UIWidgetsState)): void = {
   val () = u->edge_hover_time := 0.0
   val () = u->cur_r := 0.73f
   val () = u->cur_g := 0.73f
@@ -91,6 +88,9 @@ implement ui_state_new() = let
   val () = u->cur_h := 0.0f
   val () = u->cur_s := 0.0f
   val () = u->cur_v := 0.73f
+}
+
+fn ui_defaults_sliders(u: ref(UIWidgetsState)): void = {
   val () = u->val0 := 1.2f
   val () = u->val1 := 1.0f
   val () = u->val2 := 0.1f
@@ -99,6 +99,9 @@ implement ui_state_new() = let
   val () = u->val5 := 3.0f
   val () = u->val6 := 0.0f
   val () = u->val7 := 1.0f
+}
+
+fn ui_defaults_selection(u: ref(UIWidgetsState)): void = {
   val () = u->active_drag := DragNone()
   val () = u->active_group := GroupClassic()
   val () = u->sidebar := SidebarShown()
@@ -106,8 +109,14 @@ implement ui_state_new() = let
   val () = u->brush_scroll := 0
   val () = u->panel_h := 0
   val () = u->active_swatch := SelNone()
-in
-end
+}
+
+extern fun ui_state_new(): void = "ext#ui_state_new"
+implement ui_state_new() = let
+  val () = init_palette_colors(g_pal)
+  val () = ui_defaults_color(g_ui)
+  val () = ui_defaults_sliders(g_ui)
+in ui_defaults_selection(g_ui) end
 
 // --- Secim sinir donusumleri: dis dunya tamsayisi [0, limit) disinda ise SelNone ---
 extern fun selection_of_code(code: int, limit: int): Selection = "ext#selection_of_code"

@@ -1,88 +1,16 @@
-// Brush setting and input metadata as typed arrays.
-// main.dats initialises this file at startup (tables are filled before use).
+// Brush ayar metaverisi: tipli sabit tablo (brushsettings_fill.hats). Erisim Ix(65) ile; aralik disi tasarim ihlalidir.
+// main.dats bu dosyayi baslatir (tablo kullanimdan once dolu).
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 #include "sys/airlock.hats"
+#include "sys/arena.hats"
 #include "./brushsettings_gen.hats"
-
-val g_set_blank = @{
-  cname= "", name= "", constant= 0,
-  min= 0.0f, def= 0.0f, max= 0.0f, tooltip= ""
-} : MinePaintBrushSettingInfo
-val g_in_blank = @{
-  cname= "", hard_min= 0.0f, soft_min= 0.0f, normal= 0.0f,
-  soft_max= 0.0f, hard_max= 0.0f, name= "", tooltip= ""
-} : MinePaintBrushInputInfo
-val g_settings = arrayref_make_elt<MinePaintBrushSettingInfo>(i2sz(65), g_set_blank)
-val g_inputs = arrayref_make_elt<MinePaintBrushInputInfo>(i2sz(18), g_in_blank)
 
 #include "./brushsettings_fill.hats"
 
-val () = populate_settings_info_array()
-val () = populate_inputs_info_array()
-
-fn setting_at(id: int): MinePaintBrushSettingInfo =
-  if airlock_span(id, 1, 65) != 0 then g_settings[airlock_below(id, 65)] else g_set_blank
-
-fn input_at(id: int): MinePaintBrushInputInfo =
-  if airlock_span(id, 1, 18) != 0 then g_inputs[airlock_below(id, 18)] else g_in_blank
-
-extern fun minepaint_brush_setting_info(id: int): MinePaintBrushSettingInfo = "ext#minepaint_brush_setting_info"
-implement minepaint_brush_setting_info(id) = setting_at(id)
-
-extern fun minepaint_brush_setting_info_get_name(id: int): string = "ext#minepaint_brush_setting_info_get_name"
-implement minepaint_brush_setting_info_get_name(id) = let
-  val s = setting_at(id)
+extern fun minepaint_brush_setting_def(id: int): float = "ext#minepaint_brush_setting_def"
+implement minepaint_brush_setting_def(id) = let
+  val @(ok, i) = ix_try(id, 65)
 in
-  s.name
-end
-
-extern fun minepaint_brush_setting_info_get_tooltip(id: int): string = "ext#minepaint_brush_setting_info_get_tooltip"
-implement minepaint_brush_setting_info_get_tooltip(id) = let
-  val s = setting_at(id)
-in
-  s.tooltip
-end
-
-extern fun minepaint_brush_setting_from_cname(cname: string): int = "ext#minepaint_brush_setting_from_cname"
-implement minepaint_brush_setting_from_cname(cname) = let
-  fun loop {i:nat | i <= 65} .<65 - i>. (i: int(i)): int =
-    if i < 65 then let
-      val s = setting_at(i)
-    in
-      if s.cname = cname then i else loop(i + 1)
-    end
-    else ~1
-in
-  loop(0)
-end
-
-extern fun minepaint_brush_input_info(id: int): MinePaintBrushInputInfo = "ext#minepaint_brush_input_info"
-implement minepaint_brush_input_info(id) = input_at(id)
-
-extern fun minepaint_brush_input_info_get_name(id: int): string = "ext#minepaint_brush_input_info_get_name"
-implement minepaint_brush_input_info_get_name(id) = let
-  val s = input_at(id)
-in
-  s.name
-end
-
-extern fun minepaint_brush_input_info_get_tooltip(id: int): string = "ext#minepaint_brush_input_info_get_tooltip"
-implement minepaint_brush_input_info_get_tooltip(id) = let
-  val s = input_at(id)
-in
-  s.tooltip
-end
-
-extern fun minepaint_brush_input_from_cname(cname: string): int = "ext#minepaint_brush_input_from_cname"
-implement minepaint_brush_input_from_cname(cname) = let
-  fun loop {i:nat | i <= 18} .<18 - i>. (i: int(i)): int =
-    if i < 18 then let
-      val s = input_at(i)
-    in
-      if s.cname = cname then i else loop(i + 1)
-    end
-    else ~1
-in
-  loop(0)
+  if ok then g_settings[i].def else g0float2float_double_float(anth_die_dbl(DieContractViolation()))
 end

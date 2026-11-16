@@ -1,32 +1,42 @@
-#define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 staload "draw_engine/input_id.sats"
+#include "sys/airlock.hats"
+#include "sys/arena.hats"
 
-fn input_of_0(i: int): InputId =
-  if i = 0 then InPressure()
-  else if i = 1 then InRandom()
-  else if i = 2 then InStroke()
-  else if i = 3 then InDirection()
-  else if i = 4 then InTiltDeclination()
-  else if i = 5 then InTiltAscension()
-  else if i = 6 then InSpeed1()
-  else if i = 7 then InSpeed2()
-  else if i = 8 then InCustom()
-  else if i = 9 then InDirectionAngle()
-  else if i = 10 then InAttackAngle()
-  else if i = 11 then InTiltDeclinationX()
-  else if i = 12 then InTiltDeclinationY()
-  else if i = 13 then InGridmapX()
-  else if i = 14 then InGridmapY()
-  else if i = 15 then InViewzoom()
-  else if i = 16 then InBrushRadius()
-  else if i = 17 then InBarrelRotation()
-  else InNone()
+// Ters tablo (veri): indeks -> varyant. Sira input_ix ile ayni.
+val g_input_tab = arrayref_make_arrpsz($arrpsz{InputId}(
+  InPressure(),
+  InRandom(),
+  InStroke(),
+  InDirection(),
+  InTiltDeclination(),
+  InTiltAscension(),
+  InSpeed1(),
+  InSpeed2(),
+  InCustom(),
+  InDirectionAngle(),
+  InAttackAngle(),
+  InTiltDeclinationX(),
+  InTiltDeclinationY(),
+  InGridmapX(),
+  InGridmapY(),
+  InViewzoom(),
+  InBrushRadius(),
+  InBarrelRotation()
+))
 
-implement input_of(i) =
-  if i < 18 then input_of_0(i) else InNone()
+implement input_try(i) = let
+  val @(ok, k) = ix_try(i, 18)
+in @(ok, g_input_tab[k]) end
 
+implement input_of(i) = let
+  val @(ok, v) = input_try(i)
+in
+  if ok then v else anth_die_box{InputId}(DieContractViolation())
+end
+
+// Tam kapsamli tablo: varyant basina bir kol (veri tablosu; R17 istisnasi).
 implement input_ix(s) =
   case+ s of
   | InPressure() => 0
@@ -47,4 +57,3 @@ implement input_ix(s) =
   | InViewzoom() => 15
   | InBrushRadius() => 16
   | InBarrelRotation() => 17
-  | InNone() => ~1

@@ -2,6 +2,7 @@
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
 
+staload "sys/fs_io.sats"
 staload "ui/state.dats"
 staload "ui/slider_id.sats"
 staload "brushes/brush_group.sats"
@@ -180,12 +181,12 @@ in
 end
 
 // --- Oturum Yönetimi Entegrasyonu ---
-extern fun widgets_save_session(): void = "ext#widgets_save_session"
-implement widgets_save_session() = session_save()
+extern fun widgets_save_session(fsio: !FS_IO | ): void = "ext#widgets_save_session"
+implement widgets_save_session(fsio | ) = session_save(fsio | )
 
-extern fun widgets_restore_session(canvas_ptr: int): void = "ext#widgets_restore_session"
-implement widgets_restore_session(canvas_ptr) = let
-  val loaded = session_load()
+extern fun widgets_restore_session(fsio: !FS_IO | canvas_ptr: int): void = "ext#widgets_restore_session"
+implement widgets_restore_session(fsio | canvas_ptr) = let
+  val loaded = session_load(fsio | )
 in
   if loaded <= 0 then ()
   else let

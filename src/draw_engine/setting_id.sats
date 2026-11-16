@@ -65,8 +65,10 @@ datatype SettingId =
   | SetPosterizeNum
   | SetSnapToPixel
   | SetPressureGainLog
-  | SetNone
 
+// Tag kodlari yalniz bu sinirda: ix = tipli indeks (derleme zamaninda < 65), try = disaridan gelen int icin.
+typedef SettingIx = [k:nat | k < 65] int(k)
+
+fun setting_ix(id: SettingId): SettingIx = "ext#"
+fun setting_try(i: int): @(bool, SettingId) = "ext#"
 fun setting_of(i: int): SettingId = "ext#"
-fun setting_ix(id: SettingId): int = "ext#"
-
