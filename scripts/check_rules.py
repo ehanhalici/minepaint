@@ -4,13 +4,22 @@
 Cikis kodu 0: tum kurallar saglandi; 1: ihlal var (satir satir yazilir).
 Kurallar:
   R1 yasakli simgeler: $UNSAFE, castfn, %{ ... , $extfcall (src altinda hicbir yerde)
-  R2 `assume` yalniz src/window/window.dats icinde ve tam bir tane (App)
+  R2 `assume` yalniz izinli sahip modullerde (ASSUME_ALLOWED: dosya -> sayi)
   R3 `praxi` yalniz src/sys/capability.sats; `extern prfun` hicbir yerde yok
   R4 `mp_id_ptr` .dats/.hats icinde adlandirilamaz (yalniz .sats ve cprelude.h)
   R5 kendini cagiran fun/fnx metrik (.<...>.) tasimali; tek istisna "tek izinli sonsuz dongu" isaretli fonksiyon
   R6 fonksiyon govdesi icinde `case-` / duz `case` yok (yalniz case+)
   R8 ptr tabanli sinir hava kilidi ailesi (airlock_*_n, airlock_alloc) yok: tamponlar tipli arrayref + Ix(n)
   R9 `gl*` (GL) bildirimleri yalniz src/gl/gl_io.sats icinde (GL_IO efekt kaniti); glX* yalniz src/gl/glx.dats
+  R10 malloc/free/memset/realloc cagrilari yalniz src/sys/libc.dats (heap_new/heap_free/bytes_zero)
+  R11 etki bildirimleri tek yerde: X11 sunucu cagrilari (X*, mp_x_*, c_xi2_query_*/cookie_get|free_data...; salt veri okuyucular serbest) x11/x_io.sats; dosya/ortam (fopen..getenv) sys/fs_io.sats; zaman (gettimeofday, usleep) sys/libc.dats + clock_io.sats
+  R13 odunc "gorunum" tipi yok: MpText/MpXEvent/MpSwa/MpHints/MpDisplay/MpVisual/MpXVisual/MpGlCtx yasak (sahipli Buf(k)/Display + `!`)
+  R15 joker kolu yok: `| _ =>` yasak (kapsamli case+; dis dunya tamsayilari tipli tablolarla ayristirilir)
+  R16 .cats/.h icinde algoritma yok: for/while yalniz sinir korumasi airlock_cstr_len'de (algoritma ATS'tedir)
+  R19 Text(n) NUL kaniti (tip durumu): `!Text` alan C islemleri yalniz salt okurlardir; yazicilar `!Text(n) >> TextRaw(n)` tipindedir ve ancak text_seal ile Text'e doner
+  R18 cap_mint/cap_burn yalniz kanit ureten kaynak modullerde (mapping, brush, layer, canvas, window, effect_root)
+  R17 fonksiyon govdesi <= 20 satir (tek istisna: varyant basina bir kol olan tam kapsamli kod tablolari setting_ix, state_ix)
+  R14 ekran/baglam yasam dongusu cagrilari (mp_x_open_display, mp_x_close_display, glXCreateContext, glXDestroyContext) yalniz window.dats
   R7 duz `Option(`/`Some(`/`None()` yok: kutulu kurucu her cagrida bellek ayirir ve GC yoktur
      (Option_vt / option_v / duz demet @(bool, x) kullanin)
 """
@@ -57,27 +66,90 @@ def check_tokens(path, lines):
             violations.append("R9 %s:%d GL bildirimi yalniz gl_io.sats: %s" % (rel(path), n, raw.strip()))
         if re.search(r"\bfun\s+glX\w*\s*[({]", l) and not path.endswith("gl/glx.dats"):
             violations.append("R9 %s:%d glX bildirimi yalniz glx.dats: %s" % (rel(path), n, raw.strip()))
+        if re.search(r"\b(malloc|free|memset|realloc)\(", l) and not path.endswith("sys/libc.dats") and not path.endswith(".h") and not path.endswith(".cats"):
+            violations.append("R10 %s:%d ham bellek cagrisi yalniz libc.dats: %s" % (rel(path), n, raw.strip()))
+        if re.search(r"\bfun\s+(X[A-Z]\w*|mp_x_(?!default_screen|root_window)\w+|mp_XCreateWindow|c_xi2_(?:query_\w+|select_root_events|device_class_val_label|cookie_get_data|cookie_free_data))\s*[({]", l) and not path.endswith("x11/x_io.sats"):
+            violations.append("R11 %s:%d X11 bildirimi yalniz x_io.sats: %s" % (rel(path), n, raw.strip()))
+        if re.search(r"\bfun\s+(fopen|fclose|fgets|fputs|fflush|fileno|fsync|rename|perror|fseek|ftell|rewind|getenv|mkdir)\s*\(", l) and not path.endswith("sys/fs_io.sats"):
+            violations.append("R11 %s:%d dosya/ortam bildirimi yalniz fs_io.sats: %s" % (rel(path), n, raw.strip()))
+        if re.search(r"\bfun\s+(gettimeofday|usleep)\s*\(", l) and not path.endswith("sys/libc.dats"):
+            violations.append("R11 %s:%d zaman bildirimi yalniz libc.dats: %s" % (rel(path), n, raw.strip()))
+        if path.endswith((".dats", ".hats")) and re.search(r"\b(stderr_ref|stdout_ref|fprint\w*!?|println!?|prerr\w*)\b", l) and not path.endswith(("sys/libc.dats", "sys/airlock.dats")):
+            violations.append("R11 %s:%d stderr/stdout yazimi yalniz libc.dats (LOG_IO): %s" % (rel(path), n, raw.strip()))
+        if re.search(r"\b(MpText|MpXEvent|MpSwa|MpHints|MpDisplay|MpVisual|MpXVisual|MpGlCtx)\b|\b(text_of|xev_of|swa_of|hints_of|buf_ptr|dpy_of|text_str)\(", l):
+            violations.append("R13 %s:%d odunc gorunum tipi yasak (sahipli Buf(k)/Display kullanin): %s" % (rel(path), n, raw.strip()))
+        if re.search(r"\b(mp_x_open_display|mp_x_close_display|glXCreateContext|glXDestroyContext)\(", l) and path.endswith((".dats", ".hats")) and not path.endswith(("window/window.dats", "gl/glx.dats")):
+            violations.append("R14 %s:%d yasam dongusu cagrisi yalniz window.dats: %s" % (rel(path), n, raw.strip()))
+        m19 = re.search(r"\bText\(.*\"mac#(\w*)\"", l)
+        if m19 and ">> TextRaw" not in l and m19.group(1) not in TEXT_C_ALLOWED:
+            violations.append("R19 %s:%d Text(n) degismezi (NUL sonlu): yalniz izinli C islemleri Text alir: %s" % (rel(path), n, raw.strip()))
+        if path.endswith((".dats", ".hats")) and re.search(r"\bcap_(mint|burn)\b", l) and not path.endswith(CAP_SITES):
+            violations.append("R18 %s:%d cap_mint/cap_burn yalniz *_new/*_claim/*_stash/*_free kaynak modullerinde: %s" % (rel(path), n, raw.strip()))
         if re.search(r"\bairlock_[a-z0-9]*_n\b|\bairlock_alloc\b", l):
             violations.append("R8 %s:%d ptr tamponu hava kilidi yasak (tipli arrayref kullanin): %s" % (rel(path), n, raw.strip()))
         if re.search(r"^\s*case-\s", l) or re.search(r"\bcase-\b", l):
             violations.append("R6 %s:%d case- yasak: %s" % (rel(path), n, raw.strip()))
 
 
+TEXT_C_ALLOWED = ("sscanf", "fopen", "fputs", "rename", "mkdir", "strcasestr", "mp_text_byte")
+CAP_SITES = ("draw_engine/mapping.dats", "draw_engine/brush.dats", "canvas/layer.dats", "canvas/canvas.dats", "window/window.dats", "sys/effect_root.dats")
+LENGTH_EXEMPT = ("setting_ix", "state_ix")
+FN_HDR = re.compile(r"^(fun|fn|fnx|implement|and)\b")
+FN_END = re.compile(r"^(fun|fn|fnx|implement|extern|val|datatype|dataviewtype|typedef|vtypedef|macdef|staload|#|and|local|end|overload|stadef|sortdef|praxi|prfun|absview|absvtype|abst|assume|dataprop|dataview|infix|//)")
+
+
+def check_length(path, lines):
+    i = 0
+    while i < len(lines):
+        if not FN_HDR.match(lines[i]):
+            i += 1
+            continue
+        j = i + 1
+        while j < len(lines) and not (lines[j] and FN_END.match(lines[j])):
+            j += 1
+        n = j - i
+        while n > 1 and (not lines[i + n - 1].strip() or lines[i + n - 1].strip().startswith("//")):
+            n -= 1
+        m = re.search(r"\b(?:fun|fn|fnx|implement|and)\s+(?:\{[^}]*\}\s*)*(\w+)", lines[i])
+        name = m.group(1) if m else ""
+        if n > 20 and name not in LENGTH_EXEMPT:
+            violations.append("R17 %s:%d fonksiyon %s %d satir (>20)" % (rel(path), i + 1, name, n))
+        i = j
+
+
+def check_misc(path, lines):
+    for n, raw in enumerate(lines, 1):
+        l = strip_comment(raw)
+        if path.endswith((".dats", ".hats")) and re.search(r"\|\s*_\s*=>", l):
+            violations.append("R15 %s:%d joker kolu yasak: %s" % (rel(path), n, raw.strip()))
+        if path.endswith((".cats", ".h")) and re.search(r"\b(for|while)\s*\(", l) and "airlock_cstr_len" not in "".join(lines[max(0, n - 4):n]):
+            violations.append("R16 %s:%d C tarafinda algoritma yasak: %s" % (rel(path), n, raw.strip()))
+
+
 ASSUME_RE = re.compile(r"^\s*assume\s")
 
 
+# Sahipli (dogrusal) tip basina tek `assume`, sahip modulde. dosya -> beklenen sayi.
+ASSUME_ALLOWED = {
+    "window/window.dats": 4,   # MpApp, Display, GlCtx, Vis
+    "x11/xi2.dats": 1,         # DevList
+    "sys/libc.dats": 4,        # File, Buf, Text, TextRaw
+}
+
+
 def check_assume(all_lines):
-    found = []
+    found = {}
     for path, lines in all_lines.items():
         for n, raw in enumerate(lines, 1):
             if ASSUME_RE.match(strip_comment(raw)):
-                found.append((path, n))
-    ok = [x for x in found if x[0].endswith("window/window.dats")]
-    for path, n in found:
-        if not path.endswith("window/window.dats"):
-            violations.append("R2 %s:%d izinsiz assume" % (rel(path), n))
-    if len(ok) != 1:
-        violations.append("R2 window.dats icinde tam 1 assume beklenir, bulundu: %d" % len(ok))
+                key = next((k for k in ASSUME_ALLOWED if path.endswith(k)), None)
+                if key is None:
+                    violations.append("R2 %s:%d izinsiz assume" % (rel(path), n))
+                else:
+                    found[key] = found.get(key, 0) + 1
+    for key, want in ASSUME_ALLOWED.items():
+        if found.get(key, 0) != want:
+            violations.append("R2 %s icinde tam %d assume beklenir, bulundu: %d" % (key, want, found.get(key, 0)))
 
 
 HDR = re.compile(r"^([ \t]*)(fun|fnx)[ \t]+(?:\{[^}]*\}[ \t]*)*(\w+)")
@@ -101,6 +173,16 @@ def header_end(text, start):
                 return i
         i += 1
     return n
+
+
+def merge_split_headers(lines):
+    # `fun {..}` + satir sonu + `ad(`: ad bir sonraki satirdadir; satir sayisi korunur.
+    out = list(lines)
+    for i in range(len(out) - 1):
+        if re.match(r"^(fun|fnx)[ \t]+(\{[^}]*\}[ \t]*)*$", out[i]):
+            out[i] = out[i].rstrip() + " " + out[i + 1].strip()
+            out[i + 1] = ""
+    return out
 
 
 def check_recursion(path, lines):
@@ -149,10 +231,10 @@ def main():
             all_lines[p] = fh.read().split("\n")
     for p, lines in all_lines.items():
         check_tokens(p, lines)
-        if p.endswith(".dats") and "/brushes/" not in p.replace("\\", "/"):
-            check_recursion(p, lines)
-        elif p.endswith(".dats"):
-            check_recursion(p, lines)
+        check_misc(p, lines)
+        if p.endswith((".dats", ".hats")):
+            check_recursion(p, merge_split_headers(lines))
+            check_length(p, lines)
     check_assume(all_lines)
     for v in violations:
         print(v)

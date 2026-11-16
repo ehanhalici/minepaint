@@ -25,8 +25,11 @@
 - [X] GL efekt kaniti GL_IO (gl/gl_io.sats): her gl* cagrisi ve onu cagiran fonksiyon imzada !GL_IO tasir; kanit window.dats app_create'te uretilir, app_destroy'da tuketilir; kural R9
 - [X] canvas CAP (canvas_view.sats + canvas_borrow.hats), brush CAP (brush_view.sats + brush_borrow.hats); katalog _apply(b:int) imzalari degismedi
 - [X] E.3 tamam: rng (rng.dats tipli arena, tutamac int), palette (arrayref(float,36), 3*i+c<36 statik kanit), canvas bayraklari; airlock_*_n / airlock_alloc / engine_safe.hats silindi, kural R8
-- [ ] Kalan C teması: libc (malloc/free/zaman) ve X11 (kapsam disi birakildi)
+- [X] C teması: X11 (X_IO, x11/x_io.sats), dosya/ortam (FS_IO, sys/fs_io.sats), zaman (CLOCK_IO, sys/clock_io.sats; saat olay döngüsünün kenarında okunur, canvas `now` alır); malloc/free/memset yalnız libc.dats (heap_new/heap_free/bytes_zero); kurallar R10, R11
 - [X] cap_mint/cap_burn: arastirildi (S6); kalici kabul + gerekce skill.md'de (kullanici onayi bekler)
 - [X] dab_loop: tek yakit istisnasi olarak belgelendi (skill.md); gercek olcu yok
 - [X] hot path claim/stash maliyeti olculdu (scripts/bench.sh, Xvfb+xdotool, Release): taban c2db688 357/364 tik, guncel 359/366 tik (40x60 nokta cizim, ~%0.6 fark) -> mapping claim hoist gerekmedi
 - [X] verify.sh: .hats tek basina, cprelude.h C sozdizimi ve kural kapisi (scripts/check_rules.py: yasakli simgeler, tek assume, praxi yeri, metriksiz ozyineleme) eklendi
+- [X] Plan 7 (skill uyumu): LOG_IO (stderr), firca/ayar/font/kod tablolari dosya duzeyi `arrayref` (govde <= 20 satir, R17), joker kolu yok (R15), xi2 eksen algoritmasi ATS'te (R16); tek istisna setting_ix/state_ix tam kapsamli kod tablolari
+- [X] E.2 sonu: sahipli absvtype tutamaclar (App, Display, GlCtx, Vis, File, Buf, DevList) ve cast_box.sats kaldirildi; kural R2 izinli liste, R13
+- [X] Odunc gorunumler kaldirildi (Plan 8): MpText/MpXEvent/MpSwa/MpHints -> sahipli Buf(k,n)/Text(n) (kapasite tipte, NUL sonluluk typestate kaniti: Text/TextRaw + text_seal, R19), MpDisplay/MpVisual/MpXVisual/MpGlCtx -> sahipli Display/Vis/GlCtx, MpLayer/MpTile -> dogrulanmis int, cap_mint/cap_burn kaynak modullerde (R18). Tek kalan abst@ype MpRaw (XI2 ham veri): RAW_LIVE kanitiyla korunur (kanitsiz okunamaz), tablet ile elle dogrulandi
