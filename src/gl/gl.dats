@@ -1,7 +1,6 @@
 #define ATS_DYNLOADFLAG 0
 #include "share/atspre_define.hats"
 #include "share/atspre_staload.hats"
-staload "sys/cast_box.sats"
 staload "gl/gl_io.sats"
 
 macdef GL_TEXTURE_2D = $extval(int, "GL_TEXTURE_2D")
@@ -31,18 +30,18 @@ macdef GL_ONE = $extval(int, "GL_ONE")
 // --- Tekil nesne uretim/yikim sarmalayicilari (C cikis parametresi sinirda kalir) ---
 implement gl_gen_texture(pf | ) = let
   var id: uint = 0u
-  val () = glGenTextures(pf | 1, ptr_forget(addr@(id)))
+  val () = glGenTextures(pf | 1, addr@(id))
 in id end
 
 implement gl_gen_framebuffer(pf | ) = let
   var id: uint = 0u
-  val () = glGenFramebuffers(pf | 1, ptr_forget(addr@(id)))
+  val () = glGenFramebuffers(pf | 1, addr@(id))
 in id end
 
 implement gl_delete_texture(pf | id) = let
   var v: uint = id
-in glDeleteTextures(pf | 1, ptr_forget(addr@(v))) end
+in glDeleteTextures(pf | 1, addr@(v)) end
 
 implement gl_delete_framebuffer(pf | id) = let
   var v: uint = id
-in glDeleteFramebuffers(pf | 1, ptr_forget(addr@(v))) end
+in glDeleteFramebuffers(pf | 1, addr@(v)) end

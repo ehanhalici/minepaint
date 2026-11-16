@@ -2,8 +2,6 @@
 // Sinir hava kilidi sozlesmesi: C tarafi araligi denetler, disari tasan okuma 0 doner,
 // disari tasan yazma yapilmaz. Olumcul durumlar anth_die_* ile belirleyici sekilde biter.
 
-// Yakit tavani: 2^28. Metriksiz veri-bagimli ozyineleme bunu azaltir.
-#define MAX_REC_FUEL 268435456
 // Veri-gudumlü ozyinelemelerin fiziksel ust sinirlari. Bu dongulerin olcusu tipten cikmaz
 // (C bellegindeki zincir, RLE tamponu, float durumu...); yakit = veri yapisinin kapasitesi,
 // yani asilmasi gercek bir tasarim ihlalidir (anth_die_* ile durur). Gerekce her kullanimda yazilidir.

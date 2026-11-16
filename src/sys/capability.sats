@@ -11,6 +11,10 @@ stadef KIND_MAPPING = 7
 stadef KIND_CANVAS = 8
 stadef KIND_BRUSH = 9
 stadef KIND_GL = 10
+stadef KIND_X = 11
+stadef KIND_FS = 12
+stadef KIND_CLOCK = 13
+stadef KIND_LOG = 14
 
 // Aksiyomlar: tur ve kimlik statik indeks olarak tasindigi icin farkli turdeki kanitlar
 // birbirinin yerine kullanilamaz (FIFO kaniti katman islemine verilemez).
